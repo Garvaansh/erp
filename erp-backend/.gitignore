@@ -1,0 +1,20 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, builtin with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Environment variables
+.env
+
+# Go workspace
+go.work
+go.work.sum
