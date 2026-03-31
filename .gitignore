@@ -1,0 +1,35 @@
+.DS_Store
+erp_archive/
+
+# Env / secrets
+.env
+**/.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Logs
+*.log
+
+# Go
+**/bin/
+**/*.exe
+**/*.out
+**/*.test
+.air.toml
+
+# Node / Next
+**/node_modules/
+**/.next/
+**/out/
+**/dist/
+**/.turbo/
+**/.swc/
+**/.cache/
+**/tsconfig.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
