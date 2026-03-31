@@ -1,0 +1,15 @@
+{
+  "name": "erp",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -c \"cyan,magenta\" \"yarn workspace frontend dev\" \"cd backend && air\"",
+    "build": "yarn workspace frontend build && cd backend && go build -o bin/api cmd/api/main.go"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "packageManager": "yarn@4.13.0"
+}
