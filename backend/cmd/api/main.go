@@ -14,7 +14,10 @@ import (
 	"github.com/erp/backend/internal/middleware" // Import the middleware package
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/helmet"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -28,6 +31,16 @@ func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		log.Fatal("CRITICAL: DATABASE_URL is not set")
+	}
+
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		log.Fatal("CRITICAL: FRONTEND_URL is not set")
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("CRITICAL: JWT_SECRET is not set")
 	}
 
 	// 2. Connect to PostgreSQL with optimized pool
@@ -63,40 +76,53 @@ func main() {
 	})
 
 	// Middleware
-	app.Use(logger.New())
+	app.Use(requestid.New())
+	app.Use(recover.New())
+	app.Use(helmet.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000",
+		AllowOrigins:     frontendURL,
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-		AllowCredentials: true, // IMPORTANT: Allow cookies to be sent
+		AllowCredentials: true,
 	}))
 
 	// 5. Define Routes
-	api := app.Group("/api/v1")
+	api := app.Group("/api/v1", limiter.New(limiter.Config{
+		Max:        100,
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Rate limit exceeded. Please slow down.",
+			})
+		},
+	}))
 
 	// --- PUBLIC ROUTES ---
 	api.Get("/health", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "ok"})
 	})
 	authGroup := api.Group("/auth")
-	authGroup.Post("/login", authHandler.Login)
-
-	// --- PROTECTED ROUTES ---
-	// Any route attached to 'protected' must pass the JWT middleware.
-	protected := api.Group("/", middleware.RequireAuth)
-	protected.Get("/me", func(c *fiber.Ctx) error {
-		// Pulling the data the middleware securely injected into the context.
-		userID := c.Locals("userID")
-		role := c.Locals("role")
-
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status":  "success",
-			"message": "You are past the bouncer.",
-			"data": fiber.Map{
-				"id":   userID,
-				"role": role,
+	authGroup.Post(
+		"/login",
+		limiter.New(limiter.Config{
+			Max:        5,
+			Expiration: 1 * time.Minute,
+			KeyGenerator: func(c *fiber.Ctx) string {
+				return c.IP()
 			},
-		})
-	})
+			LimitReached: func(c *fiber.Ctx) error {
+				return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+					"status":  "error",
+					"message": "Too many login attempts. Please try again in a minute.",
+				})
+			},
+		}),
+		authHandler.Login,
+	)
+	authGroup.Get("/me", middleware.RequireAuth, authHandler.Me)
 
 	// 6. Graceful Shutdown
 	go func() {

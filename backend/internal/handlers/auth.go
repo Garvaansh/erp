@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -13,88 +14,105 @@ import (
 
 var validate = validator.New()
 
-// AuthHandler handles the HTTP requests for authentication.
-// It depends on the real AuthService for its business logic.
 type AuthHandler struct {
 	authService *auth.AuthService
 }
 
-// NewAuthHandler creates a new instance of the AuthHandler.
 func NewAuthHandler(authService *auth.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
-// Login handles the user login request.
+func formatUUID(uuidBytes [16]byte) string {
+	return fmt.Sprintf("%x-%x-%x-%x-%x", uuidBytes[0:4], uuidBytes[4:6], uuidBytes[6:8], uuidBytes[8:10], uuidBytes[10:16])
+}
+
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req models.LoginRequest
 
-	// 1. Parse the JSON body into the LoginRequest DTO.
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Cannot parse JSON",
-		})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid JSON"})
 	}
 
-	// 2. Validate the DTO using the global validator instance.
 	if err := validate.Struct(req); err != nil {
-		// Return a structured error for better client-side handling.
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Validation failed",
-			"errors":  err.Error(),
-		})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Validation failed"})
 	}
 
-	// 3. Call the real AuthService.Login method.
-	user, err := h.authService.Login(c.Context(), req.Username, req.Password)
+	user, err := h.authService.Login(c.Context(), req.Email, req.Password)
 	if err != nil {
-		// For security, return a generic "unauthorized" error regardless of
-		// whether the user was not found or the password was incorrect.
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Invalid credentials"})
+	}
+
+	var userID string
+	if user.ID.Valid {
+		userID = formatUUID(user.ID.Bytes)
+	}
+
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Invalid username or password",
+			"message": "Server configuration error",
 		})
 	}
 
-	// 4. Generate a JWT using the real user data.
+	expiresAt := time.Now().Add(time.Hour * 24)
+
 	claims := jwt.MapClaims{
-		"user_id": user.ID,
-		"role":    user.Role.String, // Use .String to get the value from pgtype.Text
-		"exp":     time.Now().Add(time.Minute * 15).Unix(),
+		"user_id": userID,
+		"email":   user.Email,
+		"role":    user.RoleCode,
+		"exp":     expiresAt.Unix(),
 	}
+
+	expiresIn := int64(time.Until(expiresAt).Seconds())
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	signedToken, err := token.SignedString([]byte(secret))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Failed to sign token",
+			"message": "Authentication failed",
 		})
 	}
 
-	// 5. Create a secure, HttpOnly fiber.Cookie.
-	cookie := new(fiber.Cookie)
-	cookie.Name = "jwt_token"
-	cookie.Value = signedToken
-	cookie.Expires = time.Now().Add(time.Hour * 24) // Match refresh token lifetime if any
-	cookie.HTTPOnly = true
-	cookie.Secure = true // MUST be true in production (requires HTTPS)
-	cookie.SameSite = "Strict"
-	cookie.Path = "/" 
-
-	c.Cookie(cookie)
-
-	// 6. Return a 200 OK response with the real user's public data.
-	// DO NOT return the password hash or other sensitive info.
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status": "success",
-		"data": fiber.Map{
-			"user": fiber.Map{
-				"id":       user.ID,
-				"username": user.Username,
-				"role":     user.Role.String,
-			},
+		"token":      signedToken,
+		"expires_in": expiresIn,
+		"expires_at": expiresAt.Unix(),
+		"user": fiber.Map{
+			"id":    userID,
+			"email": user.Email,
+			"role":  user.RoleCode,
+		},
+	})
+}
+
+func (h *AuthHandler) Me(c *fiber.Ctx) error {
+	userIDFromToken, userIDOk := c.Locals("userID").(string)
+	email, emailOk := c.Locals("email").(string)
+	if !userIDOk || !emailOk || userIDFromToken == "" || email == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"message": "Unauthorized"})
+	}
+
+	user, err := h.authService.GetActiveUserProfileByEmail(c.Context(), email)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"message": "Unauthorized"})
+	}
+
+	if !user.ID.Valid {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"message": "Unauthorized"})
+	}
+
+	userID := formatUUID(user.ID.Bytes)
+	if userID != userIDFromToken {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"message": "Unauthorized"})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"user": fiber.Map{
+			"id":    userID,
+			"email": user.Email,
+			"role":  user.RoleCode,
 		},
 	})
 }

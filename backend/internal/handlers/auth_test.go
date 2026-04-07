@@ -2,145 +2,131 @@ package handlers
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
-	"io"
 	"net/http"
-	"os"
-	"strings"
+	"net/http/httptest"
 	"testing"
+	"time"
 
-	"github.com/erp/backend/internal/auth"
-	"github.com/erp/backend/internal/db"
+	"github.com/erp/backend/internal/middleware"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
-	"github.com/stretchr/testify/assert"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/stretchr/testify/require"
 )
 
-// setupTestApp initializes a Fiber app, database connection, and all necessary services for testing.
-func setupTestApp(t *testing.T) *fiber.App {
-	// Load environment variables from the root of the backend directory
-	err := godotenv.Load("../../.env")
-	if err != nil {
-		t.Fatalf("Error loading .env file: %v", err)
+func buildTestJWT(t *testing.T, secret string, expiresAt time.Time) string {
+	t.Helper()
+
+	claims := jwt.MapClaims{
+		"user_id": "11111111-1111-1111-1111-111111111111",
+		"email":   "admin@example.com",
+		"role":    "SUPER_ADMIN",
+		"exp":     expiresAt.Unix(),
 	}
 
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Fatal("DATABASE_URL not set in .env file")
-	}
-
-	// Connect to the real PostgreSQL database
-	dbpool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("Unable to create connection pool: %v", err)
-	}
-
-	// Initialize real services
-	queries := db.New(dbpool)
-	authService := auth.NewAuthService(queries)
-	authHandler := NewAuthHandler(authService)
-
-	// Create a new Fiber app for testing
-	app := fiber.New()
-	api := app.Group("/api/v1")
-	api.Post("/auth/login", authHandler.Login)
-
-	return app
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(secret))
+	require.NoError(t, err)
+	return signed
 }
 
-func TestAuthHandler_Login(t *testing.T) {
-	app := setupTestApp(t)
-
-	// Test Case 1: Malformed JSON payload
-	t.Run("Malformed JSON", func(t *testing.T) {
-		req, _ := http.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{"username": "test",`))
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := app.Test(req)
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Expected HTTP 400 for malformed JSON")
+func TestRateLimiter_BlocksSixthLoginAttempt(t *testing.T) {
+	app := fiber.New()
+	authGroup := app.Group("/api/v1/auth")
+	authGroup.Post("/login", limiter.New(limiter.Config{
+		Max:        5,
+		Expiration: time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+	}), func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "ok"})
 	})
 
-	// Test Case 2: Validation Failure
-	t.Run("Validation Failure", func(t *testing.T) {
-		payload := map[string]string{
-			"username": "ab",
-			"password": "123",
+	for i := 1; i <= 6; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"admin@example.com","password":"Password123!"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = "198.51.100.10:12345"
+
+		resp, err := app.Test(req, -1)
+		require.NoError(t, err)
+
+		if i < 6 {
+			require.NotEqual(t, fiber.StatusTooManyRequests, resp.StatusCode)
+			continue
 		}
-		body, _ := json.Marshal(payload)
-		req, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := app.Test(req)
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Expected HTTP 400 for validation failure")
+		require.Equal(t, fiber.StatusTooManyRequests, resp.StatusCode)
+	}
+}
+
+func TestRequireAuth_RejectsForgedOrExpiredTokens(t *testing.T) {
+	t.Setenv("JWT_SECRET", "unit-test-secret")
+
+	app := fiber.New()
+	api := app.Group("/api/v1/auth")
+	api.Get("/me", middleware.RequireAuth, func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
 	})
 
-	// Test Case 3: Invalid Credentials
-	t.Run("Invalid Credentials", func(t *testing.T) {
-		// Note: This assumes a user 'garvaansh_admin' does not exist or the password is wrong.
-		// For a real test, you might want to ensure a user exists and then use the wrong password.
-		payload := map[string]string{
-			"username": "admin",
-			"password": "WrongPassword!",
-		}
-		body, _ := json.Marshal(payload)
-		req, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := app.Test(req)
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "Expected HTTP 401 for invalid credentials")
+	t.Run("Fake JWT", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req.Header.Set("Authorization", "Bearer definitely.not.a.real.token")
+		resp, err := app.Test(req, -1)
+		require.NoError(t, err)
+		require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 	})
 
-	// Test Case 4: Successful Login
-	t.Run("Successful Login", func(t *testing.T) {
-		// Using the actual SuperAdmin we seeded into the DB
-		payload := map[string]string{
-			"username": "admin",
-			"password": "password@1234",
-		}
-		body, _ := json.Marshal(payload)
-		req, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := app.Test(req)
-		assert.NoError(t, err)
-
-		// Assert HTTP 200 OK
-		assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected HTTP 200 for successful login")
-
-		// Assert the Set-Cookie header
-		cookieHeader := resp.Header.Get("Set-Cookie")
-		assert.NotEmpty(t, cookieHeader, "Set-Cookie header should not be empty")
-		assert.Contains(t, cookieHeader, "jwt_token=", "Cookie should contain jwt_token")
-		assert.Contains(t, cookieHeader, "HttpOnly", "Cookie should be HttpOnly")
-		assert.Contains(t, cookieHeader, "SameSite=Strict", "Cookie should have SameSite=Strict")
-
-		// Assert the response body for user info
-		respBody, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		defer resp.Body.Close()
-
-		var jsonResponse map[string]interface{}
-		err = json.Unmarshal(respBody, &jsonResponse)
-		assert.NoError(t, err)
-
-		// Check for status: success
-		status, ok := jsonResponse["status"].(string)
-		assert.True(t, ok && status == "success", "Response status should be 'success'")
-
-		// Check for user data
-		data, ok := jsonResponse["data"].(map[string]interface{})
-		assert.True(t, ok, "Response should contain a 'data' object")
-
-		user, ok := data["user"].(map[string]interface{})
-		assert.True(t, ok, "Data object should contain a 'user' object")
-
-		username, ok := user["username"].(string)
-		// FIXED: Asserting the correct username
-		assert.True(t, ok && username == "admin", "Response user object should have the correct username")
+	t.Run("Expired JWT", func(t *testing.T) {
+		expired := buildTestJWT(t, "unit-test-secret", time.Now().Add(-5*time.Minute))
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req.Header.Set("Authorization", "Bearer "+expired)
+		resp, err := app.Test(req, -1)
+		require.NoError(t, err)
+		require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 	})
+
+	t.Run("Wrong Secret JWT", func(t *testing.T) {
+		forged := buildTestJWT(t, "wrong-secret", time.Now().Add(5*time.Minute))
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req.Header.Set("Authorization", "Bearer "+forged)
+		resp, err := app.Test(req, -1)
+		require.NoError(t, err)
+		require.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	})
+}
+
+func TestLoginValidation_RejectsInvalidPayloadsBeforeAuthService(t *testing.T) {
+	app := fiber.New()
+	handler := &AuthHandler{}
+	app.Post("/api/v1/auth/login", handler.Login)
+
+	testCases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "Missing Email",
+			body: `{"password":"Password123!"}`,
+		},
+		{
+			name: "Blank Password",
+			body: `{"email":"admin@example.com","password":""}`,
+		},
+		{
+			name: "Malformed JSON",
+			body: `{"email":"admin@example.com",`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req, -1)
+			require.NoError(t, err)
+			require.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+		})
+	}
 }
