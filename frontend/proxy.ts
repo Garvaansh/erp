@@ -1,20 +1,47 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function proxy(request: NextRequest) {
-  const path = request.nextUrl.pathname;
-
-  // Check for the authentication cookie
-  const hasAuthCookie = request.cookies.has("jwt_token");
-
-  // If the user is trying to access the dashboard without a cookie, redirect to login
-  if (path.startsWith("/dashboard") && !hasAuthCookie) {
-    return NextResponse.redirect(new URL("/login", request.url));
+async function isSessionValid(request: NextRequest): Promise<boolean> {
+  const sessionToken = request.cookies.get("session")?.value;
+  if (!sessionToken) {
+    return false;
   }
 
-  // If the user is on the login page but already has a cookie, redirect to the dashboard
-  if (path === "/login" && hasAuthCookie) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  const backendBaseUrl = process.env.NEXT_BACKEND_API_URL;
+  if (!backendBaseUrl) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${backendBaseUrl}/api/v1/auth/me`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+      },
+      cache: "no-store",
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function proxy(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  if (path.startsWith("/dashboard")) {
+    const validSession = await isSessionValid(request);
+    if (!validSession) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+  }
+
+  if (path === "/login") {
+    const validSession = await isSessionValid(request);
+    if (validSession) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
   }
 
   return NextResponse.next();
