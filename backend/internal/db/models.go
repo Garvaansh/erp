@@ -5,43 +5,479 @@
 package db
 
 import (
+	"database/sql/driver"
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BaseUnitType string
+
+const (
+	BaseUnitTypeWEIGHT BaseUnitType = "WEIGHT"
+	BaseUnitTypeCOUNT  BaseUnitType = "COUNT"
+	BaseUnitTypeLENGTH BaseUnitType = "LENGTH"
+)
+
+func (e *BaseUnitType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BaseUnitType(s)
+	case string:
+		*e = BaseUnitType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BaseUnitType: %T", src)
+	}
+	return nil
+}
+
+type NullBaseUnitType struct {
+	BaseUnitType BaseUnitType `json:"base_unit_type"`
+	Valid        bool         `json:"valid"` // Valid is true if BaseUnitType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBaseUnitType) Scan(value interface{}) error {
+	if value == nil {
+		ns.BaseUnitType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BaseUnitType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBaseUnitType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BaseUnitType), nil
+}
+
+type BatchStatus string
+
+const (
+	BatchStatusNEW       BatchStatus = "NEW"
+	BatchStatusACTIVE    BatchStatus = "ACTIVE"
+	BatchStatusEXHAUSTED BatchStatus = "EXHAUSTED"
+	BatchStatusHOLD      BatchStatus = "HOLD"
+)
+
+func (e *BatchStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BatchStatus(s)
+	case string:
+		*e = BatchStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BatchStatus: %T", src)
+	}
+	return nil
+}
+
+type NullBatchStatus struct {
+	BatchStatus BatchStatus `json:"batch_status"`
+	Valid       bool        `json:"valid"` // Valid is true if BatchStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBatchStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.BatchStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BatchStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBatchStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BatchStatus), nil
+}
+
+type BomStatus string
+
+const (
+	BomStatusDRAFT    BomStatus = "DRAFT"
+	BomStatusACTIVE   BomStatus = "ACTIVE"
+	BomStatusARCHIVED BomStatus = "ARCHIVED"
+)
+
+func (e *BomStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BomStatus(s)
+	case string:
+		*e = BomStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BomStatus: %T", src)
+	}
+	return nil
+}
+
+type NullBomStatus struct {
+	BomStatus BomStatus `json:"bom_status"`
+	Valid     bool      `json:"valid"` // Valid is true if BomStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBomStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.BomStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BomStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBomStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BomStatus), nil
+}
+
+type ItemCategory string
+
+const (
+	ItemCategoryRAW          ItemCategory = "RAW"
+	ItemCategorySEMIFINISHED ItemCategory = "SEMI_FINISHED"
+	ItemCategoryFINISHED     ItemCategory = "FINISHED"
+	ItemCategorySCRAP        ItemCategory = "SCRAP"
+)
+
+func (e *ItemCategory) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ItemCategory(s)
+	case string:
+		*e = ItemCategory(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ItemCategory: %T", src)
+	}
+	return nil
+}
+
+type NullItemCategory struct {
+	ItemCategory ItemCategory `json:"item_category"`
+	Valid        bool         `json:"valid"` // Valid is true if ItemCategory is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullItemCategory) Scan(value interface{}) error {
+	if value == nil {
+		ns.ItemCategory, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ItemCategory.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullItemCategory) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ItemCategory), nil
+}
+
+type LocationType string
+
+const (
+	LocationTypeRAWSTORE      LocationType = "RAW_STORE"
+	LocationTypeWIP           LocationType = "WIP"
+	LocationTypeFINISHEDSTORE LocationType = "FINISHED_STORE"
+	LocationTypeSCRAPYARD     LocationType = "SCRAP_YARD"
+)
+
+func (e *LocationType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LocationType(s)
+	case string:
+		*e = LocationType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LocationType: %T", src)
+	}
+	return nil
+}
+
+type NullLocationType struct {
+	LocationType LocationType `json:"location_type"`
+	Valid        bool         `json:"valid"` // Valid is true if LocationType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLocationType) Scan(value interface{}) error {
+	if value == nil {
+		ns.LocationType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LocationType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLocationType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LocationType), nil
+}
+
+type ProductionOrderStatus string
+
+const (
+	ProductionOrderStatusDRAFT      ProductionOrderStatus = "DRAFT"
+	ProductionOrderStatusPLANNED    ProductionOrderStatus = "PLANNED"
+	ProductionOrderStatusINPROGRESS ProductionOrderStatus = "IN_PROGRESS"
+	ProductionOrderStatusCOMPLETED  ProductionOrderStatus = "COMPLETED"
+	ProductionOrderStatusCANCELLED  ProductionOrderStatus = "CANCELLED"
+)
+
+func (e *ProductionOrderStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ProductionOrderStatus(s)
+	case string:
+		*e = ProductionOrderStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ProductionOrderStatus: %T", src)
+	}
+	return nil
+}
+
+type NullProductionOrderStatus struct {
+	ProductionOrderStatus ProductionOrderStatus `json:"production_order_status"`
+	Valid                 bool                  `json:"valid"` // Valid is true if ProductionOrderStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullProductionOrderStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.ProductionOrderStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ProductionOrderStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullProductionOrderStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ProductionOrderStatus), nil
+}
+
+type TxDirection string
+
+const (
+	TxDirectionIN  TxDirection = "IN"
+	TxDirectionOUT TxDirection = "OUT"
+)
+
+func (e *TxDirection) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TxDirection(s)
+	case string:
+		*e = TxDirection(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TxDirection: %T", src)
+	}
+	return nil
+}
+
+type NullTxDirection struct {
+	TxDirection TxDirection `json:"tx_direction"`
+	Valid       bool        `json:"valid"` // Valid is true if TxDirection is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTxDirection) Scan(value interface{}) error {
+	if value == nil {
+		ns.TxDirection, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TxDirection.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTxDirection) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TxDirection), nil
+}
+
+type TxReferenceType string
+
+const (
+	TxReferenceTypePURCHASERECEIPT   TxReferenceType = "PURCHASE_RECEIPT"
+	TxReferenceTypePRODUCTIONJOURNAL TxReferenceType = "PRODUCTION_JOURNAL"
+	TxReferenceTypeTRANSFER          TxReferenceType = "TRANSFER"
+	TxReferenceTypeADJUSTMENT        TxReferenceType = "ADJUSTMENT"
+)
+
+func (e *TxReferenceType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TxReferenceType(s)
+	case string:
+		*e = TxReferenceType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TxReferenceType: %T", src)
+	}
+	return nil
+}
+
+type NullTxReferenceType struct {
+	TxReferenceType TxReferenceType `json:"tx_reference_type"`
+	Valid           bool            `json:"valid"` // Valid is true if TxReferenceType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTxReferenceType) Scan(value interface{}) error {
+	if value == nil {
+		ns.TxReferenceType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TxReferenceType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTxReferenceType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TxReferenceType), nil
+}
+
+type BomLine struct {
+	ID           pgtype.UUID        `json:"id"`
+	BomVersionID pgtype.UUID        `json:"bom_version_id"`
+	InputItemID  pgtype.UUID        `json:"input_item_id"`
+	QtyPerUnit   pgtype.Numeric     `json:"qty_per_unit"`
+	IsOptional   bool               `json:"is_optional"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type BomVersion struct {
+	ID                 pgtype.UUID        `json:"id"`
+	ItemID             pgtype.UUID        `json:"item_id"`
+	VersionNo          int32              `json:"version_no"`
+	Status             BomStatus          `json:"status"`
+	ExpectedYieldPct   pgtype.Numeric     `json:"expected_yield_pct"`
+	AllowedMinYieldPct pgtype.Numeric     `json:"allowed_min_yield_pct"`
+	AllowedMaxYieldPct pgtype.Numeric     `json:"allowed_max_yield_pct"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
 type InventoryBatch struct {
-	ID         pgtype.UUID        `json:"id"`
-	ProductID  pgtype.UUID        `json:"product_id"`
-	BatchCode  string             `json:"batch_code"`
-	Status     pgtype.Text        `json:"status"`
-	InitialQty pgtype.Numeric     `json:"initial_qty"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ID                pgtype.UUID        `json:"id"`
+	ItemID            pgtype.UUID        `json:"item_id"`
+	BatchCode         string             `json:"batch_code"`
+	CurrentLocationID pgtype.UUID        `json:"current_location_id"`
+	InitialQty        pgtype.Numeric     `json:"initial_qty"`
+	RemainingQty      pgtype.Numeric     `json:"remaining_qty"`
+	UnitCost          pgtype.Numeric     `json:"unit_cost"`
+	Status            BatchStatus        `json:"status"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InventoryLocation struct {
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	Name      string             `json:"name"`
+	Type      LocationType       `json:"type"`
+	ParentID  pgtype.UUID        `json:"parent_id"`
+	IsActive  bool               `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type InventoryTransaction struct {
-	ID          pgtype.UUID        `json:"id"`
-	BatchID     pgtype.UUID        `json:"batch_id"`
-	Quantity    pgtype.Numeric     `json:"quantity"`
-	TxType      pgtype.Text        `json:"tx_type"`
-	ReferenceID pgtype.UUID        `json:"reference_id"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID              pgtype.UUID        `json:"id"`
+	MovementGroupID pgtype.UUID        `json:"movement_group_id"`
+	ItemID          pgtype.UUID        `json:"item_id"`
+	BatchID         pgtype.UUID        `json:"batch_id"`
+	LocationID      pgtype.UUID        `json:"location_id"`
+	Direction       TxDirection        `json:"direction"`
+	Quantity        pgtype.Numeric     `json:"quantity"`
+	ReferenceType   TxReferenceType    `json:"reference_type"`
+	ReferenceID     pgtype.UUID        `json:"reference_id"`
+	PerformedBy     pgtype.UUID        `json:"performed_by"`
+	Notes           pgtype.Text        `json:"notes"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
-type Product struct {
+type Item struct {
 	ID        pgtype.UUID        `json:"id"`
 	ParentID  pgtype.UUID        `json:"parent_id"`
+	Sku       pgtype.Text        `json:"sku"`
 	Name      string             `json:"name"`
-	Category  pgtype.Text        `json:"category"`
+	Category  ItemCategory       `json:"category"`
+	BaseUnit  BaseUnitType       `json:"base_unit"`
 	Specs     []byte             `json:"specs"`
-	BaseUnit  pgtype.Text        `json:"base_unit"`
+	IsActive  bool               `json:"is_active"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProductionJournal struct {
+	ID                pgtype.UUID        `json:"id"`
+	ProductionOrderID pgtype.UUID        `json:"production_order_id"`
+	MovementGroupID   pgtype.UUID        `json:"movement_group_id"`
+	SourceBatchID     pgtype.UUID        `json:"source_batch_id"`
+	InputLocationID   pgtype.UUID        `json:"input_location_id"`
+	OutputLocationID  pgtype.UUID        `json:"output_location_id"`
+	InputQty          pgtype.Numeric     `json:"input_qty"`
+	FinishedQty       pgtype.Numeric     `json:"finished_qty"`
+	ScrapQty          pgtype.Numeric     `json:"scrap_qty"`
+	LossReason        pgtype.Text        `json:"loss_reason"`
+	CreatedBy         pgtype.UUID        `json:"created_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductionOrder struct {
+	ID               pgtype.UUID           `json:"id"`
+	OrderNumber      string                `json:"order_number"`
+	BomVersionID     pgtype.UUID           `json:"bom_version_id"`
+	PlannedQty       pgtype.Numeric        `json:"planned_qty"`
+	ProducedQty      pgtype.Numeric        `json:"produced_qty"`
+	ConsumedQty      pgtype.Numeric        `json:"consumed_qty"`
+	ScrapQty         pgtype.Numeric        `json:"scrap_qty"`
+	Status           ProductionOrderStatus `json:"status"`
+	CreatedBy        pgtype.UUID           `json:"created_by"`
+	PlannedStartDate pgtype.Date           `json:"planned_start_date"`
+	CompletedAt      pgtype.Timestamptz    `json:"completed_at"`
+	CreatedAt        pgtype.Timestamptz    `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz    `json:"updated_at"`
+}
+
+type Role struct {
+	ID   pgtype.UUID `json:"id"`
+	Code string      `json:"code"`
+	Name string      `json:"name"`
 }
 
 type User struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Username           string             `json:"username"`
-	PasswordHash       string             `json:"password_hash"`
-	FullName           pgtype.Text        `json:"full_name"`
-	Role               pgtype.Text        `json:"role"`
-	MustChangePassword pgtype.Bool        `json:"must_change_password"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ID           pgtype.UUID        `json:"id"`
+	RoleID       pgtype.UUID        `json:"role_id"`
+	Name         string             `json:"name"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	IsActive     bool               `json:"is_active"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }

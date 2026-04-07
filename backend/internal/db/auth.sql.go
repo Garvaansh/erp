@@ -12,53 +12,82 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (username, password_hash, full_name, role)
+INSERT INTO users (email, password_hash, name, role_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, username, password_hash, full_name, role, must_change_password, created_at
+RETURNING id, role_id, name, email, password_hash, is_active, created_at, updated_at
 `
 
 type CreateUserParams struct {
-	Username     string      `json:"username"`
+	Email        string      `json:"email"`
 	PasswordHash string      `json:"password_hash"`
-	FullName     pgtype.Text `json:"full_name"`
-	Role         pgtype.Text `json:"role"`
+	Name         string      `json:"name"`
+	RoleID       pgtype.UUID `json:"role_id"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser,
-		arg.Username,
+		arg.Email,
 		arg.PasswordHash,
-		arg.FullName,
-		arg.Role,
+		arg.Name,
+		arg.RoleID,
 	)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.Username,
+		&i.RoleID,
+		&i.Name,
+		&i.Email,
 		&i.PasswordHash,
-		&i.FullName,
-		&i.Role,
-		&i.MustChangePassword,
+		&i.IsActive,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, full_name, role, must_change_password, created_at FROM users WHERE username = $1 LIMIT 1
+const getRoleByCode = `-- name: GetRoleByCode :one
+SELECT id, code, name FROM roles WHERE code = $1 LIMIT 1
 `
 
-func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByUsername, username)
-	var i User
+func (q *Queries) GetRoleByCode(ctx context.Context, code string) (Role, error) {
+	row := q.db.QueryRow(ctx, getRoleByCode, code)
+	var i Role
+	err := row.Scan(&i.ID, &i.Code, &i.Name)
+	return i, err
+}
+
+const getUserWithRoleByEmail = `-- name: GetUserWithRoleByEmail :one
+SELECT 
+    u.id, 
+    u.email, 
+    u.password_hash, 
+    u.name, 
+    u.is_active, 
+    r.code as role_code 
+FROM users u 
+JOIN roles r ON u.role_id = r.id 
+WHERE u.email = $1 LIMIT 1
+`
+
+type GetUserWithRoleByEmailRow struct {
+	ID           pgtype.UUID `json:"id"`
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	Name         string      `json:"name"`
+	IsActive     bool        `json:"is_active"`
+	RoleCode     string      `json:"role_code"`
+}
+
+func (q *Queries) GetUserWithRoleByEmail(ctx context.Context, email string) (GetUserWithRoleByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getUserWithRoleByEmail, email)
+	var i GetUserWithRoleByEmailRow
 	err := row.Scan(
 		&i.ID,
-		&i.Username,
+		&i.Email,
 		&i.PasswordHash,
-		&i.FullName,
-		&i.Role,
-		&i.MustChangePassword,
-		&i.CreatedAt,
+		&i.Name,
+		&i.IsActive,
+		&i.RoleCode,
 	)
 	return i, err
 }

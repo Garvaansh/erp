@@ -6,11 +6,20 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	CreateItem(ctx context.Context, arg CreateItemParams) (Item, error)
+	CreateLocation(ctx context.Context, arg CreateLocationParams) (InventoryLocation, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetItem(ctx context.Context, id pgtype.UUID) (Item, error)
+	GetRoleByCode(ctx context.Context, code string) (Role, error)
+	GetUserWithRoleByEmail(ctx context.Context, email string) (GetUserWithRoleByEmailRow, error)
+	ListActiveItemsByCategory(ctx context.Context, category ItemCategory) ([]Item, error)
+	ListLocationsByType(ctx context.Context, type_ LocationType) ([]InventoryLocation, error)
+	ListVariantsByParent(ctx context.Context, parentID pgtype.UUID) ([]Item, error)
 }
 
 var _ Querier = (*Queries)(nil)
