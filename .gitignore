@@ -29,6 +29,7 @@ erp_archive/
 **/.swc/
 **/.cache/
 **/tsconfig.tsbuildinfo
+.yarn/install-state.gz
 
 # IDE
 .vscode/
