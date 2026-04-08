@@ -49,9 +49,15 @@ const getRoleByCode = `-- name: GetRoleByCode :one
 SELECT id, code, name FROM roles WHERE code = $1 LIMIT 1
 `
 
-func (q *Queries) GetRoleByCode(ctx context.Context, code string) (Role, error) {
+type GetRoleByCodeRow struct {
+	ID   pgtype.UUID `json:"id"`
+	Code string      `json:"code"`
+	Name string      `json:"name"`
+}
+
+func (q *Queries) GetRoleByCode(ctx context.Context, code string) (GetRoleByCodeRow, error) {
 	row := q.db.QueryRow(ctx, getRoleByCode, code)
-	var i Role
+	var i GetRoleByCodeRow
 	err := row.Scan(&i.ID, &i.Code, &i.Name)
 	return i, err
 }

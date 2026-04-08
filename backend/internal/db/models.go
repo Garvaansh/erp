@@ -185,50 +185,6 @@ func (ns NullItemCategory) Value() (driver.Value, error) {
 	return string(ns.ItemCategory), nil
 }
 
-type LocationType string
-
-const (
-	LocationTypeRAWSTORE      LocationType = "RAW_STORE"
-	LocationTypeWIP           LocationType = "WIP"
-	LocationTypeFINISHEDSTORE LocationType = "FINISHED_STORE"
-	LocationTypeSCRAPYARD     LocationType = "SCRAP_YARD"
-)
-
-func (e *LocationType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = LocationType(s)
-	case string:
-		*e = LocationType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for LocationType: %T", src)
-	}
-	return nil
-}
-
-type NullLocationType struct {
-	LocationType LocationType `json:"location_type"`
-	Valid        bool         `json:"valid"` // Valid is true if LocationType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullLocationType) Scan(value interface{}) error {
-	if value == nil {
-		ns.LocationType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.LocationType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullLocationType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.LocationType), nil
-}
-
 type ProductionOrderStatus string
 
 const (
@@ -383,27 +339,15 @@ type BomVersion struct {
 }
 
 type InventoryBatch struct {
-	ID                pgtype.UUID        `json:"id"`
-	ItemID            pgtype.UUID        `json:"item_id"`
-	BatchCode         string             `json:"batch_code"`
-	CurrentLocationID pgtype.UUID        `json:"current_location_id"`
-	InitialQty        pgtype.Numeric     `json:"initial_qty"`
-	RemainingQty      pgtype.Numeric     `json:"remaining_qty"`
-	UnitCost          pgtype.Numeric     `json:"unit_cost"`
-	Status            BatchStatus        `json:"status"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-}
-
-type InventoryLocation struct {
-	ID        pgtype.UUID        `json:"id"`
-	Code      string             `json:"code"`
-	Name      string             `json:"name"`
-	Type      LocationType       `json:"type"`
-	ParentID  pgtype.UUID        `json:"parent_id"`
-	IsActive  bool               `json:"is_active"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID           pgtype.UUID        `json:"id"`
+	ItemID       pgtype.UUID        `json:"item_id"`
+	BatchCode    string             `json:"batch_code"`
+	InitialQty   pgtype.Numeric     `json:"initial_qty"`
+	RemainingQty pgtype.Numeric     `json:"remaining_qty"`
+	UnitCost     pgtype.Numeric     `json:"unit_cost"`
+	Status       BatchStatus        `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type InventoryTransaction struct {
@@ -411,7 +355,6 @@ type InventoryTransaction struct {
 	MovementGroupID pgtype.UUID        `json:"movement_group_id"`
 	ItemID          pgtype.UUID        `json:"item_id"`
 	BatchID         pgtype.UUID        `json:"batch_id"`
-	LocationID      pgtype.UUID        `json:"location_id"`
 	Direction       TxDirection        `json:"direction"`
 	Quantity        pgtype.Numeric     `json:"quantity"`
 	ReferenceType   TxReferenceType    `json:"reference_type"`
@@ -439,8 +382,6 @@ type ProductionJournal struct {
 	ProductionOrderID pgtype.UUID        `json:"production_order_id"`
 	MovementGroupID   pgtype.UUID        `json:"movement_group_id"`
 	SourceBatchID     pgtype.UUID        `json:"source_batch_id"`
-	InputLocationID   pgtype.UUID        `json:"input_location_id"`
-	OutputLocationID  pgtype.UUID        `json:"output_location_id"`
 	InputQty          pgtype.Numeric     `json:"input_qty"`
 	FinishedQty       pgtype.Numeric     `json:"finished_qty"`
 	ScrapQty          pgtype.Numeric     `json:"scrap_qty"`
@@ -466,9 +407,10 @@ type ProductionOrder struct {
 }
 
 type Role struct {
-	ID   pgtype.UUID `json:"id"`
-	Code string      `json:"code"`
-	Name string      `json:"name"`
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	Name      string             `json:"name"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

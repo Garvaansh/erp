@@ -12,6 +12,8 @@ import (
 	"github.com/erp/backend/internal/db"
 	"github.com/erp/backend/internal/handlers"
 	"github.com/erp/backend/internal/middleware" // Import the middleware package
+	"github.com/erp/backend/internal/services"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/helmet"
@@ -69,6 +71,15 @@ func main() {
 	queries := db.New(dbpool)
 	authService := auth.NewAuthService(queries)
 	authHandler := handlers.NewAuthHandler(authService)
+	itemService := services.NewItemService(queries)
+	inventoryService := services.NewInventoryService(dbpool, itemService)
+	productionService := services.NewProductionService(dbpool)
+	dashboardService := services.NewDashboardService(queries)
+	requestValidator := validator.New(validator.WithRequiredStructEnabled())
+	itemHandler := handlers.NewItemHandler(itemService, requestValidator)
+	inventoryHandler := handlers.NewInventoryHandler(inventoryService, requestValidator)
+	productionHandler := handlers.NewDailyLogHandler(productionService, requestValidator)
+	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 
 	// 4. Initialize Fiber App
 	app := fiber.New(fiber.Config{
@@ -81,7 +92,7 @@ func main() {
 	app.Use(helmet.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     frontendURL,
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Idempotency-Key",
 		AllowCredentials: true,
 	}))
 
@@ -123,6 +134,23 @@ func main() {
 		authHandler.Login,
 	)
 	authGroup.Get("/me", middleware.RequireAuth, authHandler.Me)
+
+	itemsGroup := api.Group("/items", middleware.RequireAuth)
+	itemsGroup.Get("/", itemHandler.ListItems)
+	itemsGroup.Get("/selectable", itemHandler.GetSelectableItems)
+	itemsGroup.Post("/", itemHandler.CreateItem)
+	itemsGroup.Get("/variants/:parentId", itemHandler.ListVariants)
+
+	inventoryGroup := api.Group("/inventory", middleware.RequireAuth)
+	inventoryGroup.Get("/batches", inventoryHandler.GetActiveBatches)
+	inventoryGroup.Get("/view", inventoryHandler.GetInventoryView)
+	inventoryGroup.Post("/receive", inventoryHandler.ReceiveStock)
+
+	logsGroup := api.Group("/logs", middleware.RequireAuth)
+	logsGroup.Post("/", productionHandler.CreateLog)
+
+	dashboardGroup := api.Group("/dashboard", middleware.RequireAuth)
+	dashboardGroup.Get("", dashboardHandler.GetSummary)
 
 	// 6. Graceful Shutdown
 	go func() {

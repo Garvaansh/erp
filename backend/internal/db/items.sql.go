@@ -17,6 +17,8 @@ INSERT INTO items (
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
+ON CONFLICT (name, (specs::text)) DO UPDATE
+SET updated_at = items.updated_at
 RETURNING id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at
 `
 
@@ -77,14 +79,60 @@ func (q *Queries) GetItem(ctx context.Context, id pgtype.UUID) (Item, error) {
 	return i, err
 }
 
+const getSelectableItems = `-- name: GetSelectableItems :many
+SELECT id, name, category, specs
+FROM items
+WHERE is_active = true
+ORDER BY category, name
+`
+
+type GetSelectableItemsRow struct {
+	ID       pgtype.UUID  `json:"id"`
+	Name     string       `json:"name"`
+	Category ItemCategory `json:"category"`
+	Specs    []byte       `json:"specs"`
+}
+
+func (q *Queries) GetSelectableItems(ctx context.Context) ([]GetSelectableItemsRow, error) {
+	rows, err := q.db.Query(ctx, getSelectableItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSelectableItemsRow
+	for rows.Next() {
+		var i GetSelectableItemsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Category,
+			&i.Specs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveItemsByCategory = `-- name: ListActiveItemsByCategory :many
 SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at FROM items
 WHERE category = $1 AND is_active = true
 ORDER BY name
+LIMIT $2 OFFSET $3
 `
 
-func (q *Queries) ListActiveItemsByCategory(ctx context.Context, category ItemCategory) ([]Item, error) {
-	rows, err := q.db.Query(ctx, listActiveItemsByCategory, category)
+type ListActiveItemsByCategoryParams struct {
+	Category ItemCategory `json:"category"`
+	Limit    int32        `json:"limit"`
+	Offset   int32        `json:"offset"`
+}
+
+func (q *Queries) ListActiveItemsByCategory(ctx context.Context, arg ListActiveItemsByCategoryParams) ([]Item, error) {
+	rows, err := q.db.Query(ctx, listActiveItemsByCategory, arg.Category, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -118,10 +166,17 @@ const listVariantsByParent = `-- name: ListVariantsByParent :many
 SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at FROM items
 WHERE parent_id = $1 AND is_active = true
 ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
 `
 
-func (q *Queries) ListVariantsByParent(ctx context.Context, parentID pgtype.UUID) ([]Item, error) {
-	rows, err := q.db.Query(ctx, listVariantsByParent, parentID)
+type ListVariantsByParentParams struct {
+	ParentID pgtype.UUID `json:"parent_id"`
+	Limit    int32       `json:"limit"`
+	Offset   int32       `json:"offset"`
+}
+
+func (q *Queries) ListVariantsByParent(ctx context.Context, arg ListVariantsByParentParams) ([]Item, error) {
+	rows, err := q.db.Query(ctx, listVariantsByParent, arg.ParentID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
