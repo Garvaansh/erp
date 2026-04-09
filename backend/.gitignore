@@ -17,6 +17,7 @@ tmp/
 # Environment
 .env
 .env.local
+.env.prod
 
 # Tooling
 .air.toml
