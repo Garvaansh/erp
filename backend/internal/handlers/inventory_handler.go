@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"strings"
 
@@ -10,19 +11,26 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+type inventoryService interface {
+	ReceiveStock(ctx context.Context, req models.ReceiveStockRequest, performedBy string) (*services.ReceiveStockResult, error)
+	GetActiveBatchesByItem(ctx context.Context, itemID string) ([]services.ActiveBatchOption, error)
+	GetInventoryView(ctx context.Context) (map[string][]services.InventoryViewRow, error)
+}
+
 type InventoryHandler struct {
-	inventoryService *services.InventoryService
+	inventoryService inventoryService
 	validator        *validator.Validate
 }
 
 type inventoryViewCategoryRow struct {
 	ItemID   string  `json:"item_id"`
+	SKU      string  `json:"sku,omitempty"`
 	Name     string  `json:"name"`
 	Specs    any     `json:"specs"`
 	TotalQty float64 `json:"total_qty"`
 }
 
-func NewInventoryHandler(inventoryService *services.InventoryService, v *validator.Validate) *InventoryHandler {
+func NewInventoryHandler(inventoryService inventoryService, v *validator.Validate) *InventoryHandler {
 	return &InventoryHandler{inventoryService: inventoryService, validator: v}
 }
 
@@ -54,13 +62,6 @@ func (h *InventoryHandler) ReceiveStock(c *fiber.Ctx) error {
 
 	result, err := h.inventoryService.ReceiveStock(c.Context(), req, userID)
 	if err != nil {
-		if errors.Is(err, services.ErrDuplicateBatchCode) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
-
 		if errors.Is(err, services.ErrInvalidInventoryPayload) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
@@ -135,6 +136,7 @@ func (h *InventoryHandler) GetInventoryView(c *fiber.Ctx) error {
 		for _, row := range rows {
 			mapped = append(mapped, inventoryViewCategoryRow{
 				ItemID:   row.ItemID,
+				SKU:      row.SKU,
 				Name:     row.Name,
 				Specs:    row.Specs,
 				TotalQty: row.TotalQty,

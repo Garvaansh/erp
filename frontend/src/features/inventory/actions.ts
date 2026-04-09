@@ -1,11 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import {
-  createItemDefinition,
-  getRawItemById,
-  receiveStock,
-} from "@/features/inventory/api";
+import { createItemDefinition, receiveStock } from "@/features/inventory/api";
 import {
   defineMaterialSchema,
   receiveStockCommandSchema,
@@ -23,58 +19,15 @@ const DEFAULT_ACTION_STATE: InventoryActionState = {
   message: "",
 };
 
-function sanitizeSkuToken(value: string): string {
-  return value
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9.-]/g, "");
-}
-
-function normalizeDimension(value: number): string {
-  const fixed = value
-    .toFixed(4)
-    .replace(/\.0+$/, "")
-    .replace(/(\.\d*?)0+$/, "$1");
-  return fixed.replace(".", "-");
-}
-
-function buildRawSku(thickness: number, width: number, grade: string): string {
-  const thicknessToken = normalizeDimension(thickness);
-  const widthToken = normalizeDimension(width);
-  const gradeToken = sanitizeSkuToken(grade) || "STD";
-
-  return `RAW-SS-${thicknessToken}x${widthToken}-${gradeToken}`;
-}
-
-function buildBatchCode(sku: string): string {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const year = String(now.getFullYear());
-
-  return `${sanitizeSkuToken(sku) || "RAW-SS"}-${day}-${month}-${year}`;
-}
-
 async function receiveStockCommand(
   payload: ReceiveStockCommandInput,
 ): Promise<InventoryActionState> {
   try {
     const parsed = receiveStockCommandSchema.parse(payload);
 
-    let batchCode = (parsed.batch_code ?? "").trim();
-    if (!batchCode) {
-      const item = await getRawItemById(parsed.item_id);
-      const sku = item?.sku?.trim() || "RAW-SS";
-      batchCode = buildBatchCode(sku);
-    }
-
     await receiveStock({
       item_id: parsed.item_id,
-      batch_code: batchCode,
       quantity: parsed.weight,
-      unit_cost: parsed.price,
-      reference_type: "PURCHASE_RECEIPT",
-      reference_id: crypto.randomUUID(),
     });
 
     revalidatePath("/inventory");
@@ -97,17 +50,15 @@ export async function defineAndReceiveAction(
 ): Promise<InventoryActionState> {
   try {
     const parsed = defineMaterialSchema.parse(payload);
-    const sku = buildRawSku(parsed.thickness, parsed.width, parsed.grade);
 
     await createItemDefinition({
       name: parsed.name,
-      sku,
       category: "RAW",
       base_unit: "WEIGHT",
       specs: {
         thickness: parsed.thickness,
         width: parsed.width,
-        grade: parsed.grade.trim(),
+        diameter: parsed.diameter,
         coil_weight: 1,
       },
     });
@@ -141,9 +92,7 @@ export async function receiveStockFormAction(
 
   return receiveStockCommand({
     item_id: String(formData.get("item_id") ?? "").trim(),
-    batch_code: String(formData.get("batch_code") ?? "").trim(),
     weight: Number(formData.get("quantity") ?? 0),
-    price: Number(formData.get("unit_cost") ?? 0),
   });
 }
 

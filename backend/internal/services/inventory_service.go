@@ -9,12 +9,12 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/erp/backend/internal/db"
 	"github.com/erp/backend/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,7 +22,6 @@ import (
 var (
 	ErrInvalidInventoryPayload = errors.New("invalid inventory payload")
 	ErrInvalidItemID           = errors.New("invalid item")
-	ErrDuplicateBatchCode      = errors.New("duplicate batch code")
 	ErrReceiveStockFailed      = errors.New("unable to receive stock")
 	ErrGetActiveBatchesFailed  = errors.New("unable to get active batches")
 	ErrGetInventoryViewFailed  = errors.New("unable to get inventory view")
@@ -40,13 +39,17 @@ type ReceiveStockResult struct {
 }
 
 type ActiveBatchOption struct {
-	BatchID      string  `json:"batch_id"`
-	Label        string  `json:"label"`
-	RemainingQty float64 `json:"remaining_qty"`
+	BatchID         string  `json:"batch_id"`
+	BatchCode       string  `json:"batch_code"`
+	ArrivalDate     string  `json:"arrival_date"`
+	InitialWeight   float64 `json:"initial_weight"`
+	RemainingWeight float64 `json:"remaining_weight"`
+	Status          string  `json:"status"`
 }
 
 type InventoryViewRow struct {
 	ItemID   string  `json:"item_id"`
+	SKU      string  `json:"sku,omitempty"`
 	Name     string  `json:"name"`
 	Specs    any     `json:"specs"`
 	TotalQty float64 `json:"total_qty"`
@@ -57,34 +60,11 @@ func NewInventoryService(pool *pgxpool.Pool, itemService *ItemService) *Inventor
 }
 
 func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveStockRequest, performedBy string) (*ReceiveStockResult, error) {
-	var itemID pgtype.UUID
-	trimmedItemID := strings.TrimSpace(req.ItemID)
-	if trimmedItemID != "" {
-		parsedItemID, ok := parseUUID(trimmedItemID)
-		if !ok {
-			return nil, ErrInvalidInventoryPayload
-		}
-		itemID = parsedItemID
-	} else if req.Item != nil {
-		if s.itemService == nil {
-			return nil, ErrReceiveStockFailed
-		}
-
-		item, err := s.itemService.FindOrCreateItem(ctx, *req.Item)
-		if err != nil {
-			return nil, ErrReceiveStockFailed
-		}
-		itemID = item.ID
-	} else {
-		return nil, ErrInvalidInventoryPayload
+	if s == nil || s.pool == nil {
+		return nil, ErrReceiveStockFailed
 	}
 
-	referenceID, ok := parseUUID(req.ReferenceID)
-	if !ok {
-		return nil, ErrInvalidInventoryPayload
-	}
-
-	movementGroupID, ok := parseUUID(req.IdempotencyKey)
+	itemID, ok := parseUUID(req.ItemID)
 	if !ok {
 		return nil, ErrInvalidInventoryPayload
 	}
@@ -97,32 +77,6 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 	quantity, ok := numericFromFloat(req.Quantity)
 	if !ok {
 		return nil, ErrInvalidInventoryPayload
-	}
-
-	unitCost, ok := numericFromFloat(req.UnitCost)
-	if !ok {
-		return nil, ErrInvalidInventoryPayload
-	}
-
-	qtx := db.New(s.pool)
-	if _, err := qtx.GetItem(ctx, itemID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			log.Printf("Business Error: invalid item id: %s", strings.TrimSpace(req.ItemID))
-			return nil, ErrInvalidItemID
-		}
-		return nil, ErrReceiveStockFailed
-	}
-
-	txnRecord, err := qtx.GetTransactionByMovementGroup(ctx, movementGroupID)
-	if err == nil {
-		return &ReceiveStockResult{
-			BatchID:         uuidString(txnRecord.BatchID),
-			MovementGroupID: uuidString(movementGroupID),
-			TransactionID:   uuidString(txnRecord.ID),
-		}, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrReceiveStockFailed
 	}
 
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -139,49 +93,37 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 		}
 	}()
 
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", strings.TrimSpace(req.IdempotencyKey)); err != nil {
+	qtx := db.New(tx)
+	item, err := qtx.GetItem(ctx, itemID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidItemID
+		}
 		return nil, ErrReceiveStockFailed
 	}
 
-	qtx = db.New(tx)
-
-	txnRecord, err = qtx.GetTransactionByMovementGroup(ctx, movementGroupID)
-	if err == nil {
-		if err := tx.Commit(ctx); err != nil {
-			return nil, ErrReceiveStockFailed
-		}
-		committed = true
-		return &ReceiveStockResult{
-			BatchID:         uuidString(txnRecord.BatchID),
-			MovementGroupID: uuidString(movementGroupID),
-			TransactionID:   uuidString(txnRecord.ID),
-		}, nil
+	if !item.Sku.Valid || strings.TrimSpace(item.Sku.String) == "" {
+		return nil, ErrReceiveStockFailed
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+
+	batchCode, err := nextDailyBatchCode(ctx, tx, itemID, item.Sku.String)
+	if err != nil {
 		return nil, ErrReceiveStockFailed
 	}
 
 	batch, err := qtx.CreateBatch(ctx, db.CreateBatchParams{
 		ItemID:       itemID,
-		BatchCode:    strings.TrimSpace(req.BatchCode),
+		BatchCode:    batchCode,
 		InitialQty:   quantity,
 		RemainingQty: quantity,
-		UnitCost:     unitCost,
-		Status:       db.BatchStatusACTIVE,
+		Status:       db.BatchStatusNEW,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23505":
-				log.Printf("Business Error: duplicate batch code: %s", strings.TrimSpace(req.BatchCode))
-				return nil, ErrDuplicateBatchCode
-			}
-		}
 		return nil, ErrReceiveStockFailed
 	}
 
-	notes := strings.TrimSpace(req.Notes)
+	movementGroup := uuid.New()
+	movementGroupID := pgtype.UUID{Bytes: [16]byte(movementGroup), Valid: true}
 
 	txn, err := qtx.RecordTransaction(ctx, db.RecordTransactionParams{
 		MovementGroupID: movementGroupID,
@@ -189,10 +131,10 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 		BatchID:         batch.ID,
 		Direction:       db.TxDirectionIN,
 		Quantity:        quantity,
-		ReferenceType:   db.TxReferenceType(req.ReferenceType),
-		ReferenceID:     referenceID,
+		ReferenceType:   db.TxReferenceTypePURCHASERECEIPT,
+		ReferenceID:     movementGroupID,
 		PerformedBy:     performedByID,
-		Notes:           pgtype.Text{String: notes, Valid: notes != ""},
+		Notes:           pgtype.Text{String: "Stock receipt", Valid: true},
 	})
 	if err != nil {
 		return nil, ErrReceiveStockFailed
@@ -205,7 +147,7 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 
 	return &ReceiveStockResult{
 		BatchID:         uuidString(batch.ID),
-		MovementGroupID: uuidString(movementGroupID),
+		MovementGroupID: movementGroup.String(),
 		TransactionID:   uuidString(txn.ID),
 	}, nil
 }
@@ -228,15 +170,33 @@ func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID st
 
 	batches := make([]ActiveBatchOption, 0, len(rows))
 	for _, row := range rows {
+		initialQty, ok := numericToFloat64(row.InitialQty)
+		if !ok {
+			return nil, ErrGetActiveBatchesFailed
+		}
+
 		remainingQty, ok := numericToFloat64(row.RemainingQty)
 		if !ok {
 			return nil, ErrGetActiveBatchesFailed
 		}
 
+		status := "IN USE"
+		if almostEqual(initialQty, remainingQty) {
+			status = "NEW"
+		}
+
+		arrival := ""
+		if row.CreatedAt.Valid {
+			arrival = row.CreatedAt.Time.UTC().Format("2006-01-02")
+		}
+
 		batches = append(batches, ActiveBatchOption{
-			BatchID:      uuidString(row.ID),
-			Label:        fmt.Sprintf("%s (%skg available)", row.BatchCode, formatQtyLabel(remainingQty)),
-			RemainingQty: remainingQty,
+			BatchID:         uuidString(row.ID),
+			BatchCode:       row.BatchCode,
+			ArrivalDate:     arrival,
+			InitialWeight:   initialQty,
+			RemainingWeight: remainingQty,
+			Status:          status,
 		})
 	}
 
@@ -269,6 +229,7 @@ func (s *InventoryService) GetInventoryView(ctx context.Context) (map[string][]I
 
 		entry := InventoryViewRow{
 			ItemID:   uuidString(row.ItemID),
+			SKU:      row.Sku.String,
 			Name:     row.Name,
 			Specs:    decodeSpecs(row.Specs),
 			TotalQty: totalQty,
@@ -311,17 +272,6 @@ func numericFromFloat(value float64) (pgtype.Numeric, bool) {
 	return numeric, true
 }
 
-func formatQtyLabel(value float64) string {
-	formatted := strconv.FormatFloat(value, 'f', 4, 64)
-	formatted = strings.TrimRight(formatted, "0")
-	formatted = strings.TrimRight(formatted, ".")
-	if formatted == "" {
-		return "0"
-	}
-
-	return formatted
-}
-
 func aggregatedQtyToFloat64(value any) (float64, bool) {
 	switch typed := value.(type) {
 	case int64:
@@ -350,4 +300,36 @@ func decodeSpecs(raw []byte) any {
 	}
 
 	return out
+}
+
+func nextDailyBatchCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, sku string) (string, error) {
+	trimmedSKU := strings.TrimSpace(sku)
+	if trimmedSKU == "" {
+		return "", errors.New("missing sku")
+	}
+
+	todayToken := time.Now().UTC().Format("20060102")
+	prefix := fmt.Sprintf("%s-%s", trimmedSKU, todayToken)
+	lockKey := fmt.Sprintf("inventory-batch:%s", prefix)
+
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
+		return "", err
+	}
+
+	var nextSequence int
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE(MAX((regexp_match(batch_code, '-([0-9]+)$'))[1]::int), 0) + 1
+		FROM inventory_batches
+		WHERE item_id = $1
+		  AND batch_code LIKE $2
+	`, itemID, prefix+"-%").Scan(&nextSequence)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%s-%02d", prefix, nextSequence), nil
+}
+
+func almostEqual(left, right float64) bool {
+	return math.Abs(left-right) <= 0.000001
 }

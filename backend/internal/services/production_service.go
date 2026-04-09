@@ -189,7 +189,6 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 			BatchCode:    generateProductionBatchCode(movementGroupUUID),
 			InitialQty:   finishedQty,
 			RemainingQty: finishedQty,
-			UnitCost:     sourceBatch.UnitCost,
 			Status:       db.BatchStatusACTIVE,
 		})
 		if createErr != nil {
@@ -278,7 +277,6 @@ func (s *ProductionService) getOrCreateScrapItem(ctx context.Context, qtx *db.Qu
 		Specs: models.SteelSpecs{
 			Thickness:  1,
 			Width:      1,
-			Grade:      "SCRAP",
 			CoilWeight: 1,
 		},
 		SKU: "",

@@ -13,6 +13,11 @@ export default async function DashboardLayout({
       redirect("/login?next=/dashboard");
     }
 
+    // Keep workspace routes reachable during temporary backend outages.
+    if (error instanceof ApiClientError && error.statusCode >= 500) {
+      return <AppShell>{children}</AppShell>;
+    }
+
     throw error;
   }
 

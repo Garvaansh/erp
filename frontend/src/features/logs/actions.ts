@@ -20,7 +20,6 @@ export async function submitDailyLogAction(
       output_item_specs: {
         thickness: Number(formData.get("output_specs_thickness") ?? 0),
         width: Number(formData.get("output_specs_width") ?? 0),
-        grade: String(formData.get("output_specs_grade") ?? "").trim(),
         coil_weight: Number(formData.get("output_specs_coil_weight") ?? 0),
       },
       input_qty: Number(formData.get("input_qty") ?? 0),

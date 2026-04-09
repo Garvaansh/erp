@@ -17,8 +17,6 @@ INSERT INTO items (
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
-ON CONFLICT (name, (specs::text)) DO UPDATE
-SET updated_at = items.updated_at
 RETURNING id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at
 `
 

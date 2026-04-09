@@ -40,10 +40,6 @@ export function ReceiveStockForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="batch_code">Batch Code</Label>
-            <Input id="batch_code" name="batch_code" required />
-          </div>
-          <div className="space-y-2">
             <Label htmlFor="quantity">Quantity</Label>
             <Input
               id="quantity"
@@ -52,33 +48,6 @@ export function ReceiveStockForm() {
               step="0.0001"
               required
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="unit_cost">Unit Cost</Label>
-            <Input
-              id="unit_cost"
-              name="unit_cost"
-              type="number"
-              step="0.01"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="reference_type">Reference Type</Label>
-            <Input
-              id="reference_type"
-              name="reference_type"
-              defaultValue="PURCHASE_RECEIPT"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="reference_id">Reference ID</Label>
-            <Input id="reference_id" name="reference_id" required />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Input id="notes" name="notes" />
           </div>
 
           {state.message ? (

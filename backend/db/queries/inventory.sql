@@ -1,8 +1,8 @@
 -- name: CreateBatch :one
 INSERT INTO inventory_batches (
-    item_id, batch_code, initial_qty, remaining_qty, unit_cost, status
+    item_id, batch_code, initial_qty, remaining_qty, status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5
 )
 RETURNING *;
 
@@ -21,7 +21,8 @@ SET remaining_qty = remaining_qty + $2,
     updated_at = NOW(),
     status = CASE 
         WHEN remaining_qty + $2 <= 0 THEN 'EXHAUSTED'::batch_status 
-        ELSE status 
+        WHEN remaining_qty + $2 < initial_qty THEN 'ACTIVE'::batch_status
+        ELSE status
     END
 WHERE id = $1
 RETURNING *;
@@ -48,19 +49,20 @@ ORDER BY created_at ASC
 LIMIT 1;
 
 -- name: GetActiveBatchesByItem :many
-SELECT id, batch_code, remaining_qty
+SELECT id, batch_code, initial_qty, remaining_qty, status, created_at
 FROM inventory_batches
 WHERE item_id = $1 AND remaining_qty > 0
-ORDER BY created_at ASC;
+ORDER BY created_at DESC;
 
 -- name: GetInventoryAggregated :many
 SELECT i.category,
        i.id as item_id,
+    i.sku,
        i.name,
        i.specs,
        SUM(b.remaining_qty) as total_qty
 FROM inventory_batches b
 JOIN items i ON b.item_id = i.id
 WHERE b.remaining_qty > 0
-GROUP BY i.category, i.id, i.name, i.specs
+GROUP BY i.category, i.id, i.sku, i.name, i.specs
 ORDER BY i.category, i.name;

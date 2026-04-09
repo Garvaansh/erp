@@ -4,7 +4,6 @@ export type DailyLogPayload = {
   output_item_specs: {
     thickness: number;
     width: number;
-    grade: string;
     coil_weight: number;
   };
   input_qty: number;

@@ -55,7 +55,7 @@ export async function getInventorySnapshot(): Promise<InventorySnapshot> {
 export async function listActiveBatches(
   itemId: string,
 ): Promise<ActiveBatch[]> {
-  const params = new URLSearchParams({ productId: itemId });
+  const params = new URLSearchParams({ item_id: itemId });
   const data = await apiClient<ActiveBatchesResponse>(
     `/inventory/batches?${params.toString()}`,
     { method: "GET" },
@@ -155,10 +155,7 @@ export async function receiveStock(
 
   const data = await apiClient<ReceiveStockResult>("/inventory/receive", {
     method: "POST",
-    body: JSON.stringify({
-      ...parsed,
-      idempotency_key: crypto.randomUUID(),
-    }),
+    body: JSON.stringify(parsed),
   });
 
   return data ?? {};

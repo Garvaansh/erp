@@ -344,7 +344,6 @@ type InventoryBatch struct {
 	BatchCode    string             `json:"batch_code"`
 	InitialQty   pgtype.Numeric     `json:"initial_qty"`
 	RemainingQty pgtype.Numeric     `json:"remaining_qty"`
-	UnitCost     pgtype.Numeric     `json:"unit_cost"`
 	Status       BatchStatus        `json:"status"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/erp/backend/internal/db"
@@ -64,6 +65,14 @@ func (s *ItemService) FindOrCreateItem(ctx context.Context, req models.CreateIte
 	}
 
 	trimmedSKU := strings.TrimSpace(req.SKU)
+	if strings.EqualFold(strings.TrimSpace(req.Category), string(db.ItemCategoryRAW)) {
+		generatedSKU := buildRawMaterialSKU(req.Specs.Thickness, req.Specs.Width)
+		if generatedSKU == "" {
+			return zero, ErrInvalidItemPayload
+		}
+		trimmedSKU = generatedSKU
+	}
+
 	sku := pgtype.Text{String: trimmedSKU, Valid: trimmedSKU != ""}
 
 	item, err := s.queries.CreateItem(ctx, db.CreateItemParams{
@@ -84,6 +93,27 @@ func (s *ItemService) FindOrCreateItem(ctx context.Context, req models.CreateIte
 	}
 
 	return item, nil
+}
+
+func buildRawMaterialSKU(thickness float64, width float64) string {
+	thicknessToken := formatDimensionToken(thickness)
+	widthToken := formatDimensionToken(width)
+	if thicknessToken == "" || widthToken == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("RAW-%sx%s", thicknessToken, widthToken)
+}
+
+func formatDimensionToken(value float64) string {
+	if value <= 0 {
+		return ""
+	}
+
+	raw := strconv.FormatFloat(value, 'f', 4, 64)
+	raw = strings.TrimRight(raw, "0")
+	raw = strings.TrimRight(raw, ".")
+	return raw
 }
 
 func (s *ItemService) ListItemsByCategory(ctx context.Context, category string, limit, offset int32) ([]db.Item, error) {

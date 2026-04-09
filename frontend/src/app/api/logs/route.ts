@@ -23,7 +23,6 @@ type DailyLogBody = {
 function validSpecs(value: unknown): value is {
   thickness: number;
   width: number;
-  grade: string;
   coil_weight: number;
 } {
   return (
@@ -34,8 +33,6 @@ function validSpecs(value: unknown): value is {
     typeof value.width === "number" &&
     !Number.isNaN(value.width) &&
     value.width > 0 &&
-    typeof value.grade === "string" &&
-    value.grade.trim() !== "" &&
     typeof value.coil_weight === "number" &&
     !Number.isNaN(value.coil_weight) &&
     value.coil_weight > 0
@@ -89,7 +86,6 @@ export async function POST(request: NextRequest) {
     output_item_specs: {
       thickness: outputItemSpecs.thickness,
       width: outputItemSpecs.width,
-      grade: outputItemSpecs.grade.trim(),
       coil_weight: outputItemSpecs.coil_weight,
     },
     input_qty: inputQty,

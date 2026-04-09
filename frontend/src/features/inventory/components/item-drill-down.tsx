@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,22 @@ function formatArrivalDate(value: string | null): string {
   }).format(date);
 }
 
+function formatKg(value: number): string {
+  return `${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value)} kg`;
+}
+
+function deriveStatus(
+  initialWeight: number,
+  remainingWeight: number,
+): "NEW" | "IN USE" {
+  return Math.abs(initialWeight - remainingWeight) < 0.000001
+    ? "NEW"
+    : "IN USE";
+}
+
 export function ItemDrillDown({
   item,
   open,
@@ -51,6 +68,10 @@ export function ItemDrillDown({
   const [batches, setBatches] = useState<ActiveBatch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const sortedBatches = [...batches].sort((left, right) =>
+    right.arrival_date.localeCompare(left.arrival_date),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -122,26 +143,48 @@ export function ItemDrillDown({
                 <TableRow>
                   <TableHead>Batch Code</TableHead>
                   <TableHead>Arrival Date</TableHead>
-                  <TableHead className="text-right">Current Weight</TableHead>
+                  <TableHead className="text-right">Initial Weight</TableHead>
+                  <TableHead className="text-right">Remaining Weight</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {batches.length ? (
-                  batches.map((batch) => (
+                {sortedBatches.length ? (
+                  sortedBatches.map((batch) => (
                     <TableRow key={batch.batch_id}>
                       <TableCell>{batch.batch_code}</TableCell>
                       <TableCell>
                         {formatArrivalDate(batch.arrival_date)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {batch.current_weight}
+                        {formatKg(batch.initial_weight)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatKg(batch.remaining_weight)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            deriveStatus(
+                              batch.initial_weight,
+                              batch.remaining_weight,
+                            ) === "NEW"
+                              ? "secondary"
+                              : "outline"
+                          }
+                        >
+                          {deriveStatus(
+                            batch.initial_weight,
+                            batch.remaining_weight,
+                          )}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
                     <TableCell
-                      colSpan={3}
+                      colSpan={5}
                       className="text-sm text-muted-foreground"
                     >
                       No active batches found for this item.

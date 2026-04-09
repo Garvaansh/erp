@@ -15,35 +15,11 @@ import {
 type BatchOption = {
   batch_id: string;
   batch_code: string;
-  arrival_date: string | null;
-  current_weight: number;
-  label: string;
+  arrival_date: string;
+  initial_weight: number;
+  remaining_weight: number;
+  status: "NEW" | "IN USE";
 };
-
-function extractBatchCode(label: string): string {
-  const [batchCode] = label.split(" (");
-  return batchCode?.trim() || "UNKNOWN";
-}
-
-function deriveArrivalDate(batchCode: string): string | null {
-  const ddmmyyyy = batchCode.match(/-(\d{2})-(\d{2})-(\d{4})$/);
-  if (ddmmyyyy) {
-    const [, day, month, year] = ddmmyyyy;
-    return `${year}-${month}-${day}`;
-  }
-
-  const yyyymmdd = batchCode.match(/-(\d{8})-/);
-  if (yyyymmdd) {
-    const [year, month, day] = [
-      yyyymmdd[1].slice(0, 4),
-      yyyymmdd[1].slice(4, 6),
-      yyyymmdd[1].slice(6, 8),
-    ];
-    return `${year}-${month}-${day}`;
-  }
-
-  return null;
-}
 
 function sanitizeBatches(payload: unknown): BatchOption[] {
   const rows = unwrapBackendPayload(payload);
@@ -56,25 +32,26 @@ function sanitizeBatches(payload: unknown): BatchOption[] {
       (row): row is Record<string, unknown> =>
         isRecord(row) &&
         typeof row.batch_id === "string" &&
-        typeof row.label === "string" &&
-        typeof row.remaining_qty === "number",
+        typeof row.batch_code === "string" &&
+        typeof row.arrival_date === "string" &&
+        typeof row.initial_weight === "number" &&
+        typeof row.remaining_weight === "number" &&
+        (row.status === "NEW" || row.status === "IN USE"),
     )
     .map((row) => ({
       batch_id: row.batch_id as string,
-      batch_code: extractBatchCode(row.label as string),
-      arrival_date: deriveArrivalDate(extractBatchCode(row.label as string)),
-      current_weight: row.remaining_qty as number,
-      label: row.label as string,
+      batch_code: row.batch_code as string,
+      arrival_date: row.arrival_date as string,
+      initial_weight: row.initial_weight as number,
+      remaining_weight: row.remaining_weight as number,
+      status: row.status as "NEW" | "IN USE",
     }));
 }
 
 export async function GET(request: NextRequest) {
-  const itemID =
-    request.nextUrl.searchParams.get("productId")?.trim() ??
-    request.nextUrl.searchParams.get("item_id")?.trim() ??
-    "";
+  const itemID = request.nextUrl.searchParams.get("item_id")?.trim() ?? "";
   if (!itemID) {
-    return apiError("productId query parameter is required", 400);
+    return apiError("item_id query parameter is required", 400);
   }
 
   const backendURL = getBackendBaseUrl();

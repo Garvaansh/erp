@@ -4,8 +4,6 @@ INSERT INTO items (
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
-ON CONFLICT (name, (specs::text)) DO UPDATE
-SET updated_at = items.updated_at
 RETURNING *;
 
 -- name: GetItem :one

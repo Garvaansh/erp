@@ -53,13 +53,14 @@ import type {
   SelectableItem,
 } from "@/features/inventory/types";
 
-type LaneTab = "raw" | "wip" | "finished";
+type InventoryTab = "raw" | "wip" | "finished";
 
 type InventoryViewProps = {
   snapshot: InventorySnapshot;
   selectableItems: SelectableItem[];
   rawItems: ItemDefinition[];
-  initialLane: LaneTab;
+  initialTab: InventoryTab;
+  serviceAlert?: string;
 };
 
 type MessageTone = "success" | "error";
@@ -76,17 +77,30 @@ function readNumberSpec(specs: Record<string, unknown>, key: string): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function readStringSpec(specs: Record<string, unknown>, key: string): string {
-  const value = specs[key];
-  return typeof value === "string" ? value : "";
-}
-
-function formatSpecs(specs: Record<string, unknown>): string {
+function formatCompactSpecs(specs: Record<string, unknown>): string {
   const thickness = readNumberSpec(specs, "thickness");
   const width = readNumberSpec(specs, "width");
-  const grade = readStringSpec(specs, "grade") || "N/A";
+  const diameter = readNumberSpec(specs, "diameter");
 
-  return `T:${thickness} W:${width} G:${grade}`;
+  if (diameter > 0) {
+    return `${formatNumber(thickness)} mm x ${formatNumber(width)} mm x ${formatNumber(diameter)} mm`;
+  }
+
+  return `${formatNumber(thickness)} mm x ${formatNumber(width)} mm`;
+}
+
+function formatNumber(value: number, maxFractionDigits = 4): string {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  }).format(value);
+}
+
+function formatKg(value: number): string {
+  return `${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value)} kg`;
 }
 
 function applyActionResult(
@@ -101,7 +115,7 @@ function applyActionResult(
   return result.ok;
 }
 
-function parseLane(value: string | null | undefined): LaneTab {
+function parseTab(value: string | null | undefined): InventoryTab {
   if (value === "wip" || value === "finished") {
     return value;
   }
@@ -113,14 +127,15 @@ export function InventoryView({
   snapshot,
   selectableItems,
   rawItems,
-  initialLane,
+  initialTab,
+  serviceAlert,
 }: InventoryViewProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  const [activeLane, setActiveLane] = useState<LaneTab>(initialLane);
+  const [activeTab, setActiveTab] = useState<InventoryTab>(initialTab);
   const [banner, setBanner] = useState<BannerMessage | null>(null);
   const [finishedFilter, setFinishedFilter] =
     useState<FinishedFilter>("SELLABLE");
@@ -139,7 +154,7 @@ export function InventoryView({
     const map = new Map<string, number>();
 
     for (const row of snapshot.RAW) {
-      map.set(row.item_id, (map.get(row.item_id) || 0) + row.total_qty);
+      map.set(row.item_id, row.total_qty);
     }
 
     return map;
@@ -155,6 +170,14 @@ export function InventoryView({
     [selectableItems],
   );
 
+  const rawItemById = useMemo(() => {
+    const map = new Map<string, ItemDefinition>();
+    for (const item of rawDefinitions) {
+      map.set(item.id, item);
+    }
+    return map;
+  }, [rawDefinitions]);
+
   const drillDownItem = useMemo(
     () => rawDefinitions.find((item) => item.id === drillDownItemId) ?? null,
     [drillDownItemId, rawDefinitions],
@@ -164,14 +187,12 @@ export function InventoryView({
     name: "",
     thickness: "",
     width: "",
-    grade: "",
+    diameter: "",
   });
 
   const [receiveForm, setReceiveForm] = useState({
     item_id: rawSelectableItems[0]?.item_id ?? "",
-    batch_code: "",
     weight: "",
-    price: "",
   });
 
   const [selectedWipItemId, setSelectedWipItemId] = useState<string>(
@@ -190,7 +211,6 @@ export function InventoryView({
     output_item_name: "",
     output_specs_thickness: "",
     output_specs_width: "",
-    output_specs_grade: "",
     output_specs_coil_weight: "",
     input_qty: "",
     finished_qty: "",
@@ -198,8 +218,10 @@ export function InventoryView({
   });
 
   useEffect(() => {
-    const laneFromUrl = parseLane(searchParams.get("lane"));
-    setActiveLane(laneFromUrl);
+    const tabFromUrl = parseTab(
+      searchParams.get("tab") ?? searchParams.get("lane"),
+    );
+    setActiveTab(tabFromUrl);
   }, [searchParams]);
 
   useEffect(() => {
@@ -245,8 +267,6 @@ export function InventoryView({
       output_specs_width: String(
         readNumberSpec(selectedWipRow.specs, "width") || 1,
       ),
-      output_specs_grade:
-        readStringSpec(selectedWipRow.specs, "grade") || "STD",
       output_specs_coil_weight: String(
         readNumberSpec(selectedWipRow.specs, "coil_weight") || 1,
       ),
@@ -296,19 +316,20 @@ export function InventoryView({
     };
   }, [selectedWipItemId]);
 
-  function setLaneInUrl(nextLane: LaneTab) {
+  function setTabInUrl(nextTab: InventoryTab) {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("lane", nextLane);
+    params.delete("lane");
+    params.set("tab", nextTab);
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
     });
   }
 
-  function onLaneChange(value: string) {
-    const nextLane = parseLane(value);
-    setActiveLane(nextLane);
-    setLaneInUrl(nextLane);
+  function onTabChange(value: string) {
+    const nextTab = parseTab(value);
+    setActiveTab(nextTab);
+    setTabInUrl(nextTab);
   }
 
   function openLogForRow(row: InventoryViewRow) {
@@ -329,13 +350,13 @@ export function InventoryView({
         name: defineForm.name,
         thickness: Number(defineForm.thickness),
         width: Number(defineForm.width),
-        grade: defineForm.grade,
+        diameter: defineForm.diameter ? Number(defineForm.diameter) : undefined,
       });
 
       const ok = applyActionResult(result, setBanner);
       if (ok) {
         setDefineOpen(false);
-        setDefineForm({ name: "", thickness: "", width: "", grade: "" });
+        setDefineForm({ name: "", thickness: "", width: "", diameter: "" });
         router.refresh();
       }
     });
@@ -347,9 +368,7 @@ export function InventoryView({
     startTransition(async () => {
       const result = await receiveStockAction({
         item_id: receiveForm.item_id,
-        batch_code: receiveForm.batch_code,
         weight: Number(receiveForm.weight),
-        price: Number(receiveForm.price),
       });
 
       const ok = applyActionResult(result, setBanner);
@@ -357,9 +376,7 @@ export function InventoryView({
         setReceiveOpen(false);
         setReceiveForm((current) => ({
           ...current,
-          batch_code: "",
           weight: "",
-          price: "",
         }));
         router.refresh();
       }
@@ -376,7 +393,6 @@ export function InventoryView({
         output_item_specs: {
           thickness: Number(logForm.output_specs_thickness),
           width: Number(logForm.output_specs_width),
-          grade: logForm.output_specs_grade,
           coil_weight: Number(logForm.output_specs_coil_weight),
         },
         input_qty: Number(logForm.input_qty),
@@ -394,6 +410,16 @@ export function InventoryView({
 
   return (
     <div className="space-y-4">
+      {serviceAlert ? (
+        <Card>
+          <CardContent>
+            <p>
+              <Badge variant="destructive">SERVICE</Badge> {serviceAlert}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {banner ? (
         <Card>
           <CardContent>
@@ -411,7 +437,7 @@ export function InventoryView({
         </Card>
       ) : null}
 
-      <Tabs value={activeLane} onValueChange={onLaneChange}>
+      <Tabs value={activeTab} onValueChange={onTabChange}>
         <TabsList className="w-full justify-start gap-1 rounded-xl border border-border/70 bg-muted/40 p-1">
           <TabsTrigger value="raw" className="px-4">
             Raw Materials
@@ -431,11 +457,11 @@ export function InventoryView({
                 <div>
                   <CardTitle>Raw Materials Definition Ledger</CardTitle>
                   <CardDescription>
-                    Item-first master list with drill-down into physical coil
+                    Item-first master list with drill-down into physical stock
                     batches.
                   </CardDescription>
                 </div>
-                <Badge variant="outline">Lane 1</Badge>
+                <Badge variant="outline">Raw Materials</Badge>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -458,11 +484,11 @@ export function InventoryView({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Specs</TableHead>
-                      <TableHead className="text-right">
-                        Total Stock On Hand
-                      </TableHead>
+                      <TableHead>Material</TableHead>
+                      <TableHead>Thickness</TableHead>
+                      <TableHead>Width</TableHead>
+                      <TableHead>Diameter</TableHead>
+                      <TableHead className="text-right">Total Stock</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -476,20 +502,43 @@ export function InventoryView({
                           <TableCell>
                             <div className="font-medium">{item.name}</div>
                             <div className="text-xs text-muted-foreground">
-                              {item.id}
+                              {item.sku || "SKU unavailable"}
                             </div>
                           </TableCell>
                           <TableCell>
-                            {formatSpecs(item.specs as Record<string, unknown>)}
+                            {formatNumber(
+                              readNumberSpec(
+                                item.specs as Record<string, unknown>,
+                                "thickness",
+                              ),
+                            )}{" "}
+                            mm
+                          </TableCell>
+                          <TableCell>
+                            {formatNumber(
+                              readNumberSpec(
+                                item.specs as Record<string, unknown>,
+                                "width",
+                              ),
+                            )}{" "}
+                            mm
+                          </TableCell>
+                          <TableCell>
+                            {readNumberSpec(
+                              item.specs as Record<string, unknown>,
+                              "diameter",
+                            ) > 0
+                              ? `${formatNumber(readNumberSpec(item.specs as Record<string, unknown>, "diameter"))} mm`
+                              : "-"}
                           </TableCell>
                           <TableCell className="text-right">
-                            {rawStockByItemId.get(item.id) || 0}
+                            {formatKg(rawStockByItemId.get(item.id) || 0)}
                           </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={3}>
+                        <TableCell colSpan={5}>
                           No raw material definitions available.
                         </TableCell>
                       </TableRow>
@@ -508,11 +557,11 @@ export function InventoryView({
                 <div>
                   <CardTitle>Under Processing (WIP)</CardTitle>
                   <CardDescription>
-                    Ongoing conversion lane where semi-finished stock is
+                    Ongoing conversion area where semi-finished stock is
                     consumed and logged.
                   </CardDescription>
                 </div>
-                <Badge variant="outline">Lane 2</Badge>
+                <Badge variant="outline">Work In Progress</Badge>
               </div>
               <Button
                 variant="outline"
@@ -547,7 +596,7 @@ export function InventoryView({
                         <TableRow key={row.item_id}>
                           <TableCell>{row.name}</TableCell>
                           <TableCell className="text-right">
-                            {row.total_qty}
+                            {formatKg(row.total_qty)}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -581,10 +630,10 @@ export function InventoryView({
                 <div>
                   <CardTitle>Finished Goods and Scrap</CardTitle>
                   <CardDescription>
-                    Final lane for sellable output and scrap recovery tracking.
+                    Final stage for sellable output and scrap recovery tracking.
                   </CardDescription>
                 </div>
-                <Badge variant="outline">Lane 3</Badge>
+                <Badge variant="outline">Finished Output</Badge>
               </div>
               <div className="flex items-center gap-2">
                 <Label htmlFor="fg_filter">View</Label>
@@ -619,16 +668,16 @@ export function InventoryView({
                       finishedRows.map((row) => (
                         <TableRow key={row.item_id}>
                           <TableCell>{row.name}</TableCell>
-                          <TableCell>{formatSpecs(row.specs)}</TableCell>
+                          <TableCell>{formatCompactSpecs(row.specs)}</TableCell>
                           <TableCell className="text-right">
-                            {row.total_qty}
+                            {formatKg(row.total_qty)}
                           </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
                         <TableCell colSpan={3}>
-                          No records in this lane.
+                          No records in this section.
                         </TableCell>
                       </TableRow>
                     )}
@@ -651,7 +700,7 @@ export function InventoryView({
           <DialogHeader>
             <DialogTitle>Define New Material</DialogTitle>
             <DialogDescription>
-              SKU is generated automatically from thickness, width, and grade.
+              SKU is generated automatically from thickness and width.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onDefineSubmit}>
@@ -705,17 +754,18 @@ export function InventoryView({
                 </div>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="define_grade">Grade</Label>
+                <Label htmlFor="define_diameter">Diameter (optional)</Label>
                 <Input
-                  id="define_grade"
-                  value={defineForm.grade}
+                  id="define_diameter"
+                  type="number"
+                  step="0.0001"
+                  value={defineForm.diameter}
                   onChange={(event) =>
                     setDefineForm((current) => ({
                       ...current,
-                      grade: event.target.value,
+                      diameter: event.target.value,
                     }))
                   }
-                  required
                 />
               </div>
             </div>
@@ -741,7 +791,7 @@ export function InventoryView({
           <DialogHeader>
             <DialogTitle>Receive Stock</DialogTitle>
             <DialogDescription>
-              Batch code can be left blank to auto-generate from SKU and date.
+              Batch code and timestamps are generated by the backend.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onReceiveSubmit}>
@@ -761,61 +811,48 @@ export function InventoryView({
                     <SelectValue placeholder="Select raw item" />
                   </SelectTrigger>
                   <SelectContent>
-                    {rawSelectableItems.map((item) => (
-                      <SelectItem key={item.item_id} value={item.item_id}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
+                    {rawSelectableItems.map((item) => {
+                      const rawItem = rawItemById.get(item.item_id);
+                      const specs = rawItem?.specs as
+                        | Record<string, unknown>
+                        | undefined;
+                      const primaryName =
+                        rawItem?.name ||
+                        item.label.split(" (")[0] ||
+                        "Raw item";
+                      const secondary = specs
+                        ? `${formatNumber(readNumberSpec(specs, "thickness"))} mm x ${formatNumber(readNumberSpec(specs, "width"))} mm`
+                        : "Specs unavailable";
+
+                      return (
+                        <SelectItem key={item.item_id} value={item.item_id}>
+                          <div className="flex flex-col">
+                            <span>{primaryName}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {secondary}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="receive_batch">Batch #</Label>
+                <Label htmlFor="receive_weight">Quantity</Label>
                 <Input
-                  id="receive_batch"
-                  value={receiveForm.batch_code}
+                  id="receive_weight"
+                  type="number"
+                  step="0.0001"
+                  value={receiveForm.weight}
                   onChange={(event) =>
                     setReceiveForm((current) => ({
                       ...current,
-                      batch_code: event.target.value,
+                      weight: event.target.value,
                     }))
                   }
-                  placeholder="Optional"
+                  required
                 />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor="receive_weight">Weight</Label>
-                  <Input
-                    id="receive_weight"
-                    type="number"
-                    step="0.0001"
-                    value={receiveForm.weight}
-                    onChange={(event) =>
-                      setReceiveForm((current) => ({
-                        ...current,
-                        weight: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="receive_price">Price</Label>
-                  <Input
-                    id="receive_price"
-                    type="number"
-                    step="0.01"
-                    value={receiveForm.price}
-                    onChange={(event) =>
-                      setReceiveForm((current) => ({
-                        ...current,
-                        price: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
               </div>
             </div>
 
@@ -890,7 +927,7 @@ export function InventoryView({
                   <SelectContent>
                     {activeBatches.map((batch) => (
                       <SelectItem key={batch.batch_id} value={batch.batch_id}>
-                        {`${batch.batch_code} (${batch.current_weight}kg available)`}
+                        {`${batch.batch_code} (${formatKg(batch.remaining_weight)} available)`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -947,37 +984,21 @@ export function InventoryView({
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor="log_specs_grade">Grade</Label>
-                  <Input
-                    id="log_specs_grade"
-                    value={logForm.output_specs_grade}
-                    onChange={(event) =>
-                      setLogForm((current) => ({
-                        ...current,
-                        output_specs_grade: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="log_specs_coil_weight">Coil Weight</Label>
-                  <Input
-                    id="log_specs_coil_weight"
-                    type="number"
-                    step="0.0001"
-                    value={logForm.output_specs_coil_weight}
-                    onChange={(event) =>
-                      setLogForm((current) => ({
-                        ...current,
-                        output_specs_coil_weight: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
+              <div className="space-y-1">
+                <Label htmlFor="log_specs_coil_weight">Coil Weight</Label>
+                <Input
+                  id="log_specs_coil_weight"
+                  type="number"
+                  step="0.0001"
+                  value={logForm.output_specs_coil_weight}
+                  onChange={(event) =>
+                    setLogForm((current) => ({
+                      ...current,
+                      output_specs_coil_weight: event.target.value,
+                    }))
+                  }
+                  required
+                />
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">

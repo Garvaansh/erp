@@ -73,15 +73,6 @@ export function DailyLogForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="output_specs_grade">Specs: Grade</Label>
-              <Input
-                id="output_specs_grade"
-                name="output_specs_grade"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="output_specs_width">Specs: Width</Label>
               <Input
                 id="output_specs_width"
@@ -94,7 +85,9 @@ export function DailyLogForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="output_specs_coil_weight">Specs: Coil Weight</Label>
+              <Label htmlFor="output_specs_coil_weight">
+                Specs: Coil Weight
+              </Label>
               <Input
                 id="output_specs_coil_weight"
                 name="output_specs_coil_weight"

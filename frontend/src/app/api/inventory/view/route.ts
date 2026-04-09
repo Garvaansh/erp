@@ -16,6 +16,7 @@ import {
  */
 type InventoryViewRow = {
   item_id: string;
+  sku?: string;
   name: string;
   specs: Record<string, unknown>;
   total_qty: number;
@@ -43,38 +44,29 @@ function sanitizeViewRow(row: unknown): InventoryViewRow | null {
   if (!isRecord(row)) return null;
 
   const itemId = typeof row.item_id === "string" ? row.item_id.trim() : "";
+  const sku = typeof row.sku === "string" ? row.sku.trim() : "";
   const name = typeof row.name === "string" ? row.name.trim() : "";
   const totalQty = typeof row.total_qty === "number" ? row.total_qty : 0;
   const specs = isRecord(row.specs) ? row.specs : {};
 
   if (!itemId) return null;
 
-  return { item_id: itemId, name, specs, total_qty: totalQty };
+  return {
+    item_id: itemId,
+    sku: sku || undefined,
+    name,
+    specs,
+    total_qty: totalQty,
+  };
 }
 
 function sanitizeCategory(data: unknown): InventoryViewRow[] {
   if (!Array.isArray(data)) return [];
 
-  const totals = new Map<string, InventoryViewRow>();
-
-  for (const row of data) {
-    const sanitized = sanitizeViewRow(row);
-    if (!sanitized) {
-      continue;
-    }
-
-    const existing = totals.get(sanitized.item_id);
-    if (!existing) {
-      totals.set(sanitized.item_id, sanitized);
-      continue;
-    }
-
-    existing.total_qty += sanitized.total_qty;
-  }
-
-  return Array.from(totals.values()).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  return data
+    .map((row) => sanitizeViewRow(row))
+    .filter((row): row is InventoryViewRow => row !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function sanitizeView(payload: unknown): InventoryView {

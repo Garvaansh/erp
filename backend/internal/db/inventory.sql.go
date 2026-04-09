@@ -13,11 +13,11 @@ import (
 
 const createBatch = `-- name: CreateBatch :one
 INSERT INTO inventory_batches (
-    item_id, batch_code, initial_qty, remaining_qty, unit_cost, status
+    item_id, batch_code, initial_qty, remaining_qty, status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5
 )
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, unit_cost, status, created_at, updated_at
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at
 `
 
 type CreateBatchParams struct {
@@ -25,7 +25,6 @@ type CreateBatchParams struct {
 	BatchCode    string         `json:"batch_code"`
 	InitialQty   pgtype.Numeric `json:"initial_qty"`
 	RemainingQty pgtype.Numeric `json:"remaining_qty"`
-	UnitCost     pgtype.Numeric `json:"unit_cost"`
 	Status       BatchStatus    `json:"status"`
 }
 
@@ -35,7 +34,6 @@ func (q *Queries) CreateBatch(ctx context.Context, arg CreateBatchParams) (Inven
 		arg.BatchCode,
 		arg.InitialQty,
 		arg.RemainingQty,
-		arg.UnitCost,
 		arg.Status,
 	)
 	var i InventoryBatch
@@ -45,7 +43,6 @@ func (q *Queries) CreateBatch(ctx context.Context, arg CreateBatchParams) (Inven
 		&i.BatchCode,
 		&i.InitialQty,
 		&i.RemainingQty,
-		&i.UnitCost,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -54,16 +51,19 @@ func (q *Queries) CreateBatch(ctx context.Context, arg CreateBatchParams) (Inven
 }
 
 const getActiveBatchesByItem = `-- name: GetActiveBatchesByItem :many
-SELECT id, batch_code, remaining_qty
+SELECT id, batch_code, initial_qty, remaining_qty, status, created_at
 FROM inventory_batches
 WHERE item_id = $1 AND remaining_qty > 0
-ORDER BY created_at ASC
+ORDER BY created_at DESC
 `
 
 type GetActiveBatchesByItemRow struct {
-	ID           pgtype.UUID    `json:"id"`
-	BatchCode    string         `json:"batch_code"`
-	RemainingQty pgtype.Numeric `json:"remaining_qty"`
+	ID           pgtype.UUID        `json:"id"`
+	BatchCode    string             `json:"batch_code"`
+	InitialQty   pgtype.Numeric     `json:"initial_qty"`
+	RemainingQty pgtype.Numeric     `json:"remaining_qty"`
+	Status       BatchStatus        `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 func (q *Queries) GetActiveBatchesByItem(ctx context.Context, itemID pgtype.UUID) ([]GetActiveBatchesByItemRow, error) {
@@ -75,7 +75,14 @@ func (q *Queries) GetActiveBatchesByItem(ctx context.Context, itemID pgtype.UUID
 	var items []GetActiveBatchesByItemRow
 	for rows.Next() {
 		var i GetActiveBatchesByItemRow
-		if err := rows.Scan(&i.ID, &i.BatchCode, &i.RemainingQty); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.BatchCode,
+			&i.InitialQty,
+			&i.RemainingQty,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -87,7 +94,7 @@ func (q *Queries) GetActiveBatchesByItem(ctx context.Context, itemID pgtype.UUID
 }
 
 const getBatch = `-- name: GetBatch :one
-SELECT id, item_id, batch_code, initial_qty, remaining_qty, unit_cost, status, created_at, updated_at FROM inventory_batches
+SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at FROM inventory_batches
 WHERE id = $1 LIMIT 1
 `
 
@@ -100,7 +107,6 @@ func (q *Queries) GetBatch(ctx context.Context, id pgtype.UUID) (InventoryBatch,
 		&i.BatchCode,
 		&i.InitialQty,
 		&i.RemainingQty,
-		&i.UnitCost,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -109,7 +115,7 @@ func (q *Queries) GetBatch(ctx context.Context, id pgtype.UUID) (InventoryBatch,
 }
 
 const getBatchForUpdate = `-- name: GetBatchForUpdate :one
-SELECT id, item_id, batch_code, initial_qty, remaining_qty, unit_cost, status, created_at, updated_at FROM inventory_batches
+SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at FROM inventory_batches
 WHERE id = $1
 FOR UPDATE
 `
@@ -123,7 +129,6 @@ func (q *Queries) GetBatchForUpdate(ctx context.Context, id pgtype.UUID) (Invent
 		&i.BatchCode,
 		&i.InitialQty,
 		&i.RemainingQty,
-		&i.UnitCost,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -134,19 +139,21 @@ func (q *Queries) GetBatchForUpdate(ctx context.Context, id pgtype.UUID) (Invent
 const getInventoryAggregated = `-- name: GetInventoryAggregated :many
 SELECT i.category,
        i.id as item_id,
+    i.sku,
        i.name,
        i.specs,
        SUM(b.remaining_qty) as total_qty
 FROM inventory_batches b
 JOIN items i ON b.item_id = i.id
 WHERE b.remaining_qty > 0
-GROUP BY i.category, i.id, i.name, i.specs
+GROUP BY i.category, i.id, i.sku, i.name, i.specs
 ORDER BY i.category, i.name
 `
 
 type GetInventoryAggregatedRow struct {
 	Category ItemCategory `json:"category"`
 	ItemID   pgtype.UUID  `json:"item_id"`
+	Sku      pgtype.Text  `json:"sku"`
 	Name     string       `json:"name"`
 	Specs    []byte       `json:"specs"`
 	TotalQty int64        `json:"total_qty"`
@@ -164,6 +171,7 @@ func (q *Queries) GetInventoryAggregated(ctx context.Context) ([]GetInventoryAgg
 		if err := rows.Scan(
 			&i.Category,
 			&i.ItemID,
+			&i.Sku,
 			&i.Name,
 			&i.Specs,
 			&i.TotalQty,
@@ -306,10 +314,11 @@ SET remaining_qty = remaining_qty + $2,
     updated_at = NOW(),
     status = CASE 
         WHEN remaining_qty + $2 <= 0 THEN 'EXHAUSTED'::batch_status 
-        ELSE status 
+        WHEN remaining_qty + $2 < initial_qty THEN 'ACTIVE'::batch_status
+        ELSE status
     END
 WHERE id = $1
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, unit_cost, status, created_at, updated_at
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at
 `
 
 type UpdateBatchQuantityParams struct {
@@ -326,7 +335,6 @@ func (q *Queries) UpdateBatchQuantity(ctx context.Context, arg UpdateBatchQuanti
 		&i.BatchCode,
 		&i.InitialQty,
 		&i.RemainingQty,
-		&i.UnitCost,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
