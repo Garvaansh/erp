@@ -100,7 +100,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
 	committed := false
@@ -114,7 +114,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 	itemService := NewItemService(qtx)
 
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", idempotencyKey); err != nil {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("acquire idempotency lock: %w", err)
 	}
 
 	movementGroupUUID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(idempotencyKey))
@@ -128,7 +128,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 		}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("fetch existing journal by movement group: %w", err)
 	}
 
 	outputItem, err := itemService.FindOrCreateItem(ctx, models.CreateItemRequest{
@@ -139,17 +139,17 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 		SKU:      "SKU-" + strings.ToUpper(movementGroupUUID.String()[0:8]),
 	})
 	if err != nil {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("find or create output item: %w", err)
 	}
 
 	sourceBatch, err := qtx.GetBatchForUpdate(ctx, sourceBatchID)
 	if err != nil {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("fetch source batch for update: %w", err)
 	}
 
 	availableQty, ok := numericToFloat64(sourceBatch.RemainingQty)
 	if !ok {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("parse source batch quantity: %w", ErrProcessDailyLogFailed)
 	}
 
 	if input.InputQty > availableQty {
@@ -161,7 +161,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 		RemainingQty: negInputQty,
 	})
 	if err != nil {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("consume source batch quantity: %w", err)
 	}
 
 	_, err = qtx.RecordTransaction(ctx, db.RecordTransactionParams{
@@ -176,7 +176,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 		Notes:           pgtype.Text{String: "Input consumption for daily log", Valid: true},
 	})
 	if err != nil {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("record input consumption transaction: %w", err)
 	}
 
 	result := &ProcessDailyLogResult{
@@ -184,15 +184,21 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 	}
 
 	if input.FinishedQty > 0 {
+		finishedDailySequence, seqErr := nextProductionDailySequence(ctx, tx, outputItem.ID)
+		if seqErr != nil {
+			return nil, fmt.Errorf("generate production batch daily sequence: %w", seqErr)
+		}
+
 		finishedBatch, createErr := qtx.CreateBatch(ctx, db.CreateBatchParams{
-			ItemID:       outputItem.ID,
-			BatchCode:    generateProductionBatchCode(movementGroupUUID),
-			InitialQty:   finishedQty,
-			RemainingQty: finishedQty,
-			Status:       db.BatchStatusACTIVE,
+			ItemID:        outputItem.ID,
+			BatchCode:     generateProductionBatchCode(movementGroupUUID),
+			DailySequence: finishedDailySequence,
+			InitialQty:    finishedQty,
+			RemainingQty:  finishedQty,
+			Status:        db.BatchStatusACTIVE,
 		})
 		if createErr != nil {
-			return nil, ErrProcessDailyLogFailed
+			return nil, fmt.Errorf("create finished batch: %w", createErr)
 		}
 
 		_, createErr = qtx.RecordTransaction(ctx, db.RecordTransactionParams{
@@ -207,7 +213,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 			Notes:           pgtype.Text{String: "Finished goods receipt from daily log", Valid: true},
 		})
 		if createErr != nil {
-			return nil, ErrProcessDailyLogFailed
+			return nil, fmt.Errorf("record finished goods transaction: %w", createErr)
 		}
 
 		result.FinishedBatchID = uuidString(finishedBatch.ID)
@@ -216,7 +222,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 	if input.ScrapQty > 0 {
 		scrapItem, createErr := s.getOrCreateScrapItem(ctx, qtx, itemService)
 		if createErr != nil {
-			return nil, ErrProcessDailyLogFailed
+			return nil, fmt.Errorf("resolve scrap item: %w", createErr)
 		}
 
 		_, createErr = qtx.RecordTransaction(ctx, db.RecordTransactionParams{
@@ -231,7 +237,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 			Notes:           pgtype.Text{String: "Scrap receipt from daily log", Valid: true},
 		})
 		if createErr != nil {
-			return nil, ErrProcessDailyLogFailed
+			return nil, fmt.Errorf("record scrap receipt transaction: %w", createErr)
 		}
 	}
 
@@ -245,11 +251,11 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 		CreatedBy:       workerID,
 	})
 	if err != nil {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("create production journal: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, ErrProcessDailyLogFailed
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 	committed = true
 
@@ -314,4 +320,31 @@ func generateProductionBatchCode(movementGroupID uuid.UUID) string {
 		prefix = prefix[:8]
 	}
 	return fmt.Sprintf("P-%s-%s", time.Now().UTC().Format("20060102"), prefix)
+}
+
+func nextProductionDailySequence(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID) (int32, error) {
+	nowUTC := time.Now().UTC()
+	todayToken := nowUTC.Format("20060102")
+	lockKey := fmt.Sprintf("production-seq:%s:%s", uuidString(itemID), todayToken)
+
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
+		return 0, err
+	}
+
+	dayStartUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+	dayEndUTC := dayStartUTC.Add(24 * time.Hour)
+
+	var nextSequence int32
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE(MAX(daily_sequence), 0) + 1
+		FROM inventory_batches
+		WHERE item_id = $1
+		  AND created_at >= $2
+		  AND created_at < $3
+	`, itemID, dayStartUTC, dayEndUTC).Scan(&nextSequence)
+	if err != nil {
+		return 0, err
+	}
+
+	return nextSequence, nil
 }

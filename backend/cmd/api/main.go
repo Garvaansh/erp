@@ -74,11 +74,13 @@ func main() {
 	itemService := services.NewItemService(queries)
 	inventoryService := services.NewInventoryService(dbpool, itemService)
 	productionService := services.NewProductionService(dbpool)
+	procurementService := services.NewProcurementService(dbpool)
 	dashboardService := services.NewDashboardService(queries)
 	requestValidator := validator.New(validator.WithRequiredStructEnabled())
 	itemHandler := handlers.NewItemHandler(itemService, requestValidator)
 	inventoryHandler := handlers.NewInventoryHandler(inventoryService, requestValidator)
 	productionHandler := handlers.NewDailyLogHandler(productionService, requestValidator)
+	procurementHandler := handlers.NewProcurementHandler(procurementService, requestValidator)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 
 	// 4. Initialize Fiber App
@@ -148,6 +150,14 @@ func main() {
 
 	logsGroup := api.Group("/logs", middleware.RequireAuth)
 	logsGroup.Post("/", productionHandler.CreateLog)
+
+	procurementGroup := api.Group("/procurement", middleware.RequireAuth)
+	procurementGroup.Get("/orders", procurementHandler.ListOrders)
+	procurementGroup.Post("/orders", procurementHandler.CreateOrder)
+	procurementGroup.Get("/orders/:poId", procurementHandler.GetOrderDetails)
+	procurementGroup.Get("/orders/:poId/batches", procurementHandler.ListOrderBatches)
+	procurementGroup.Post("/receive", procurementHandler.ReceiveOrder)
+	procurementGroup.Post("/void-receipt", procurementHandler.VoidReceipt)
 
 	dashboardGroup := api.Group("/dashboard", middleware.RequireAuth)
 	dashboardGroup.Get("", dashboardHandler.GetSummary)

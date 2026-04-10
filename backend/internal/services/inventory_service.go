@@ -81,7 +81,7 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, ErrReceiveStockFailed
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 
 	committed := false
@@ -99,27 +99,28 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvalidItemID
 		}
-		return nil, ErrReceiveStockFailed
+		return nil, fmt.Errorf("fetch item: %w", err)
 	}
 
 	if !item.Sku.Valid || strings.TrimSpace(item.Sku.String) == "" {
-		return nil, ErrReceiveStockFailed
+		return nil, fmt.Errorf("validate item sku: %w", ErrReceiveStockFailed)
 	}
 
-	batchCode, err := nextDailyBatchCode(ctx, tx, itemID, item.Sku.String)
+	batchCode, dailySequence, err := nextDailyBatchCode(ctx, tx, itemID, item.Sku.String)
 	if err != nil {
-		return nil, ErrReceiveStockFailed
+		return nil, fmt.Errorf("generate batch code: %w", err)
 	}
 
 	batch, err := qtx.CreateBatch(ctx, db.CreateBatchParams{
-		ItemID:       itemID,
-		BatchCode:    batchCode,
-		InitialQty:   quantity,
-		RemainingQty: quantity,
-		Status:       db.BatchStatusNEW,
+		ItemID:        itemID,
+		BatchCode:     batchCode,
+		DailySequence: dailySequence,
+		InitialQty:    quantity,
+		RemainingQty:  quantity,
+		Status:        db.BatchStatusNEW,
 	})
 	if err != nil {
-		return nil, ErrReceiveStockFailed
+		return nil, fmt.Errorf("create batch: %w", err)
 	}
 
 	movementGroup := uuid.New()
@@ -137,11 +138,11 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 		Notes:           pgtype.Text{String: "Stock receipt", Valid: true},
 	})
 	if err != nil {
-		return nil, ErrReceiveStockFailed
+		return nil, fmt.Errorf("record transaction: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, ErrReceiveStockFailed
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 	committed = true
 
@@ -181,7 +182,11 @@ func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID st
 		}
 
 		status := "IN USE"
-		if almostEqual(initialQty, remainingQty) {
+		cmp, cmpErr := compareNumerics(row.InitialQty, row.RemainingQty)
+		if cmpErr != nil {
+			return nil, ErrGetActiveBatchesFailed
+		}
+		if cmp == 0 {
 			status = "NEW"
 		}
 
@@ -302,34 +307,35 @@ func decodeSpecs(raw []byte) any {
 	return out
 }
 
-func nextDailyBatchCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, sku string) (string, error) {
-	trimmedSKU := strings.TrimSpace(sku)
-	if trimmedSKU == "" {
-		return "", errors.New("missing sku")
+func nextDailyBatchCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, sku string) (string, int32, error) {
+	skuToken := sanitizeLotSKUToken(sku)
+	if skuToken == "" {
+		return "", 0, errors.New("missing sku")
 	}
 
-	todayToken := time.Now().UTC().Format("20060102")
-	prefix := fmt.Sprintf("%s-%s", trimmedSKU, todayToken)
-	lockKey := fmt.Sprintf("inventory-batch:%s", prefix)
+	nowUTC := time.Now().UTC()
+	todayToken := nowUTC.Format("20060102")
+	prefix := fmt.Sprintf("LOT-%s-%s", skuToken, todayToken)
+	lockKey := fmt.Sprintf("lot-seq:%s:%s", skuToken, todayToken)
 
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	var nextSequence int
+	dayStartUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+	dayEndUTC := dayStartUTC.Add(24 * time.Hour)
+
+	var nextSequence int32
 	err := tx.QueryRow(ctx, `
-		SELECT COALESCE(MAX((regexp_match(batch_code, '-([0-9]+)$'))[1]::int), 0) + 1
+		SELECT COALESCE(MAX(daily_sequence), 0) + 1
 		FROM inventory_batches
 		WHERE item_id = $1
-		  AND batch_code LIKE $2
-	`, itemID, prefix+"-%").Scan(&nextSequence)
+		  AND created_at >= $2
+		  AND created_at < $3
+	`, itemID, dayStartUTC, dayEndUTC).Scan(&nextSequence)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	return fmt.Sprintf("%s-%02d", prefix, nextSequence), nil
-}
-
-func almostEqual(left, right float64) bool {
-	return math.Abs(left-right) <= 0.000001
+	return fmt.Sprintf("%s-%02d", prefix, nextSequence), nextSequence, nil
 }
