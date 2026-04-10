@@ -7,6 +7,7 @@ import {
   PackageSearch,
   ClipboardList,
   Landmark,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/procurement", label: "Procurement", icon: Truck },
   { href: "/inventory", label: "Inventory", icon: PackageSearch },
   { href: "/finance", label: "Finance", icon: Landmark },
   { href: "/logs", label: "Logs", icon: ClipboardList },
