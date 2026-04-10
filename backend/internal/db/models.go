@@ -230,6 +230,49 @@ func (ns NullProductionOrderStatus) Value() (driver.Value, error) {
 	return string(ns.ProductionOrderStatus), nil
 }
 
+type PurchaseOrderStatus string
+
+const (
+	PurchaseOrderStatusPENDING   PurchaseOrderStatus = "PENDING"
+	PurchaseOrderStatusDELIVERED PurchaseOrderStatus = "DELIVERED"
+	PurchaseOrderStatusCANCELLED PurchaseOrderStatus = "CANCELLED"
+)
+
+func (e *PurchaseOrderStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PurchaseOrderStatus(s)
+	case string:
+		*e = PurchaseOrderStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PurchaseOrderStatus: %T", src)
+	}
+	return nil
+}
+
+type NullPurchaseOrderStatus struct {
+	PurchaseOrderStatus PurchaseOrderStatus `json:"purchase_order_status"`
+	Valid               bool                `json:"valid"` // Valid is true if PurchaseOrderStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPurchaseOrderStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.PurchaseOrderStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PurchaseOrderStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPurchaseOrderStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PurchaseOrderStatus), nil
+}
+
 type TxDirection string
 
 const (
@@ -279,6 +322,7 @@ const (
 	TxReferenceTypePRODUCTIONJOURNAL TxReferenceType = "PRODUCTION_JOURNAL"
 	TxReferenceTypeTRANSFER          TxReferenceType = "TRANSFER"
 	TxReferenceTypeADJUSTMENT        TxReferenceType = "ADJUSTMENT"
+	TxReferenceTypePURCHASEORDER     TxReferenceType = "PURCHASE_ORDER"
 )
 
 func (e *TxReferenceType) Scan(src interface{}) error {
@@ -339,14 +383,15 @@ type BomVersion struct {
 }
 
 type InventoryBatch struct {
-	ID           pgtype.UUID        `json:"id"`
-	ItemID       pgtype.UUID        `json:"item_id"`
-	BatchCode    string             `json:"batch_code"`
-	InitialQty   pgtype.Numeric     `json:"initial_qty"`
-	RemainingQty pgtype.Numeric     `json:"remaining_qty"`
-	Status       BatchStatus        `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	ItemID        pgtype.UUID        `json:"item_id"`
+	BatchCode     string             `json:"batch_code"`
+	InitialQty    pgtype.Numeric     `json:"initial_qty"`
+	RemainingQty  pgtype.Numeric     `json:"remaining_qty"`
+	Status        BatchStatus        `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	DailySequence int32              `json:"daily_sequence"`
 }
 
 type InventoryTransaction struct {
@@ -403,6 +448,19 @@ type ProductionOrder struct {
 	CompletedAt      pgtype.Timestamptz    `json:"completed_at"`
 	CreatedAt        pgtype.Timestamptz    `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz    `json:"updated_at"`
+}
+
+type PurchaseOrder struct {
+	ID         pgtype.UUID         `json:"id"`
+	PoNumber   string              `json:"po_number"`
+	VendorName string              `json:"vendor_name"`
+	ItemID     pgtype.UUID         `json:"item_id"`
+	OrderedQty pgtype.Numeric      `json:"ordered_qty"`
+	UnitPrice  pgtype.Numeric      `json:"unit_price"`
+	Status     PurchaseOrderStatus `json:"status"`
+	CreatedBy  pgtype.UUID         `json:"created_by"`
+	CreatedAt  pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz  `json:"updated_at"`
 }
 
 type Role struct {

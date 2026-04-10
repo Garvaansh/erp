@@ -1,8 +1,8 @@
 -- name: CreateBatch :one
 INSERT INTO inventory_batches (
-    item_id, batch_code, initial_qty, remaining_qty, status
+    item_id, batch_code, daily_sequence, initial_qty, remaining_qty, status
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 )
 RETURNING *;
 
@@ -47,6 +47,21 @@ SELECT * FROM inventory_transactions
 WHERE movement_group_id = $1
 ORDER BY created_at ASC
 LIMIT 1;
+
+-- name: GetProcurementReceiptTransactionForUpdate :one
+SELECT * FROM inventory_transactions
+WHERE id = $1
+    AND reference_type = 'PURCHASE_ORDER'
+    AND direction = 'IN'
+FOR UPDATE;
+
+-- name: ExhaustBatchByID :one
+UPDATE inventory_batches
+SET remaining_qty = 0,
+        status = 'EXHAUSTED',
+        updated_at = NOW()
+WHERE id = $1
+RETURNING *;
 
 -- name: GetActiveBatchesByItem :many
 SELECT id, batch_code, initial_qty, remaining_qty, status, created_at

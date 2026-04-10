@@ -13,25 +13,27 @@ import (
 
 const createBatch = `-- name: CreateBatch :one
 INSERT INTO inventory_batches (
-    item_id, batch_code, initial_qty, remaining_qty, status
+    item_id, batch_code, daily_sequence, initial_qty, remaining_qty, status
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 )
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence
 `
 
 type CreateBatchParams struct {
-	ItemID       pgtype.UUID    `json:"item_id"`
-	BatchCode    string         `json:"batch_code"`
-	InitialQty   pgtype.Numeric `json:"initial_qty"`
-	RemainingQty pgtype.Numeric `json:"remaining_qty"`
-	Status       BatchStatus    `json:"status"`
+	ItemID        pgtype.UUID    `json:"item_id"`
+	BatchCode     string         `json:"batch_code"`
+	DailySequence int32          `json:"daily_sequence"`
+	InitialQty    pgtype.Numeric `json:"initial_qty"`
+	RemainingQty  pgtype.Numeric `json:"remaining_qty"`
+	Status        BatchStatus    `json:"status"`
 }
 
 func (q *Queries) CreateBatch(ctx context.Context, arg CreateBatchParams) (InventoryBatch, error) {
 	row := q.db.QueryRow(ctx, createBatch,
 		arg.ItemID,
 		arg.BatchCode,
+		arg.DailySequence,
 		arg.InitialQty,
 		arg.RemainingQty,
 		arg.Status,
@@ -46,6 +48,33 @@ func (q *Queries) CreateBatch(ctx context.Context, arg CreateBatchParams) (Inven
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DailySequence,
+	)
+	return i, err
+}
+
+const exhaustBatchByID = `-- name: ExhaustBatchByID :one
+UPDATE inventory_batches
+SET remaining_qty = 0,
+        status = 'EXHAUSTED',
+        updated_at = NOW()
+WHERE id = $1
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence
+`
+
+func (q *Queries) ExhaustBatchByID(ctx context.Context, id pgtype.UUID) (InventoryBatch, error) {
+	row := q.db.QueryRow(ctx, exhaustBatchByID, id)
+	var i InventoryBatch
+	err := row.Scan(
+		&i.ID,
+		&i.ItemID,
+		&i.BatchCode,
+		&i.InitialQty,
+		&i.RemainingQty,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DailySequence,
 	)
 	return i, err
 }
@@ -94,7 +123,7 @@ func (q *Queries) GetActiveBatchesByItem(ctx context.Context, itemID pgtype.UUID
 }
 
 const getBatch = `-- name: GetBatch :one
-SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at FROM inventory_batches
+SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence FROM inventory_batches
 WHERE id = $1 LIMIT 1
 `
 
@@ -110,12 +139,13 @@ func (q *Queries) GetBatch(ctx context.Context, id pgtype.UUID) (InventoryBatch,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DailySequence,
 	)
 	return i, err
 }
 
 const getBatchForUpdate = `-- name: GetBatchForUpdate :one
-SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at FROM inventory_batches
+SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence FROM inventory_batches
 WHERE id = $1
 FOR UPDATE
 `
@@ -132,6 +162,7 @@ func (q *Queries) GetBatchForUpdate(ctx context.Context, id pgtype.UUID) (Invent
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DailySequence,
 	)
 	return i, err
 }
@@ -184,6 +215,33 @@ func (q *Queries) GetInventoryAggregated(ctx context.Context) ([]GetInventoryAgg
 		return nil, err
 	}
 	return items, nil
+}
+
+const getProcurementReceiptTransactionForUpdate = `-- name: GetProcurementReceiptTransactionForUpdate :one
+SELECT id, movement_group_id, item_id, batch_id, direction, quantity, reference_type, reference_id, performed_by, notes, created_at FROM inventory_transactions
+WHERE id = $1
+    AND reference_type = 'PURCHASE_ORDER'
+    AND direction = 'IN'
+FOR UPDATE
+`
+
+func (q *Queries) GetProcurementReceiptTransactionForUpdate(ctx context.Context, id pgtype.UUID) (InventoryTransaction, error) {
+	row := q.db.QueryRow(ctx, getProcurementReceiptTransactionForUpdate, id)
+	var i InventoryTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.MovementGroupID,
+		&i.ItemID,
+		&i.BatchID,
+		&i.Direction,
+		&i.Quantity,
+		&i.ReferenceType,
+		&i.ReferenceID,
+		&i.PerformedBy,
+		&i.Notes,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getTransactionByMovementGroup = `-- name: GetTransactionByMovementGroup :one
@@ -318,7 +376,7 @@ SET remaining_qty = remaining_qty + $2,
         ELSE status
     END
 WHERE id = $1
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence
 `
 
 type UpdateBatchQuantityParams struct {
@@ -338,6 +396,7 @@ func (q *Queries) UpdateBatchQuantity(ctx context.Context, arg UpdateBatchQuanti
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DailySequence,
 	)
 	return i, err
 }
