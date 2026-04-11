@@ -32,7 +32,7 @@ export async function submitDailyLogAction(
     return {
       ok: result.success,
       message: result.success
-        ? `Daily log submitted. journal_id: ${result.journal_id}`
+        ? "Daily log submitted successfully."
         : "Daily log request failed.",
     };
   } catch (error) {

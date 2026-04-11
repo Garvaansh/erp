@@ -1,15 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Zap, Mail, Lock, Eye, EyeOff, ArrowRight, Shield, Wifi, Server } from "lucide-react";
+import {
+  Zap,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  Shield,
+  Wifi,
+  Server,
+} from "lucide-react";
+import { loginAction } from "@/features/auth/actions";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isPending, setIsPending] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [state, formAction, isPending] = useActionState(loginAction, {
+    ok: false,
+    message: "",
+  });
 
   // Look for ?next= in the URL and only allow safe in-app paths.
   const nextParam = searchParams.get("next") || "";
@@ -18,51 +31,14 @@ export function LoginForm() {
       ? nextParam
       : "/dashboard";
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    setErrorMessage("");
-    setIsPending(true);
-
-    const formData = new FormData(event.currentTarget);
-
-    try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          email: String(formData.get("email") ?? "").trim(),
-          password: String(formData.get("password") ?? ""),
-        }),
-      });
-
-      let message = "Login failed.";
-      try {
-        const payload = (await response.json()) as { message?: string };
-        if (payload?.message?.trim()) {
-          message = payload.message;
-        }
-      } catch {
-        // Ignore JSON parse failures and use fallback message.
-      }
-
-      if (!response.ok) {
-        setErrorMessage(message);
-        return;
-      }
-
-      router.push(nextUrl);
-      router.refresh();
-    } catch {
-      setErrorMessage("Authentication service unavailable.");
-    } finally {
-      setIsPending(false);
+  useEffect(() => {
+    if (!state.ok) {
+      return;
     }
-  }
+
+    router.push(nextUrl);
+    router.refresh();
+  }, [state.ok, router, nextUrl]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--erp-bg-deep)] erp-grid-pattern relative overflow-hidden">
@@ -100,7 +76,7 @@ export function LoginForm() {
             </p>
           </div>
 
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form action={formAction} className="space-y-4">
             {/* Email */}
             <div className="flex items-center gap-3 rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 focus-within:border-[var(--erp-accent)] transition-colors">
               <Mail className="size-4 text-[var(--erp-text-muted)] shrink-0" />
@@ -130,25 +106,35 @@ export function LoginForm() {
                 onClick={() => setShowPassword(!showPassword)}
                 className="text-[var(--erp-text-muted)] hover:text-[var(--erp-text-secondary)] transition-colors"
               >
-                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                {showPassword ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
               </button>
             </div>
 
             {/* Options row */}
             <div className="flex items-center justify-between text-xs">
               <label className="flex items-center gap-2 text-[var(--erp-text-muted)] cursor-pointer">
-                <input type="checkbox" className="rounded border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] accent-[var(--erp-accent)]" />
+                <input
+                  type="checkbox"
+                  className="rounded border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] accent-[var(--erp-accent)]"
+                />
                 Keep session active
               </label>
-              <button type="button" className="text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] font-medium uppercase tracking-wider text-[10px] transition-colors">
+              <button
+                type="button"
+                className="text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] font-medium uppercase tracking-wider text-[10px] transition-colors"
+              >
                 Forgot Key?
               </button>
             </div>
 
             {/* Error */}
-            {errorMessage ? (
+            {!state.ok && state.message ? (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-                {errorMessage}
+                {state.message}
               </div>
             ) : null}
 
@@ -192,7 +178,9 @@ export function LoginForm() {
         </div>
         <div className="flex items-center gap-1.5 text-[10px] text-[var(--erp-text-muted)]">
           <Server className="size-3 text-[var(--erp-success)]" />
-          <span className="uppercase tracking-wider font-medium">Encrypted</span>
+          <span className="uppercase tracking-wider font-medium">
+            Encrypted
+          </span>
           <span className="text-[var(--erp-text-secondary)]">✓</span>
         </div>
       </div>

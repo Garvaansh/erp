@@ -10,6 +10,7 @@ import { submitDailyLog } from "@/features/logs/api";
 import type {
   DefineMaterialInput,
   InventoryActionState,
+  ItemCategory,
   LogProductionInput,
   ReceiveStockCommandInput,
 } from "@/features/inventory/types";
@@ -96,6 +97,41 @@ export async function receiveStockFormAction(
   });
 }
 
+export async function createItemFormAction(
+  _previousState: InventoryActionState = DEFAULT_ACTION_STATE,
+  formData: FormData,
+): Promise<InventoryActionState> {
+  void _previousState;
+
+  try {
+    const itemType = String(formData.get("item_type") ?? "COIL").toUpperCase();
+    const category: ItemCategory = itemType === "COIL" ? "RAW" : "FINISHED";
+
+    await createItemDefinition({
+      name: String(formData.get("name") ?? "").trim(),
+      category,
+      base_unit: "WEIGHT",
+      specs: {
+        thickness: Number(formData.get("thickness") ?? 0) || 0,
+        width: Number(formData.get("width") ?? 0) || 0,
+        coil_weight: Number(formData.get("coil_weight") ?? 0) || 0,
+      },
+    });
+
+    revalidatePath("/inventory");
+
+    return {
+      ok: true,
+      message: "Item created successfully.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Service unavailable.",
+    };
+  }
+}
+
 export async function logProductionAction(
   payload: LogProductionInput,
 ): Promise<InventoryActionState> {
@@ -106,7 +142,7 @@ export async function logProductionAction(
     return {
       ok: result.success,
       message: result.success
-        ? `Production logged. journal_id: ${result.journal_id}`
+        ? "Production logged successfully."
         : "Production logging failed.",
     };
   } catch (error) {

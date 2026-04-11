@@ -18,6 +18,7 @@ import {
   X,
   ChevronRight,
 } from "lucide-react";
+import { logoutAction } from "@/features/auth/actions";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -94,7 +95,7 @@ export function AppShell({ children }: AppShellProps) {
 
   const handleNav = (href: string) => {
     if (href === "#logout") {
-      fetch("/api/auth/logout", { method: "POST", credentials: "include" }).then(() => {
+      logoutAction().then(() => {
         router.push("/login");
         router.refresh();
       });
@@ -115,8 +116,12 @@ export function AppShell({ children }: AppShellProps) {
             <Zap className="size-4 text-white" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-[var(--erp-text-primary)] tracking-wide">Reva ERP</p>
-            <p className="text-[10px] font-medium text-[var(--erp-text-muted)] uppercase tracking-widest">v2.4.0 PRO</p>
+            <p className="text-sm font-bold text-[var(--erp-text-primary)] tracking-wide">
+              Reva ERP
+            </p>
+            <p className="text-[10px] font-medium text-[var(--erp-text-muted)] uppercase tracking-widest">
+              v2.4.0 PRO
+            </p>
           </div>
         </div>
 
@@ -162,23 +167,41 @@ export function AppShell({ children }: AppShellProps) {
                 <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--erp-accent)] to-cyan-600">
                   <Zap className="size-4 text-white" />
                 </div>
-                <p className="text-sm font-bold text-[var(--erp-text-primary)]">Reva ERP</p>
+                <p className="text-sm font-bold text-[var(--erp-text-primary)]">
+                  Reva ERP
+                </p>
               </div>
-              <button type="button" onClick={() => setMobileOpen(false)} className="p-1 text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)]">
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                className="p-1 text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)]"
+              >
                 <X className="size-5" />
               </button>
             </div>
             <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
               {NAV_ITEMS.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const active =
+                  pathname === item.href ||
+                  pathname.startsWith(`${item.href}/`);
                 return (
-                  <SidebarNavItem key={item.href} item={item} active={active} onClick={() => handleNav(item.href)} />
+                  <SidebarNavItem
+                    key={item.href}
+                    item={item}
+                    active={active}
+                    onClick={() => handleNav(item.href)}
+                  />
                 );
               })}
             </nav>
             <div className="border-t border-[var(--erp-border-subtle)] px-3 py-3 space-y-1">
               {BOTTOM_ITEMS.map((item) => (
-                <SidebarNavItem key={item.href} item={item} active={false} onClick={() => handleNav(item.href)} />
+                <SidebarNavItem
+                  key={item.href}
+                  item={item}
+                  active={false}
+                  onClick={() => handleNav(item.href)}
+                />
               ))}
             </div>
           </aside>
@@ -229,7 +252,10 @@ export function AppShell({ children }: AppShellProps) {
             <Zap className="size-3.5" />
             Quick Action
           </button>
-          <button type="button" className="relative p-2 text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)] transition-colors">
+          <button
+            type="button"
+            className="relative p-2 text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)] transition-colors"
+          >
             <Bell className="size-[18px]" />
             <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-[var(--erp-accent)]" />
           </button>
@@ -238,16 +264,18 @@ export function AppShell({ children }: AppShellProps) {
               A
             </div>
             <div className="hidden md:block">
-              <p className="text-xs font-medium text-[var(--erp-text-primary)]">Admin</p>
-              <p className="text-[10px] text-[var(--erp-text-muted)]">SUPER ADMIN</p>
+              <p className="text-xs font-medium text-[var(--erp-text-primary)]">
+                Admin
+              </p>
+              <p className="text-[10px] text-[var(--erp-text-muted)]">
+                SUPER ADMIN
+              </p>
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
     </div>
   );
