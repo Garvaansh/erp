@@ -1,97 +1,109 @@
+"use client";
+
 import Link from "next/link";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import type { ProcurementOrderListItem } from "@/features/procurement/types";
+import { ArrowRight, PackageOpen } from "lucide-react";
 
 type POTableProps = {
   orders: ProcurementOrderListItem[];
 };
 
-const quantityFormatter = new Intl.NumberFormat("en-IN", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-function statusVariant(status: ProcurementOrderListItem["status"]) {
-  if (status === "DELIVERED") {
-    return "default" as const;
-  }
-
-  if (status === "CANCELLED") {
-    return "destructive" as const;
-  }
-
-  return "secondary" as const;
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    PENDING: "erp-badge--warning",
+    DELIVERED: "erp-badge--success",
+    CANCELLED: "erp-badge--critical",
+  };
+  return (
+    <span className={`erp-badge ${map[status] || "erp-badge--neutral"}`}>
+      {status}
+    </span>
+  );
 }
 
 export function POTable({ orders }: POTableProps) {
   if (orders.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-        No purchase orders yet.
+      <div className="flex flex-col items-center justify-center py-16">
+        <PackageOpen className="size-10 text-[var(--erp-text-muted)] mb-3 opacity-40" />
+        <p className="text-sm text-[var(--erp-text-muted)]">No procurement orders yet.</p>
+        <Link
+          href="/procurement/create"
+          className="mt-4 text-xs font-semibold text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] uppercase tracking-wider transition-colors"
+        >
+          Create your first order →
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>PO Number</TableHead>
-            <TableHead>Date</TableHead>
-            <TableHead>Supplier</TableHead>
-            <TableHead>Material</TableHead>
-            <TableHead className="text-right">Qty (kg)</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {orders.map((order) => (
-            <TableRow key={order.id}>
-              <TableCell className="font-medium text-slate-900">
+    <div className="overflow-x-auto">
+      <table className="erp-table">
+        <thead>
+          <tr>
+            <th>PO Number</th>
+            <th>Supplier</th>
+            <th>Item</th>
+            <th className="text-right">Ordered</th>
+            <th className="text-right">Received</th>
+            <th className="text-right">Unit Price</th>
+            <th>Status</th>
+            <th className="text-right">Created</th>
+            <th style={{ width: "40px" }} />
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((order, i) => (
+            <tr key={order.id} className="erp-fade-in" style={{ animationDelay: `${i * 0.03}s` }}>
+              <td>
                 <Link
                   href={`/procurement/${order.id}`}
-                  className="underline-offset-4 hover:underline"
+                  className="text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] font-mono text-xs font-semibold transition-colors"
                 >
                   {order.po_number}
                 </Link>
-              </TableCell>
-              <TableCell className="text-slate-600">
-                {order.created_at
-                  ? new Date(order.created_at).toLocaleDateString("en-IN")
-                  : "-"}
-              </TableCell>
-              <TableCell>{order.supplier_name || "-"}</TableCell>
-              <TableCell>
-                <span className="text-slate-900">
-                  {order.item_name || "Material"}
+              </td>
+              <td>
+                <span className="text-sm text-[var(--erp-text-primary)]">{order.supplier_name}</span>
+              </td>
+              <td>
+                <span className="text-sm text-[var(--erp-text-secondary)]">
+                  {order.item_name || "—"}
                 </span>
-                {order.item_sku ? (
-                  <span className="ml-2 text-xs text-slate-500">
-                    {order.item_sku}
-                  </span>
-                ) : null}
-              </TableCell>
-              <TableCell className="text-right font-mono text-slate-700">
-                {quantityFormatter.format(order.ordered_qty)}
-              </TableCell>
-              <TableCell>
-                <Badge variant={statusVariant(order.status)}>
-                  {order.status}
-                </Badge>
-              </TableCell>
-            </TableRow>
+                {order.item_sku && (
+                  <span className="block text-[10px] font-mono text-[var(--erp-text-muted)]">{order.item_sku}</span>
+                )}
+              </td>
+              <td className="text-right font-mono text-sm text-[var(--erp-text-primary)]">
+                {order.ordered_qty.toLocaleString()}
+              </td>
+              <td className="text-right font-mono text-sm text-[var(--erp-text-primary)]">
+                {order.received_qty.toLocaleString()}
+              </td>
+              <td className="text-right font-mono text-sm text-[var(--erp-text-secondary)]">
+                ₹{order.unit_price.toLocaleString()}
+              </td>
+              <td>
+                <StatusBadge status={order.status} />
+              </td>
+              <td className="text-right text-xs text-[var(--erp-text-muted)]">
+                {order.created_at
+                  ? new Date(order.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
+                  : "—"}
+              </td>
+              <td>
+                <Link
+                  href={`/procurement/${order.id}`}
+                  className="text-[var(--erp-text-muted)] hover:text-[var(--erp-accent)] transition-colors"
+                >
+                  <ArrowRight className="size-4" />
+                </Link>
+              </td>
+            </tr>
           ))}
-        </TableBody>
-      </Table>
+        </tbody>
+      </table>
     </div>
   );
 }

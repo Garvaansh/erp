@@ -1,57 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useState, useMemo, useCallback } from "react";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listActiveBatches } from "@/features/inventory/api";
-import {
-  defineAndReceiveAction,
-  logProductionAction,
-  receiveStockAction,
-} from "@/features/inventory/actions";
-import { ItemDrillDown } from "@/features/inventory/components/item-drill-down";
+  Plus,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  ArrowRight,
+  PackageOpen,
+  X,
+} from "lucide-react";
 import type {
-  ActiveBatch,
-  InventoryActionState,
   InventorySnapshot,
-  ItemDefinition,
   InventoryViewRow,
+  ItemDefinition,
   SelectableItem,
+  ItemCategory,
 } from "@/features/inventory/types";
+import { ReceiveStockForm } from "./receive-stock-form";
+import { ItemDrillDown } from "./item-drill-down";
 
 type InventoryTab = "raw" | "wip" | "finished";
 
@@ -63,64 +32,26 @@ type InventoryViewProps = {
   serviceAlert?: string;
 };
 
-type MessageTone = "success" | "error";
+const TAB_CONFIG: { key: InventoryTab; label: string; category: keyof InventorySnapshot }[] = [
+  { key: "raw", label: "Raw Materials (Coils)", category: "RAW" },
+  { key: "wip", label: "Finished Goods (Pipes)", category: "FINISHED" },
+  { key: "finished", label: "Semi-Finished", category: "SEMI_FINISHED" },
+];
 
-type BannerMessage = {
-  tone: MessageTone;
-  text: string;
-};
+const ITEMS_PER_PAGE = 8;
 
-type FinishedFilter = "SELLABLE" | "SCRAP";
-
-function readNumberSpec(specs: Record<string, unknown>, key: string): number {
-  const value = specs[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+function StatusBadge({ qty }: { qty: number }) {
+  if (qty <= 0) return <span className="erp-badge erp-badge--critical">Exhausted</span>;
+  if (qty < 500) return <span className="erp-badge erp-badge--warning">Low Stock</span>;
+  return <span className="erp-badge erp-badge--success">In Stock</span>;
 }
 
-function formatCompactSpecs(specs: Record<string, unknown>): string {
-  const thickness = readNumberSpec(specs, "thickness");
-  const width = readNumberSpec(specs, "width");
-  const diameter = readNumberSpec(specs, "diameter");
-
-  if (diameter > 0) {
-    return `${formatNumber(thickness)} mm x ${formatNumber(width)} mm x ${formatNumber(diameter)} mm`;
-  }
-
-  return `${formatNumber(thickness)} mm x ${formatNumber(width)} mm`;
-}
-
-function formatNumber(value: number, maxFractionDigits = 4): string {
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: maxFractionDigits,
-  }).format(value);
-}
-
-function formatKg(value: number): string {
-  return `${new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(value)} kg`;
-}
-
-function applyActionResult(
-  result: InventoryActionState,
-  setBanner: (value: BannerMessage | null) => void,
-): boolean {
-  setBanner({
-    tone: result.ok ? "success" : "error",
-    text: result.message,
-  });
-
-  return result.ok;
-}
-
-function parseTab(value: string | null | undefined): InventoryTab {
-  if (value === "wip" || value === "finished") {
-    return value;
-  }
-
-  return "raw";
+function formatSpec(specs: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (specs.thickness) parts.push(`${specs.thickness}mm`);
+  if (specs.width) parts.push(`${specs.width}mm`);
+  if (specs.diameter) parts.push(`Ø${specs.diameter}mm`);
+  return parts.join(" × ") || "—";
 }
 
 export function InventoryView({
@@ -130,949 +61,459 @@ export function InventoryView({
   initialTab,
   serviceAlert,
 }: InventoryViewProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
-
   const [activeTab, setActiveTab] = useState<InventoryTab>(initialTab);
-  const [banner, setBanner] = useState<BannerMessage | null>(null);
-  const [finishedFilter, setFinishedFilter] =
-    useState<FinishedFilter>("SELLABLE");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<InventoryViewRow | null>(null);
+  const [showReceiveStock, setShowReceiveStock] = useState(false);
 
-  const [defineOpen, setDefineOpen] = useState(false);
-  const [receiveOpen, setReceiveOpen] = useState(false);
-  const [logOpen, setLogOpen] = useState(false);
-  const [drillDownOpen, setDrillDownOpen] = useState(false);
-  const [drillDownItemId, setDrillDownItemId] = useState<string>("");
+  const tabConfig = TAB_CONFIG.find((t) => t.key === activeTab) ?? TAB_CONFIG[0];
+  const rows = snapshot[tabConfig.category] || [];
 
-  const wipRows = snapshot.SEMI_FINISHED;
-  const finishedRows =
-    finishedFilter === "SELLABLE" ? snapshot.FINISHED : snapshot.SCRAP;
-
-  const rawStockByItemId = useMemo(() => {
-    const map = new Map<string, number>();
-
-    for (const row of snapshot.RAW) {
-      map.set(row.item_id, row.total_qty);
-    }
-
-    return map;
-  }, [snapshot.RAW]);
-
-  const rawDefinitions = useMemo(
-    () => [...rawItems].sort((a, b) => a.name.localeCompare(b.name)),
-    [rawItems],
-  );
-
-  const rawSelectableItems = useMemo(
-    () => selectableItems.filter((item) => item.category === "RAW"),
-    [selectableItems],
-  );
-
-  const rawItemById = useMemo(() => {
-    const map = new Map<string, ItemDefinition>();
-    for (const item of rawDefinitions) {
-      map.set(item.id, item);
-    }
-    return map;
-  }, [rawDefinitions]);
-
-  const drillDownItem = useMemo(
-    () => rawDefinitions.find((item) => item.id === drillDownItemId) ?? null,
-    [drillDownItemId, rawDefinitions],
-  );
-
-  const [defineForm, setDefineForm] = useState({
-    name: "",
-    thickness: "",
-    width: "",
-    diameter: "",
-  });
-
-  const [receiveForm, setReceiveForm] = useState({
-    item_id: rawSelectableItems[0]?.item_id ?? "",
-    weight: "",
-  });
-
-  const [selectedWipItemId, setSelectedWipItemId] = useState<string>(
-    wipRows[0]?.item_id ?? "",
-  );
-  const [activeBatches, setActiveBatches] = useState<ActiveBatch[]>([]);
-  const [loadingBatches, setLoadingBatches] = useState(false);
-
-  const selectedWipRow = useMemo(
-    () => wipRows.find((row) => row.item_id === selectedWipItemId) ?? null,
-    [wipRows, selectedWipItemId],
-  );
-
-  const [logForm, setLogForm] = useState({
-    source_batch_id: "",
-    output_item_name: "",
-    output_specs_thickness: "",
-    output_specs_width: "",
-    output_specs_coil_weight: "",
-    input_qty: "",
-    finished_qty: "",
-    scrap_qty: "0",
-  });
-
-  useEffect(() => {
-    const tabFromUrl = parseTab(
-      searchParams.get("tab") ?? searchParams.get("lane"),
+  const filteredRows = useMemo(() => {
+    if (!searchQuery.trim()) return rows;
+    const q = searchQuery.toLowerCase();
+    return rows.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        (r.sku && r.sku.toLowerCase().includes(q)) ||
+        formatSpec(r.specs).toLowerCase().includes(q),
     );
-    setActiveTab(tabFromUrl);
-  }, [searchParams]);
+  }, [rows, searchQuery]);
 
-  useEffect(() => {
-    if (!rawSelectableItems.length) {
-      return;
-    }
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
+  const paginatedRows = filteredRows.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE,
+  );
 
-    setReceiveForm((current) => {
-      const exists = rawSelectableItems.some(
-        (item) => item.item_id === current.item_id,
-      );
-      return {
-        ...current,
-        item_id: exists ? current.item_id : rawSelectableItems[0].item_id,
-      };
-    });
-  }, [rawSelectableItems]);
+  const totalWeight = rows.reduce((sum, r) => sum + r.total_qty, 0);
+  const activeSKUs = rows.length;
 
-  useEffect(() => {
-    if (!wipRows.length) {
-      setSelectedWipItemId("");
-      return;
-    }
+  const handleTabChange = useCallback((tab: InventoryTab) => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+    setSearchQuery("");
+    setSelectedItem(null);
+  }, []);
 
-    setSelectedWipItemId((current) => current || wipRows[0].item_id);
-  }, [wipRows]);
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <p className="erp-section-title mb-1">Inventory Management</p>
+          <h1 className="text-2xl font-bold text-[var(--erp-text-primary)]">Item Master</h1>
+        </div>
+        <button
+          onClick={() => setShowAddItem(true)}
+          className="flex items-center gap-2 rounded-lg bg-[var(--erp-accent)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--erp-accent-bright)] transition-colors shadow-lg shadow-cyan-500/15"
+        >
+          <Plus className="size-4" />
+          Add New Item
+        </button>
+      </div>
 
-  useEffect(() => {
-    if (!selectedWipRow) {
-      setLogForm((current) => ({
-        ...current,
-        output_item_name: "",
-      }));
-      return;
-    }
+      {serviceAlert && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+          <AlertTriangle className="size-4 text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-300">{serviceAlert}</p>
+        </div>
+      )}
 
-    setLogForm((current) => ({
-      ...current,
-      output_item_name: selectedWipRow.name,
-      output_specs_thickness: String(
-        readNumberSpec(selectedWipRow.specs, "thickness") || 1,
-      ),
-      output_specs_width: String(
-        readNumberSpec(selectedWipRow.specs, "width") || 1,
-      ),
-      output_specs_coil_weight: String(
-        readNumberSpec(selectedWipRow.specs, "coil_weight") || 1,
-      ),
-      input_qty: String(selectedWipRow.total_qty || 0),
-      finished_qty: String(selectedWipRow.total_qty || 0),
-    }));
-  }, [selectedWipRow]);
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-[var(--erp-border-default)] overflow-x-auto">
+        {TAB_CONFIG.map((tab) => {
+          const count = (snapshot[tab.category] || []).length;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => handleTabChange(tab.key)}
+              className={`flex items-center gap-2 whitespace-nowrap px-4 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
+                activeTab === tab.key
+                  ? "border-[var(--erp-accent)] text-[var(--erp-accent)]"
+                  : "border-transparent text-[var(--erp-text-muted)] hover:text-[var(--erp-text-secondary)]"
+              }`}
+            >
+              {tab.label}
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
+                activeTab === tab.key ? "bg-[var(--erp-accent-glow)] text-[var(--erp-accent)]" : "bg-[var(--erp-bg-surface)] text-[var(--erp-text-muted)]"
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-  useEffect(() => {
-    let cancelled = false;
+      {/* Search & Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2 focus-within:border-[var(--erp-accent)] transition-colors">
+          <Search className="size-4 text-[var(--erp-text-muted)]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            placeholder="Search Master Item ID, Spec or Serial..."
+            className="flex-1 bg-transparent text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)]">
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+        <button className="flex items-center gap-1.5 rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2 text-xs font-medium text-[var(--erp-text-secondary)] hover:border-[var(--erp-accent)] transition-colors">
+          <Filter className="size-3.5" />
+          Filters
+        </button>
+      </div>
 
-    async function loadBatches() {
-      if (!selectedWipItemId) {
-        setActiveBatches([]);
-        return;
-      }
+      {/* Data Table */}
+      <div className="erp-card-static overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="erp-table">
+            <thead>
+              <tr>
+                <th style={{ width: "40px" }}>
+                  <input type="checkbox" className="rounded border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)]" />
+                </th>
+                <th>Material ID</th>
+                <th>Description</th>
+                <th>Specifications</th>
+                <th className="text-right">Weight (MT)</th>
+                <th>Status</th>
+                <th className="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-12">
+                    <PackageOpen className="size-10 text-[var(--erp-text-muted)] mx-auto mb-3 opacity-40" />
+                    <p className="text-sm text-[var(--erp-text-muted)]">
+                      {searchQuery ? "No items match your search." : "No items in this category yet."}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                paginatedRows.map((row, i) => (
+                  <tr key={row.item_id} style={{ animationDelay: `${i * 0.03}s` }} className="erp-fade-in">
+                    <td>
+                      <input type="checkbox" className="rounded border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)]" />
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => setSelectedItem(row)}
+                        className="text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] font-mono text-xs font-medium transition-colors"
+                      >
+                        {row.sku || row.item_id.slice(0, 8).toUpperCase()}
+                      </button>
+                    </td>
+                    <td>
+                      <p className="text-sm font-medium text-[var(--erp-text-primary)]">{row.name}</p>
+                    </td>
+                    <td>
+                      <span className="font-mono text-xs text-[var(--erp-text-secondary)]">
+                        {formatSpec(row.specs)}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <span className="font-mono font-semibold text-[var(--erp-text-primary)]">
+                        {row.total_qty.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
+                      </span>
+                    </td>
+                    <td>
+                      <StatusBadge qty={row.total_qty} />
+                    </td>
+                    <td className="text-right">
+                      <button
+                        onClick={() => setSelectedItem(row)}
+                        className="text-[var(--erp-text-muted)] hover:text-[var(--erp-accent)] transition-colors"
+                      >
+                        <ArrowRight className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      setLoadingBatches(true);
-      try {
-        const rows = await listActiveBatches(selectedWipItemId);
-        if (!cancelled) {
-          setActiveBatches(rows);
-          setLogForm((current) => ({
-            ...current,
-            source_batch_id: current.source_batch_id || rows[0]?.batch_id || "",
-          }));
-        }
-      } catch {
-        if (!cancelled) {
-          setActiveBatches([]);
-          setBanner({
-            tone: "error",
-            text: "Failed to load active batches for WIP item.",
-          });
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingBatches(false);
-        }
-      }
-    }
+        {/* Pagination */}
+        {filteredRows.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--erp-border-subtle)]">
+            <p className="text-xs text-[var(--erp-text-muted)]">
+              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredRows.length)} of {filteredRows.length} items
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)] hover:bg-[var(--erp-bg-surface)] disabled:opacity-30 transition-colors"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`min-w-[28px] h-7 rounded text-xs font-medium transition-colors ${
+                    page === currentPage
+                      ? "bg-[var(--erp-accent)] text-[var(--primary-foreground)]"
+                      : "text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)] hover:bg-[var(--erp-bg-surface)]"
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)] hover:bg-[var(--erp-bg-surface)] disabled:opacity-30 transition-colors"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
-    void loadBatches();
+      {/* Bottom Section: Analytics + Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Inventory Health Analytics */}
+        <div className="lg:col-span-2 erp-card-static p-5">
+          <p className="erp-kpi-label mb-1">Inventory Health Analytics</p>
+          <p className="text-sm text-[var(--erp-text-muted)] mb-5">
+            Real-time tonnage distribution across grade categories.
+          </p>
+          <div className="flex items-end gap-2 h-28">
+            {[65, 45, 80, 30, 55, 70, 40].map((h, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full erp-bar" style={{ height: `${h}%` }} />
+                <span className="text-[9px] text-[var(--erp-text-muted)]">
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i]}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
 
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedWipItemId]);
+        {/* Summary */}
+        <div className="erp-card-static p-5 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div>
+              <p className="erp-kpi-label">Total Weight</p>
+              <p className="text-2xl font-bold text-[var(--erp-text-primary)] tabular-nums">
+                {totalWeight.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
+                <span className="text-sm font-normal text-[var(--erp-text-muted)] ml-1">MT</span>
+              </p>
+            </div>
+            <div>
+              <p className="erp-kpi-label">Active SKUs</p>
+              <p className="text-2xl font-bold text-[var(--erp-text-primary)] tabular-nums">{activeSKUs}</p>
+            </div>
+          </div>
+          <button className="flex items-center gap-2 justify-center mt-4 w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] py-2 text-xs font-semibold text-[var(--erp-accent)] hover:border-[var(--erp-accent)] transition-colors">
+            View Detailed Report
+            <ArrowRight className="size-3.5" />
+          </button>
+        </div>
+      </div>
 
-  function setTabInUrl(nextTab: InventoryTab) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("lane");
-    params.set("tab", nextTab);
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, {
-      scroll: false,
-    });
-  }
+      {/* ── Receive Stock Slideout ── */}
+      {showReceiveStock && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowReceiveStock(false)} />
+          <div className="relative w-full max-w-md bg-[var(--card)] border-l border-[var(--erp-border-default)] overflow-y-auto erp-slide-in">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--erp-border-subtle)]">
+              <h2 className="text-lg font-semibold text-[var(--erp-text-primary)]">Receive Stock</h2>
+              <button onClick={() => setShowReceiveStock(false)} className="p-1 text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)]">
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <ReceiveStockForm />
+            </div>
+          </div>
+        </div>
+      )}
 
-  function onTabChange(value: string) {
-    const nextTab = parseTab(value);
-    setActiveTab(nextTab);
-    setTabInUrl(nextTab);
-  }
+      {/* ── Item Drill Down Dialog ── */}
+      <ItemDrillDown
+        item={selectedItem ? {
+          id: selectedItem.item_id,
+          name: selectedItem.name,
+          category: tabConfig.category === "RAW" ? "RAW" : tabConfig.category === "FINISHED" ? "FINISHED" : "SEMI_FINISHED",
+          base_unit: "WEIGHT",
+          specs: {
+            thickness: Number(selectedItem.specs?.thickness) || 0,
+            width: Number(selectedItem.specs?.width) || 0,
+            coil_weight: Number(selectedItem.specs?.coil_weight) || 0,
+          },
+          is_active: true,
+        } : null}
+        open={!!selectedItem}
+        onOpenChange={(open) => { if (!open) setSelectedItem(null); }}
+      />
 
-  function openLogForRow(row: InventoryViewRow) {
-    setSelectedWipItemId(row.item_id);
-    setLogOpen(true);
-  }
+      {/* ── Add Item Slideout ── */}
+      {showAddItem && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddItem(false)} />
+          <div className="relative w-full max-w-md bg-[var(--card)] border-l border-[var(--erp-border-default)] overflow-y-auto erp-slide-in">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--erp-border-subtle)]">
+              <h2 className="text-lg font-semibold text-[var(--erp-text-primary)]">Add New Item</h2>
+              <button onClick={() => setShowAddItem(false)} className="p-1 text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)]">
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <AddItemForm onClose={() => setShowAddItem(false)} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  function openDrillDown(itemId: string) {
-    setDrillDownItemId(itemId);
-    setDrillDownOpen(true);
-  }
+/* ── Inline Add Item Form ── */
+function AddItemForm({ onClose }: { onClose: () => void }) {
+  const [itemType, setItemType] = useState<"COIL" | "PIPE">("COIL");
+  const [isPending, setIsPending] = useState(false);
+  const [message, setMessage] = useState("");
 
-  function onDefineSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setIsPending(true);
+    setMessage("");
 
-    startTransition(async () => {
-      const result = await defineAndReceiveAction({
-        name: defineForm.name,
-        thickness: Number(defineForm.thickness),
-        width: Number(defineForm.width),
-        diameter: defineForm.diameter ? Number(defineForm.diameter) : undefined,
+    const fd = new FormData(e.currentTarget);
+    const category: ItemCategory = itemType === "COIL" ? "RAW" : "FINISHED";
+
+    try {
+      const res = await fetch("/api/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: fd.get("name"),
+          category,
+          base_unit: "WEIGHT",
+          specs: {
+            thickness: Number(fd.get("thickness")) || 0,
+            width: Number(fd.get("width")) || 0,
+            coil_weight: Number(fd.get("coil_weight")) || 0,
+          },
+        }),
       });
-
-      const ok = applyActionResult(result, setBanner);
-      if (ok) {
-        setDefineOpen(false);
-        setDefineForm({ name: "", thickness: "", width: "", diameter: "" });
-        router.refresh();
+      if (res.ok) {
+        setMessage("Item created successfully.");
+        setTimeout(() => { onClose(); window.location.reload(); }, 800);
+      } else {
+        const data = await res.json().catch(() => ({})) as { message?: string };
+        setMessage(data.message || "Failed to create item.");
       }
-    });
-  }
-
-  function onReceiveSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    startTransition(async () => {
-      const result = await receiveStockAction({
-        item_id: receiveForm.item_id,
-        weight: Number(receiveForm.weight),
-      });
-
-      const ok = applyActionResult(result, setBanner);
-      if (ok) {
-        setReceiveOpen(false);
-        setReceiveForm((current) => ({
-          ...current,
-          weight: "",
-        }));
-        router.refresh();
-      }
-    });
-  }
-
-  function onLogSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    startTransition(async () => {
-      const result = await logProductionAction({
-        source_batch_id: logForm.source_batch_id,
-        output_item_name: logForm.output_item_name,
-        output_item_specs: {
-          thickness: Number(logForm.output_specs_thickness),
-          width: Number(logForm.output_specs_width),
-          coil_weight: Number(logForm.output_specs_coil_weight),
-        },
-        input_qty: Number(logForm.input_qty),
-        finished_qty: Number(logForm.finished_qty),
-        scrap_qty: Number(logForm.scrap_qty),
-      });
-
-      const ok = applyActionResult(result, setBanner);
-      if (ok) {
-        setLogOpen(false);
-        router.refresh();
-      }
-    });
+    } catch {
+      setMessage("Service unavailable.");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
-    <div className="space-y-4">
-      {serviceAlert ? (
-        <Card>
-          <CardContent>
-            <p>
-              <Badge variant="destructive">SERVICE</Badge> {serviceAlert}
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Item type toggle */}
+      <div>
+        <p className="erp-kpi-label mb-2">Item Classification</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(["COIL", "PIPE"] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setItemType(type)}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-all ${
+                itemType === type
+                  ? "bg-[var(--erp-accent)] text-[var(--primary-foreground)]"
+                  : "bg-[var(--erp-bg-surface)] text-[var(--erp-text-muted)] border border-[var(--erp-border-default)] hover:border-[var(--erp-accent)]"
+              }`}
+            >
+              {type}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {banner ? (
-        <Card>
-          <CardContent>
-            <p>
-              <Badge
-                variant={
-                  banner.tone === "success" ? "secondary" : "destructive"
-                }
-              >
-                {banner.tone === "success" ? "SUCCESS" : "ERROR"}
-              </Badge>{" "}
-              {banner.text}
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+      {/* Form fields */}
+      <div className="space-y-3">
+        <div>
+          <label className="erp-kpi-label mb-1 block">Material Name</label>
+          <input
+            name="name"
+            required
+            placeholder="e.g. Hot Rolled Carbon Steel Coil"
+            className="w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none focus:border-[var(--erp-accent)] transition-colors"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="erp-kpi-label mb-1 block">Thickness (mm)</label>
+            <input
+              name="thickness"
+              type="number"
+              step="0.01"
+              placeholder="4.50"
+              className="w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none focus:border-[var(--erp-accent)] transition-colors"
+            />
+          </div>
+          <div>
+            <label className="erp-kpi-label mb-1 block">Width (mm)</label>
+            <input
+              name="width"
+              type="number"
+              step="0.01"
+              placeholder="1250.0"
+              className="w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none focus:border-[var(--erp-accent)] transition-colors"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="erp-kpi-label mb-1 block">Initial Weight (MT)</label>
+          <input
+            name="coil_weight"
+            type="number"
+            step="0.01"
+            placeholder="18.420"
+            className="w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none focus:border-[var(--erp-accent)] transition-colors"
+          />
+        </div>
+      </div>
 
-      <Tabs value={activeTab} onValueChange={onTabChange}>
-        <TabsList className="w-full justify-start gap-1 rounded-xl border border-border/70 bg-muted/40 p-1">
-          <TabsTrigger value="raw" className="px-4">
-            Raw Materials
-          </TabsTrigger>
-          <TabsTrigger value="wip" className="px-4">
-            Under Processing
-          </TabsTrigger>
-          <TabsTrigger value="finished" className="px-4">
-            Finished and Scrap
-          </TabsTrigger>
-        </TabsList>
+      {message && (
+        <p className={`text-sm rounded-lg px-3 py-2 ${message.includes("success") ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-red-500/10 text-red-400 border border-red-500/30"}`}>
+          {message}
+        </p>
+      )}
 
-        <TabsContent value="raw">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <CardTitle>Raw Materials Definition Ledger</CardTitle>
-                  <CardDescription>
-                    Item-first master list with drill-down into physical stock
-                    batches.
-                  </CardDescription>
-                </div>
-                <Badge variant="outline">Raw Materials</Badge>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={() => setDefineOpen(true)}
-                  disabled={isPending}
-                >
-                  + Define Item
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setReceiveOpen(true)}
-                  disabled={isPending}
-                >
-                  + Receive Stock
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-hidden rounded-lg border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Material</TableHead>
-                      <TableHead>Thickness</TableHead>
-                      <TableHead>Width</TableHead>
-                      <TableHead>Diameter</TableHead>
-                      <TableHead className="text-right">Total Stock</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rawDefinitions.length ? (
-                      rawDefinitions.map((item) => (
-                        <TableRow
-                          key={item.id}
-                          className="cursor-pointer"
-                          onClick={() => openDrillDown(item.id)}
-                        >
-                          <TableCell>
-                            <div className="font-medium">{item.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {item.sku || "SKU unavailable"}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {formatNumber(
-                              readNumberSpec(
-                                item.specs as Record<string, unknown>,
-                                "thickness",
-                              ),
-                            )}{" "}
-                            mm
-                          </TableCell>
-                          <TableCell>
-                            {formatNumber(
-                              readNumberSpec(
-                                item.specs as Record<string, unknown>,
-                                "width",
-                              ),
-                            )}{" "}
-                            mm
-                          </TableCell>
-                          <TableCell>
-                            {readNumberSpec(
-                              item.specs as Record<string, unknown>,
-                              "diameter",
-                            ) > 0
-                              ? `${formatNumber(readNumberSpec(item.specs as Record<string, unknown>, "diameter"))} mm`
-                              : "-"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatKg(rawStockByItemId.get(item.id) || 0)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          No raw material definitions available.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="wip">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <CardTitle>Under Processing (WIP)</CardTitle>
-                  <CardDescription>
-                    Ongoing conversion area where semi-finished stock is
-                    consumed and logged.
-                  </CardDescription>
-                </div>
-                <Badge variant="outline">Work In Progress</Badge>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (!wipRows.length) {
-                    setBanner({
-                      tone: "error",
-                      text: "No WIP rows available to log.",
-                    });
-                    return;
-                  }
-                  setLogOpen(true);
-                }}
-                disabled={isPending}
-              >
-                Log Production
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-hidden rounded-lg border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Material</TableHead>
-                      <TableHead className="text-right">WIP Qty</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {wipRows.length ? (
-                      wipRows.map((row) => (
-                        <TableRow key={row.item_id}>
-                          <TableCell>{row.name}</TableCell>
-                          <TableCell className="text-right">
-                            {formatKg(row.total_qty)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              onClick={() => openLogForRow(row)}
-                              disabled={isPending}
-                            >
-                              Finish Batch
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={3}>
-                          No active WIP batches.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="finished">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <CardTitle>Finished Goods and Scrap</CardTitle>
-                  <CardDescription>
-                    Final stage for sellable output and scrap recovery tracking.
-                  </CardDescription>
-                </div>
-                <Badge variant="outline">Finished Output</Badge>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="fg_filter">View</Label>
-                <Select
-                  value={finishedFilter}
-                  onValueChange={(value) =>
-                    setFinishedFilter(value as FinishedFilter)
-                  }
-                >
-                  <SelectTrigger id="fg_filter" className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SELLABLE">Sellable</SelectItem>
-                    <SelectItem value="SCRAP">Scrap</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-hidden rounded-lg border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Material</TableHead>
-                      <TableHead>Specs</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {finishedRows.length ? (
-                      finishedRows.map((row) => (
-                        <TableRow key={row.item_id}>
-                          <TableCell>{row.name}</TableCell>
-                          <TableCell>{formatCompactSpecs(row.specs)}</TableCell>
-                          <TableCell className="text-right">
-                            {formatKg(row.total_qty)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={3}>
-                          No records in this section.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      <ItemDrillDown
-        item={drillDownItem}
-        open={drillDownOpen}
-        onOpenChange={setDrillDownOpen}
-      />
-
-      <Dialog open={defineOpen} onOpenChange={setDefineOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Define New Material</DialogTitle>
-            <DialogDescription>
-              SKU is generated automatically from thickness and width.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={onDefineSubmit}>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="define_name">Name</Label>
-                <Input
-                  id="define_name"
-                  value={defineForm.name}
-                  onChange={(event) =>
-                    setDefineForm((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor="define_thickness">Thickness</Label>
-                  <Input
-                    id="define_thickness"
-                    type="number"
-                    step="0.0001"
-                    value={defineForm.thickness}
-                    onChange={(event) =>
-                      setDefineForm((current) => ({
-                        ...current,
-                        thickness: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="define_width">Width</Label>
-                  <Input
-                    id="define_width"
-                    type="number"
-                    step="0.0001"
-                    value={defineForm.width}
-                    onChange={(event) =>
-                      setDefineForm((current) => ({
-                        ...current,
-                        width: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="define_diameter">Diameter (optional)</Label>
-                <Input
-                  id="define_diameter"
-                  type="number"
-                  step="0.0001"
-                  value={defineForm.diameter}
-                  onChange={(event) =>
-                    setDefineForm((current) => ({
-                      ...current,
-                      diameter: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDefineOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isPending}>
-                {isPending ? "Defining..." : "Define Item"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={receiveOpen} onOpenChange={setReceiveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Receive Stock</DialogTitle>
-            <DialogDescription>
-              Batch code and timestamps are generated by the backend.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={onReceiveSubmit}>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="receive_item">Item</Label>
-                <Select
-                  value={receiveForm.item_id}
-                  onValueChange={(value) =>
-                    setReceiveForm((current) => ({
-                      ...current,
-                      item_id: value ?? "",
-                    }))
-                  }
-                >
-                  <SelectTrigger id="receive_item" className="w-full">
-                    <SelectValue placeholder="Select raw item" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {rawSelectableItems.map((item) => {
-                      const rawItem = rawItemById.get(item.item_id);
-                      const specs = rawItem?.specs as
-                        | Record<string, unknown>
-                        | undefined;
-                      const primaryName =
-                        rawItem?.name ||
-                        item.label.split(" (")[0] ||
-                        "Raw item";
-                      const secondary = specs
-                        ? `${formatNumber(readNumberSpec(specs, "thickness"))} mm x ${formatNumber(readNumberSpec(specs, "width"))} mm`
-                        : "Specs unavailable";
-
-                      return (
-                        <SelectItem key={item.item_id} value={item.item_id}>
-                          <div className="flex flex-col">
-                            <span>{primaryName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {secondary}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="receive_weight">Quantity</Label>
-                <Input
-                  id="receive_weight"
-                  type="number"
-                  step="0.0001"
-                  value={receiveForm.weight}
-                  onChange={(event) =>
-                    setReceiveForm((current) => ({
-                      ...current,
-                      weight: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setReceiveOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isPending || !receiveForm.item_id}
-              >
-                {isPending ? "Receiving..." : "Receive"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={logOpen} onOpenChange={setLogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Log Production</DialogTitle>
-            <DialogDescription>
-              Convert WIP into finished goods or scrap from a selected source
-              batch.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={onLogSubmit}>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="log_item">WIP Item</Label>
-                <Select
-                  value={selectedWipItemId}
-                  onValueChange={(value) => setSelectedWipItemId(value ?? "")}
-                >
-                  <SelectTrigger id="log_item" className="w-full">
-                    <SelectValue placeholder="Select WIP item" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {wipRows.map((row) => (
-                      <SelectItem key={row.item_id} value={row.item_id}>
-                        {row.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="log_source_batch">Source Batch</Label>
-                <Select
-                  value={logForm.source_batch_id}
-                  onValueChange={(value) =>
-                    setLogForm((current) => ({
-                      ...current,
-                      source_batch_id: value ?? "",
-                    }))
-                  }
-                >
-                  <SelectTrigger id="log_source_batch" className="w-full">
-                    <SelectValue
-                      placeholder={
-                        loadingBatches ? "Loading batches..." : "Select batch"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeBatches.map((batch) => (
-                      <SelectItem key={batch.batch_id} value={batch.batch_id}>
-                        {`${batch.batch_code} (${formatKg(batch.remaining_weight)} available)`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="log_output_name">Output Name</Label>
-                <Input
-                  id="log_output_name"
-                  value={logForm.output_item_name}
-                  onChange={(event) =>
-                    setLogForm((current) => ({
-                      ...current,
-                      output_item_name: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor="log_specs_thickness">Thickness</Label>
-                  <Input
-                    id="log_specs_thickness"
-                    type="number"
-                    step="0.0001"
-                    value={logForm.output_specs_thickness}
-                    onChange={(event) =>
-                      setLogForm((current) => ({
-                        ...current,
-                        output_specs_thickness: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="log_specs_width">Width</Label>
-                  <Input
-                    id="log_specs_width"
-                    type="number"
-                    step="0.0001"
-                    value={logForm.output_specs_width}
-                    onChange={(event) =>
-                      setLogForm((current) => ({
-                        ...current,
-                        output_specs_width: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="log_specs_coil_weight">Coil Weight</Label>
-                <Input
-                  id="log_specs_coil_weight"
-                  type="number"
-                  step="0.0001"
-                  value={logForm.output_specs_coil_weight}
-                  onChange={(event) =>
-                    setLogForm((current) => ({
-                      ...current,
-                      output_specs_coil_weight: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-1">
-                  <Label htmlFor="log_input_qty">Input Qty</Label>
-                  <Input
-                    id="log_input_qty"
-                    type="number"
-                    step="0.0001"
-                    value={logForm.input_qty}
-                    onChange={(event) =>
-                      setLogForm((current) => ({
-                        ...current,
-                        input_qty: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="log_finished_qty">Finished Qty</Label>
-                  <Input
-                    id="log_finished_qty"
-                    type="number"
-                    step="0.0001"
-                    value={logForm.finished_qty}
-                    onChange={(event) =>
-                      setLogForm((current) => ({
-                        ...current,
-                        finished_qty: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="log_scrap_qty">Scrap Qty</Label>
-                  <Input
-                    id="log_scrap_qty"
-                    type="number"
-                    step="0.0001"
-                    value={logForm.scrap_qty}
-                    onChange={(event) =>
-                      setLogForm((current) => ({
-                        ...current,
-                        scrap_qty: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setLogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  isPending || !logForm.source_batch_id || !selectedWipRow
-                }
-              >
-                {isPending ? "Logging..." : "Finish Batch"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+      <div className="flex gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-lg border border-[var(--erp-border-default)] py-2.5 text-sm font-medium text-[var(--erp-text-secondary)] hover:bg-[var(--erp-bg-surface)] transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isPending}
+          className="flex-1 rounded-lg bg-[var(--erp-accent)] py-2.5 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--erp-accent-bright)] disabled:opacity-50 transition-colors"
+        >
+          {isPending ? "Creating..." : "Create Item"}
+        </button>
+      </div>
+    </form>
   );
 }
