@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   PackageSearch,
@@ -18,7 +19,8 @@ import {
   X,
   ChevronRight,
 } from "lucide-react";
-import { logoutAction } from "@/features/auth/actions";
+import { logout } from "@/lib/api/auth";
+import { useAuthStore } from "@/stores/auth.store";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -86,6 +88,16 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const clearAuthSession = useAuthStore((state) => state.clearAuthSession);
+
+  const logoutMutation = useMutation({
+    mutationFn: logout,
+    onSettled: () => {
+      clearAuthSession();
+      router.push("/login");
+      router.refresh();
+    },
+  });
 
   const showShell = useMemo(() => isWorkspacePath(pathname), [pathname]);
 
@@ -95,10 +107,9 @@ export function AppShell({ children }: AppShellProps) {
 
   const handleNav = (href: string) => {
     if (href === "#logout") {
-      logoutAction().then(() => {
-        router.push("/login");
-        router.refresh();
-      });
+      if (!logoutMutation.isPending) {
+        logoutMutation.mutate();
+      }
       return;
     }
     if (href.startsWith("#")) return;
