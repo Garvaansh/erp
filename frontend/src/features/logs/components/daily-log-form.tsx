@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { submitDailyLogAction } from "@/features/logs/actions";
+import { submitDailyLog } from "@/lib/api/logs";
 
 const INITIAL_STATE = {
   ok: false,
@@ -19,10 +20,49 @@ const INITIAL_STATE = {
 };
 
 export function DailyLogForm() {
-  const [state, formAction, isPending] = useActionState(
-    submitDailyLogAction,
-    INITIAL_STATE,
-  );
+  const [state, setState] = useState(INITIAL_STATE);
+  const submitMutation = useMutation({ mutationFn: submitDailyLog });
+
+  const isPending = submitMutation.isPending;
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+
+    try {
+      const result = await submitMutation.mutateAsync({
+        source_batch_id: String(formData.get("source_batch_id") ?? "").trim(),
+        output_item_name: String(formData.get("output_item_name") ?? "").trim(),
+        output_item_specs: {
+          thickness: Number(formData.get("output_specs_thickness") ?? 0),
+          width: Number(formData.get("output_specs_width") ?? 0),
+          coil_weight: Number(formData.get("output_specs_coil_weight") ?? 0),
+        },
+        input_qty: Number(formData.get("input_qty") ?? 0),
+        finished_qty: Number(formData.get("finished_qty") ?? 0),
+        scrap_qty: Number(formData.get("scrap_qty") ?? 0),
+      });
+
+      setState({
+        ok: result.success,
+        message: result.success
+          ? "Daily log submitted successfully."
+          : "Daily log request failed.",
+      });
+
+      if (result.success) {
+        event.currentTarget.reset();
+      }
+    } catch (error) {
+      setState({
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to submit daily log.",
+      });
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -35,7 +75,7 @@ export function DailyLogForm() {
         </CardHeader>
       </Card>
 
-      <form action={formAction} className="space-y-4">
+      <form onSubmit={onSubmit} className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
