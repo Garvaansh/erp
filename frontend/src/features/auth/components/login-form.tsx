@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
 import {
   Zap,
   Mail,
@@ -13,16 +14,28 @@ import {
   Wifi,
   Server,
 } from "lucide-react";
-import { loginAction } from "@/features/auth/actions";
+import { ApiClientError } from "@/lib/api/api-client";
+import { login } from "@/lib/api/auth";
+import { useAuthStore } from "@/stores/auth.store";
+
+function readLoginErrorMessage(error: unknown): string {
+  if (error instanceof ApiClientError && error.message.trim()) {
+    return error.message;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "Authentication service unavailable.";
+}
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
-  const [state, formAction, isPending] = useActionState(loginAction, {
-    ok: false,
-    message: "",
-  });
+  const [errorMessage, setErrorMessage] = useState("");
+  const setAuthSession = useAuthStore((state) => state.setAuthSession);
 
   // Look for ?next= in the URL and only allow safe in-app paths.
   const nextParam = searchParams.get("next") || "";
@@ -31,14 +44,33 @@ export function LoginForm() {
       ? nextParam
       : "/dashboard";
 
-  useEffect(() => {
-    if (!state.ok) {
+  const loginMutation = useMutation({
+    mutationFn: login,
+    onSuccess: (user) => {
+      setAuthSession({ user, token: null });
+      router.push(nextUrl);
+      router.refresh();
+    },
+    onError: (error) => {
+      setErrorMessage(readLoginErrorMessage(error));
+    },
+  });
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+
+    if (!email || !password) {
+      setErrorMessage("Email and password are required.");
       return;
     }
 
-    router.push(nextUrl);
-    router.refresh();
-  }, [state.ok, router, nextUrl]);
+    setErrorMessage("");
+    loginMutation.mutate({ email, password });
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--erp-bg-deep)] erp-grid-pattern relative overflow-hidden">
@@ -76,7 +108,7 @@ export function LoginForm() {
             </p>
           </div>
 
-          <form action={formAction} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
             <div className="flex items-center gap-3 rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 focus-within:border-[var(--erp-accent)] transition-colors">
               <Mail className="size-4 text-[var(--erp-text-muted)] shrink-0" />
@@ -132,19 +164,19 @@ export function LoginForm() {
             </div>
 
             {/* Error */}
-            {!state.ok && state.message ? (
+            {errorMessage ? (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-                {state.message}
+                {errorMessage}
               </div>
             ) : null}
 
             {/* Submit */}
             <button
               type="submit"
-              disabled={isPending}
+              disabled={loginMutation.isPending}
               className="w-full flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[var(--erp-accent)] to-cyan-500 px-4 py-3 text-sm font-bold uppercase tracking-wider text-white hover:from-[var(--erp-accent-bright)] hover:to-cyan-400 disabled:opacity-50 transition-all duration-200 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30"
             >
-              {isPending ? (
+              {loginMutation.isPending ? (
                 <span className="animate-pulse">Authenticating...</span>
               ) : (
                 <>
