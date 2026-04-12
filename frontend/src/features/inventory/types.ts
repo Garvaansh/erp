@@ -43,6 +43,8 @@ export type InventoryViewRow = {
   name: string;
   specs: Record<string, unknown>;
   total_qty: number;
+  available_qty: number;
+  reserved_qty: number;
 };
 
 /**

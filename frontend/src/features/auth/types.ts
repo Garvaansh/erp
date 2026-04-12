@@ -7,6 +7,7 @@ export type AuthUser = {
   id?: string;
   email?: string;
   role?: string;
+  is_admin?: boolean;
 };
 
 export type LoginActionState = {

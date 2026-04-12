@@ -1,14 +1,7 @@
-import {
-  getInventorySnapshot,
-  getRawItemDefinitions,
-  getSelectableRawItems,
-} from "@/features/inventory/api";
+import { getInventorySnapshot } from "@/features/inventory/api";
+import { getCurrentUser } from "@/features/auth/api";
 import { InventoryView } from "@/features/inventory/components/inventory-view";
-import type {
-  InventorySnapshot,
-  ItemDefinition,
-  SelectableItem,
-} from "@/features/inventory/types";
+import type { InventorySnapshot } from "@/features/inventory/types";
 import { ApiClientError } from "@/lib/api-client";
 
 export const dynamic = "force-dynamic";
@@ -45,16 +38,16 @@ export default async function InventoryPage({
   };
 
   let snapshot: InventorySnapshot = emptySnapshot;
-  let selectableItems: SelectableItem[] = [];
-  let rawItems: ItemDefinition[] = [];
+  let isAdmin = false;
   let serviceAlert: string | undefined;
 
   try {
-    [snapshot, selectableItems, rawItems] = await Promise.all([
+    const [inventorySnapshot, user] = await Promise.all([
       getInventorySnapshot(),
-      getSelectableRawItems(),
-      getRawItemDefinitions(),
+      getCurrentUser(),
     ]);
+    snapshot = inventorySnapshot;
+    isAdmin = user?.is_admin === true;
   } catch (error) {
     if (error instanceof ApiClientError && error.statusCode >= 500) {
       serviceAlert =
@@ -67,9 +60,8 @@ export default async function InventoryPage({
   return (
     <InventoryView
       snapshot={snapshot}
-      selectableItems={selectableItems}
-      rawItems={rawItems}
       initialTab={initialTab}
+      isAdmin={isAdmin}
       serviceAlert={serviceAlert}
     />
   );

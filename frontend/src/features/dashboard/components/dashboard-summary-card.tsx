@@ -19,11 +19,6 @@ type DashboardSummaryCardProps = {
   summary: DashboardSummary;
 };
 
-function formatWeight(value: number): string {
-  if (value >= 1000) return (value / 1000).toFixed(1) + "K";
-  return value.toLocaleString("en-IN", { maximumFractionDigits: 0 });
-}
-
 function formatNumber(value: number): string {
   return value.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
@@ -71,7 +66,9 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <button className="erp-badge--neutral erp-badge">Last 24 Hours</button>
+          <button className="erp-badge--neutral erp-badge">
+            Last 24 Hours
+          </button>
           <button className="flex items-center gap-1.5 rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--erp-text-secondary)] hover:border-[var(--erp-accent)] transition-colors">
             Export Report
           </button>
@@ -90,7 +87,9 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
                   <span className="erp-kpi-label">Total Coils in Stock</span>
                 </div>
                 <div className="flex items-end gap-3">
-                  <span className="erp-kpi-value">{formatNumber(totalCoils)}</span>
+                  <span className="erp-kpi-value">
+                    {formatNumber(totalCoils)}
+                  </span>
                   <span className="flex items-center gap-1 text-xs text-[var(--erp-success)] font-medium mb-1">
                     <ArrowUpRight className="size-3" />
                     +12.4%
@@ -138,11 +137,15 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
               <div className="erp-progress mb-2">
                 <div
                   className="erp-progress-fill"
-                  style={{ width: `${Math.min((finishedWeight / 20000) * 100, 100)}%` }}
+                  style={{
+                    width: `${Math.min((finishedWeight / 20000) * 100, 100)}%`,
+                  }}
                 />
               </div>
               <div className="flex justify-between text-[10px] text-[var(--erp-text-muted)]">
-                <span>{Math.round((finishedWeight / 20000) * 100)}% Complete</span>
+                <span>
+                  {Math.round((finishedWeight / 20000) * 100)}% Complete
+                </span>
                 <span>{formatNumber(20000 - finishedWeight)} remaining</span>
               </div>
             </div>
@@ -151,16 +154,24 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
             <div className="erp-card-static p-5">
               <div className="flex items-center justify-between mb-4">
                 <p className="erp-kpi-label">Recent Activity Feed</p>
-                <Link href="/logs" className="text-[10px] font-semibold text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] uppercase tracking-wider">
+                <Link
+                  href="/logs"
+                  className="text-[10px] font-semibold text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] uppercase tracking-wider"
+                >
                   View All
                 </Link>
               </div>
               <div className="space-y-3">
                 {recentActivity.length === 0 ? (
-                  <p className="text-xs text-[var(--erp-text-muted)]">No recent activity.</p>
+                  <p className="text-xs text-[var(--erp-text-muted)]">
+                    No recent activity.
+                  </p>
                 ) : (
                   recentActivity.slice(0, 4).map((item, i) => (
-                    <div key={item.journal_id || i} className="flex items-start gap-3 group">
+                    <div
+                      key={item.journal_id || i}
+                      className="flex items-start gap-3 group"
+                    >
                       <div className="mt-0.5">
                         <Activity className="size-3.5 text-[var(--erp-accent)]" />
                       </div>
@@ -169,11 +180,18 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
                           <span className="text-xs font-medium text-[var(--erp-text-primary)] truncate">
                             {item.source_batch || "Batch"}
                           </span>
-                          <StatusBadge status={item.scrap_qty > 0 ? "FLAGGED" : "COMPLETED"} />
+                          <StatusBadge
+                            status={
+                              item.scrap_qty > 0 ? "FLAGGED" : "COMPLETED"
+                            }
+                          />
                         </div>
                         <p className="text-[10px] text-[var(--erp-text-muted)] mt-0.5">
-                          {item.worker_name} • In: {item.input_qty} → Out: {item.finished_qty}
-                          {item.scrap_qty > 0 ? ` • Scrap: ${item.scrap_qty}` : ""}
+                          {item.worker_name} • In: {item.input_qty} → Out:{" "}
+                          {item.finished_qty}
+                          {item.scrap_qty > 0
+                            ? ` • Scrap: ${item.scrap_qty}`
+                            : ""}
                         </p>
                       </div>
                       <span className="text-[10px] text-[var(--erp-text-muted)] whitespace-nowrap">
@@ -200,8 +218,12 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
                   <Truck className="size-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[var(--erp-text-primary)]">New Order</p>
-                  <p className="text-[10px] text-[var(--erp-text-muted)]">Dispatch items to client</p>
+                  <p className="text-sm font-medium text-[var(--erp-text-primary)]">
+                    New Order
+                  </p>
+                  <p className="text-[10px] text-[var(--erp-text-muted)]">
+                    Dispatch items to client
+                  </p>
                 </div>
               </Link>
               <Link
@@ -212,8 +234,12 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
                   <PackagePlus className="size-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[var(--erp-text-primary)]">Update Stock</p>
-                  <p className="text-[10px] text-[var(--erp-text-muted)]">Manual inventory correction</p>
+                  <p className="text-sm font-medium text-[var(--erp-text-primary)]">
+                    Update Stock
+                  </p>
+                  <p className="text-[10px] text-[var(--erp-text-muted)]">
+                    Manual inventory correction
+                  </p>
                 </div>
               </Link>
               <Link
@@ -224,8 +250,12 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
                   <ClipboardPlus className="size-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[var(--erp-text-primary)]">Add Item</p>
-                  <p className="text-[10px] text-[var(--erp-text-muted)]">Register new SKU</p>
+                  <p className="text-sm font-medium text-[var(--erp-text-primary)]">
+                    Add Item
+                  </p>
+                  <p className="text-[10px] text-[var(--erp-text-muted)]">
+                    Register new SKU
+                  </p>
                 </div>
               </Link>
             </div>
@@ -239,7 +269,9 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
           <HeartPulse className="size-5 text-[var(--erp-success)]" />
           <div>
             <p className="erp-kpi-label">System Health</p>
-            <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">99.98%</p>
+            <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">
+              99.98%
+            </p>
           </div>
         </div>
         <div className="erp-card-static p-4 flex items-center gap-4">
@@ -247,8 +279,12 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
           <div>
             <p className="erp-kpi-label">Active Shifts</p>
             <div className="flex items-center gap-2">
-              <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">14 / 15</p>
-              <span className="text-[10px] text-[var(--erp-success)] font-medium">+1</span>
+              <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">
+                14 / 15
+              </p>
+              <span className="text-[10px] text-[var(--erp-success)] font-medium">
+                +1
+              </span>
             </div>
           </div>
         </div>
@@ -257,8 +293,12 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
           <div>
             <p className="erp-kpi-label">Factory Temperature</p>
             <div className="flex items-center gap-2">
-              <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">24.2°C</p>
-              <span className="text-[10px] text-[var(--erp-success)]">• Stable</span>
+              <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">
+                24.2°C
+              </p>
+              <span className="text-[10px] text-[var(--erp-success)]">
+                • Stable
+              </span>
             </div>
           </div>
         </div>

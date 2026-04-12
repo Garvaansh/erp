@@ -20,6 +20,8 @@ type InventoryViewRow = {
   name: string;
   specs: Record<string, unknown>;
   total_qty: number;
+  available_qty: number;
+  reserved_qty: number;
 };
 
 /**
@@ -47,6 +49,10 @@ function sanitizeViewRow(row: unknown): InventoryViewRow | null {
   const sku = typeof row.sku === "string" ? row.sku.trim() : "";
   const name = typeof row.name === "string" ? row.name.trim() : "";
   const totalQty = typeof row.total_qty === "number" ? row.total_qty : 0;
+  const availableQty =
+    typeof row.available_qty === "number" ? row.available_qty : totalQty;
+  const reservedQty =
+    typeof row.reserved_qty === "number" ? row.reserved_qty : 0;
   const specs = isRecord(row.specs) ? row.specs : {};
 
   if (!itemId) return null;
@@ -57,6 +63,8 @@ function sanitizeViewRow(row: unknown): InventoryViewRow | null {
     name,
     specs,
     total_qty: totalQty,
+    available_qty: availableQty,
+    reserved_qty: reservedQty,
   };
 }
 

@@ -13,6 +13,8 @@ export async function submitDailyLogAction(
   _previousState: DailyLogActionState = DEFAULT_ACTION_STATE,
   formData: FormData,
 ): Promise<DailyLogActionState> {
+  void _previousState;
+
   try {
     const result = await submitDailyLog({
       source_batch_id: String(formData.get("source_batch_id") ?? "").trim(),

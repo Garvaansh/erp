@@ -1,590 +1,458 @@
 "use client";
 
+import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { AlertTriangle, Filter, Plus, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  useState,
-  useMemo,
-  useCallback,
-  useActionState,
-  useEffect,
-} from "react";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Plus,
-  Search,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  AlertTriangle,
-  ArrowRight,
-  PackageOpen,
-  X,
-} from "lucide-react";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { createItemFormAction } from "@/features/inventory/actions";
 import type {
   InventorySnapshot,
   InventoryViewRow,
-  ItemDefinition,
-  SelectableItem,
 } from "@/features/inventory/types";
-import { createItemFormAction } from "@/features/inventory/actions";
-import { ReceiveStockForm } from "./receive-stock-form";
-import { ItemDrillDown } from "./item-drill-down";
+import { ItemDrillDown } from "@/features/inventory/components/item-drill-down";
+import { WIPActivityTab } from "@/features/inventory/components/wip-activity-tab";
 
 type InventoryTab = "raw" | "wip" | "finished";
 
 type InventoryViewProps = {
   snapshot: InventorySnapshot;
-  selectableItems: SelectableItem[];
-  rawItems: ItemDefinition[];
   initialTab: InventoryTab;
+  isAdmin: boolean;
   serviceAlert?: string;
 };
 
-const TAB_CONFIG: {
-  key: InventoryTab;
-  label: string;
-  category: keyof InventorySnapshot;
-}[] = [
-  { key: "raw", label: "Raw Materials (Coils)", category: "RAW" },
-  { key: "wip", label: "Finished Goods (Pipes)", category: "FINISHED" },
-  { key: "finished", label: "Semi-Finished", category: "SEMI_FINISHED" },
-];
-
-const ITEMS_PER_PAGE = 8;
-
-function StatusBadge({ qty }: { qty: number }) {
-  if (qty <= 0)
-    return <span className="erp-badge erp-badge--critical">Exhausted</span>;
-  if (qty < 500)
-    return <span className="erp-badge erp-badge--warning">Low Stock</span>;
-  return <span className="erp-badge erp-badge--success">In Stock</span>;
-}
+type RowWithCategory = InventoryViewRow & {
+  category: "RAW" | "SEMI_FINISHED" | "FINISHED";
+};
 
 function formatSpec(specs: Record<string, unknown>): string {
   const parts: string[] = [];
-  if (specs.thickness) parts.push(`${specs.thickness}mm`);
-  if (specs.width) parts.push(`${specs.width}mm`);
-  if (specs.diameter) parts.push(`Ø${specs.diameter}mm`);
-  return parts.join(" × ") || "—";
+  if (typeof specs.thickness === "number") {
+    parts.push(`${specs.thickness}mm`);
+  }
+  if (typeof specs.width === "number") {
+    parts.push(`${specs.width}mm`);
+  }
+  if (typeof specs.diameter === "number") {
+    parts.push(`Ø${specs.diameter}mm`);
+  }
+  return parts.join(" x ") || "-";
+}
+
+function stockStatus(availableQty: number): "In Stock" | "Low" | "Exhausted" {
+  if (availableQty <= 0) {
+    return "Exhausted";
+  }
+  if (availableQty < 500) {
+    return "Low";
+  }
+  return "In Stock";
+}
+
+function statusClass(status: "In Stock" | "Low" | "Exhausted"): string {
+  if (status === "In Stock") {
+    return "text-emerald-600";
+  }
+  if (status === "Low") {
+    return "text-amber-600";
+  }
+  return "text-red-600";
 }
 
 export function InventoryView({
   snapshot,
-  selectableItems,
-  rawItems,
   initialTab,
+  isAdmin,
   serviceAlert,
 }: InventoryViewProps) {
   const [activeTab, setActiveTab] = useState<InventoryTab>(initialTab);
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [showAddItem, setShowAddItem] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<InventoryViewRow | null>(
-    null,
+  const [selectedRow, setSelectedRow] = useState<RowWithCategory | null>(null);
+
+  const rawRows = useMemo<RowWithCategory[]>(
+    () =>
+      snapshot.RAW.map((row) => ({
+        ...row,
+        category: "RAW",
+      })),
+    [snapshot.RAW],
   );
-  const [showReceiveStock, setShowReceiveStock] = useState(false);
 
-  const tabConfig =
-    TAB_CONFIG.find((t) => t.key === activeTab) ?? TAB_CONFIG[0];
-  const rows = snapshot[tabConfig.category] || [];
+  const finishedRows = useMemo<RowWithCategory[]>(
+    () => [
+      ...snapshot.SEMI_FINISHED.map((row) => ({
+        ...row,
+        category: "SEMI_FINISHED" as const,
+      })),
+      ...snapshot.FINISHED.map((row) => ({
+        ...row,
+        category: "FINISHED" as const,
+      })),
+    ],
+    [snapshot.FINISHED, snapshot.SEMI_FINISHED],
+  );
 
-  const filteredRows = useMemo(() => {
-    if (!searchQuery.trim()) return rows;
-    const q = searchQuery.toLowerCase();
-    return rows.filter(
-      (r) =>
-        r.name.toLowerCase().includes(q) ||
-        (r.sku && r.sku.toLowerCase().includes(q)) ||
-        formatSpec(r.specs).toLowerCase().includes(q),
+  const filteredRawRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return rawRows;
+    }
+
+    return rawRows.filter(
+      (row) =>
+        row.name.toLowerCase().includes(query) ||
+        (row.sku ?? "").toLowerCase().includes(query) ||
+        formatSpec(row.specs).toLowerCase().includes(query),
     );
-  }, [rows, searchQuery]);
+  }, [rawRows, searchQuery]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredRows.length / ITEMS_PER_PAGE),
-  );
-  const paginatedRows = filteredRows.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE,
-  );
+  const filteredFinishedRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return finishedRows;
+    }
 
-  const totalWeight = rows.reduce((sum, r) => sum + r.total_qty, 0);
-  const activeSKUs = rows.length;
-
-  const handleTabChange = useCallback((tab: InventoryTab) => {
-    setActiveTab(tab);
-    setCurrentPage(1);
-    setSearchQuery("");
-    setSelectedItem(null);
-  }, []);
+    return finishedRows.filter(
+      (row) =>
+        row.name.toLowerCase().includes(query) ||
+        (row.sku ?? "").toLowerCase().includes(query) ||
+        formatSpec(row.specs).toLowerCase().includes(query),
+    );
+  }, [finishedRows, searchQuery]);
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="erp-section-title mb-1">Inventory Management</p>
-          <h1 className="text-2xl font-bold text-[var(--erp-text-primary)]">
+          <p className="erp-section-title">Inventory</p>
+          <h1 className="text-2xl font-semibold text-foreground">
             Item Master
           </h1>
         </div>
-        <button
-          onClick={() => setShowAddItem(true)}
-          className="flex items-center gap-2 rounded-lg bg-[var(--erp-accent)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--erp-accent-bright)] transition-colors shadow-lg shadow-cyan-500/15"
-        >
-          <Plus className="size-4" />
-          Add New Item
-        </button>
       </div>
 
-      {serviceAlert && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
-          <AlertTriangle className="size-4 text-amber-400 shrink-0" />
-          <p className="text-sm text-amber-300">{serviceAlert}</p>
+      {serviceAlert ? (
+        <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700">
+          <AlertTriangle className="size-4" />
+          <span>{serviceAlert}</span>
         </div>
-      )}
+      ) : null}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-[var(--erp-border-default)] overflow-x-auto">
-        {TAB_CONFIG.map((tab) => {
-          const count = (snapshot[tab.category] || []).length;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => handleTabChange(tab.key)}
-              className={`flex items-center gap-2 whitespace-nowrap px-4 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
-                activeTab === tab.key
-                  ? "border-[var(--erp-accent)] text-[var(--erp-accent)]"
-                  : "border-transparent text-[var(--erp-text-muted)] hover:text-[var(--erp-text-secondary)]"
-              }`}
-            >
-              {tab.label}
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
-                  activeTab === tab.key
-                    ? "bg-[var(--erp-accent-glow)] text-[var(--erp-accent)]"
-                    : "bg-[var(--erp-bg-surface)] text-[var(--erp-text-muted)]"
-                }`}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as InventoryTab)}
+      >
+        <TabsList variant="line" className="w-full justify-start">
+          <TabsTrigger value="raw">Raw Material</TabsTrigger>
+          <TabsTrigger value="wip">WIP</TabsTrigger>
+          <TabsTrigger value="finished">Finished Goods</TabsTrigger>
+        </TabsList>
 
-      {/* Search & Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2 focus-within:border-[var(--erp-accent)] transition-colors">
-          <Search className="size-4 text-[var(--erp-text-muted)]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder="Search Master Item ID, Spec or Serial..."
-            className="flex-1 bg-transparent text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)]"
-            >
-              <X className="size-3.5" />
-            </button>
-          )}
-        </div>
-        <button className="flex items-center gap-1.5 rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2 text-xs font-medium text-[var(--erp-text-secondary)] hover:border-[var(--erp-accent)] transition-colors">
-          <Filter className="size-3.5" />
-          Filters
-        </button>
-      </div>
-
-      {/* Data Table */}
-      <div className="erp-card-static overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="erp-table">
-            <thead>
-              <tr>
-                <th style={{ width: "40px" }}>
-                  <input
-                    type="checkbox"
-                    className="rounded border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)]"
-                  />
-                </th>
-                <th>Material ID</th>
-                <th>Description</th>
-                <th>Specifications</th>
-                <th className="text-right">Weight (MT)</th>
-                <th>Status</th>
-                <th className="text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedRows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12">
-                    <PackageOpen className="size-10 text-[var(--erp-text-muted)] mx-auto mb-3 opacity-40" />
-                    <p className="text-sm text-[var(--erp-text-muted)]">
-                      {searchQuery
-                        ? "No items match your search."
-                        : "No items in this category yet."}
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                paginatedRows.map((row, i) => (
-                  <tr
-                    key={row.item_id}
-                    style={{ animationDelay: `${i * 0.03}s` }}
-                    className="erp-fade-in"
-                  >
-                    <td>
-                      <input
-                        type="checkbox"
-                        className="rounded border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)]"
-                      />
-                    </td>
-                    <td>
-                      <button
-                        onClick={() => setSelectedItem(row)}
-                        className="text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] font-mono text-xs font-medium transition-colors"
-                      >
-                        {row.sku || "SKU-PENDING"}
-                      </button>
-                    </td>
-                    <td>
-                      <p className="text-sm font-medium text-[var(--erp-text-primary)]">
-                        {row.name}
-                      </p>
-                    </td>
-                    <td>
-                      <span className="font-mono text-xs text-[var(--erp-text-secondary)]">
-                        {formatSpec(row.specs)}
-                      </span>
-                    </td>
-                    <td className="text-right">
-                      <span className="font-mono font-semibold text-[var(--erp-text-primary)]">
-                        {row.total_qty.toLocaleString("en-IN", {
-                          maximumFractionDigits: 1,
-                        })}
-                      </span>
-                    </td>
-                    <td>
-                      <StatusBadge qty={row.total_qty} />
-                    </td>
-                    <td className="text-right">
-                      <button
-                        onClick={() => setSelectedItem(row)}
-                        className="text-[var(--erp-text-muted)] hover:text-[var(--erp-accent)] transition-colors"
-                      >
-                        <ArrowRight className="size-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {filteredRows.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--erp-border-subtle)]">
-            <p className="text-xs text-[var(--erp-text-muted)]">
-              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
-              {Math.min(currentPage * ITEMS_PER_PAGE, filteredRows.length)} of{" "}
-              {filteredRows.length} items
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 rounded text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)] hover:bg-[var(--erp-bg-surface)] disabled:opacity-30 transition-colors"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              {Array.from(
-                { length: Math.min(totalPages, 5) },
-                (_, i) => i + 1,
-              ).map((page) => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`min-w-[28px] h-7 rounded text-xs font-medium transition-colors ${
-                    page === currentPage
-                      ? "bg-[var(--erp-accent)] text-[var(--primary-foreground)]"
-                      : "text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)] hover:bg-[var(--erp-bg-surface)]"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="p-1.5 rounded text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)] hover:bg-[var(--erp-bg-surface)] disabled:opacity-30 transition-colors"
-              >
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Section: Analytics + Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Inventory Health Analytics */}
-        <div className="lg:col-span-2 erp-card-static p-5">
-          <p className="erp-kpi-label mb-1">Inventory Health Analytics</p>
-          <p className="text-sm text-[var(--erp-text-muted)] mb-5">
-            Real-time tonnage distribution across grade categories.
-          </p>
-          <div className="flex items-end gap-2 h-28">
-            {[65, 45, 80, 30, 55, 70, 40].map((h, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div className="w-full erp-bar" style={{ height: `${h}%` }} />
-                <span className="text-[9px] text-[var(--erp-text-muted)]">
-                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i]}
-                </span>
+        <TabsContent value="raw" className="space-y-4 pt-2">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <div className="relative min-w-72 flex-1 max-w-xl">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search SKU, description, or specification"
+                  className="pl-9"
+                />
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Summary */}
-        <div className="erp-card-static p-5 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div>
-              <p className="erp-kpi-label">Total Weight</p>
-              <p className="text-2xl font-bold text-[var(--erp-text-primary)] tabular-nums">
-                {totalWeight.toLocaleString("en-IN", {
-                  maximumFractionDigits: 1,
-                })}
-                <span className="text-sm font-normal text-[var(--erp-text-muted)] ml-1">
-                  MT
-                </span>
-              </p>
+              <Button variant="outline" disabled>
+                <Filter className="mr-2 size-4" />
+                Filters
+              </Button>
             </div>
-            <div>
-              <p className="erp-kpi-label">Active SKUs</p>
-              <p className="text-2xl font-bold text-[var(--erp-text-primary)] tabular-nums">
-                {activeSKUs}
-              </p>
-            </div>
+            <AddRawMaterialDialog />
           </div>
-          <button className="flex items-center gap-2 justify-center mt-4 w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] py-2 text-xs font-semibold text-[var(--erp-accent)] hover:border-[var(--erp-accent)] transition-colors">
-            View Detailed Report
-            <ArrowRight className="size-3.5" />
-          </button>
-        </div>
-      </div>
 
-      {/* ── Receive Stock Slideout ── */}
-      {showReceiveStock && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowReceiveStock(false)}
+          <InventoryTable
+            rows={filteredRawRows}
+            emptyText="No raw material rows found."
+            showType={false}
+            onRowClick={setSelectedRow}
           />
-          <div className="relative w-full max-w-md bg-[var(--card)] border-l border-[var(--erp-border-default)] overflow-y-auto erp-slide-in">
-            <div className="flex items-center justify-between p-5 border-b border-[var(--erp-border-subtle)]">
-              <h2 className="text-lg font-semibold text-[var(--erp-text-primary)]">
-                Receive Stock
-              </h2>
-              <button
-                onClick={() => setShowReceiveStock(false)}
-                className="p-1 text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)]"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-            <div className="p-5">
-              <ReceiveStockForm />
+        </TabsContent>
+
+        <TabsContent value="wip" className="space-y-4 pt-2">
+          <WIPActivityTab isAdmin={isAdmin} />
+        </TabsContent>
+
+        <TabsContent value="finished" className="space-y-4 pt-2">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <div className="relative min-w-72 flex-1 max-w-xl">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search finished/semi-finished output"
+                  className="pl-9"
+                />
+              </div>
+              <Button variant="outline" disabled>
+                <Filter className="mr-2 size-4" />
+                Filters
+              </Button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ── Item Drill Down Dialog ── */}
+          <InventoryTable
+            rows={filteredFinishedRows}
+            emptyText="No finished goods rows found."
+            showType={true}
+            onRowClick={setSelectedRow}
+          />
+        </TabsContent>
+      </Tabs>
+
       <ItemDrillDown
         item={
-          selectedItem
+          selectedRow
             ? {
-                id: selectedItem.item_id,
-                name: selectedItem.name,
-                category:
-                  tabConfig.category === "RAW"
-                    ? "RAW"
-                    : tabConfig.category === "FINISHED"
-                      ? "FINISHED"
-                      : "SEMI_FINISHED",
+                id: selectedRow.item_id,
+                name: selectedRow.name,
+                category: selectedRow.category,
                 base_unit: "WEIGHT",
                 specs: {
-                  thickness: Number(selectedItem.specs?.thickness) || 0,
-                  width: Number(selectedItem.specs?.width) || 0,
-                  coil_weight: Number(selectedItem.specs?.coil_weight) || 0,
+                  thickness: Number(selectedRow.specs?.thickness) || 0,
+                  width: Number(selectedRow.specs?.width) || 0,
+                  coil_weight: Number(selectedRow.specs?.coil_weight) || 0,
                 },
                 is_active: true,
               }
             : null
         }
-        open={!!selectedItem}
+        open={selectedRow !== null}
         onOpenChange={(open) => {
-          if (!open) setSelectedItem(null);
+          if (!open) {
+            setSelectedRow(null);
+          }
         }}
       />
-
-      {/* ── Add Item Slideout ── */}
-      {showAddItem && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowAddItem(false)}
-          />
-          <div className="relative w-full max-w-md bg-[var(--card)] border-l border-[var(--erp-border-default)] overflow-y-auto erp-slide-in">
-            <div className="flex items-center justify-between p-5 border-b border-[var(--erp-border-subtle)]">
-              <h2 className="text-lg font-semibold text-[var(--erp-text-primary)]">
-                Add New Item
-              </h2>
-              <button
-                onClick={() => setShowAddItem(false)}
-                className="p-1 text-[var(--erp-text-muted)] hover:text-[var(--erp-text-primary)]"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-            <div className="p-5">
-              <AddItemForm onClose={() => setShowAddItem(false)} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-/* ── Inline Add Item Form ── */
-function AddItemForm({ onClose }: { onClose: () => void }) {
-  const [itemType, setItemType] = useState<"COIL" | "PIPE">("COIL");
-  const [state, formAction, isPending] = useActionState(createItemFormAction, {
+type InventoryTableProps = {
+  rows: RowWithCategory[];
+  emptyText: string;
+  showType: boolean;
+  onRowClick: (row: RowWithCategory) => void;
+};
+
+function InventoryTable({
+  rows,
+  emptyText,
+  showType,
+  onRowClick,
+}: InventoryTableProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Current State</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>SKU</TableHead>
+              <TableHead>Description</TableHead>
+              {showType ? <TableHead>Type</TableHead> : null}
+              <TableHead>Specification</TableHead>
+              <TableHead className="text-right">Total Weight</TableHead>
+              <TableHead className="text-right">Available</TableHead>
+              <TableHead className="text-right">Reserved</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const status = stockStatus(row.available_qty);
+              return (
+                <TableRow
+                  key={`${row.category}:${row.item_id}`}
+                  className="cursor-pointer"
+                  onClick={() => onRowClick(row)}
+                >
+                  <TableCell className="font-mono text-xs">
+                    {row.sku || "-"}
+                  </TableCell>
+                  <TableCell>{row.name}</TableCell>
+                  {showType ? (
+                    <TableCell>
+                      {row.category === "SEMI_FINISHED"
+                        ? "Semi-Finished"
+                        : "Finished"}
+                    </TableCell>
+                  ) : null}
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatSpec(row.specs)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">
+                    {row.total_qty.toFixed(4)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">
+                    {row.available_qty.toFixed(4)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">
+                    {row.reserved_qty.toFixed(4)}
+                  </TableCell>
+                  <TableCell
+                    className={`text-xs font-medium ${statusClass(status)}`}
+                  >
+                    {status}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={showType ? 8 : 7}
+                  className="text-center text-sm text-muted-foreground"
+                >
+                  {emptyText}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AddRawMaterialDialog() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState({
     ok: false,
     message: "",
   });
+  const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (!state.ok) {
-      return;
-    }
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-    const timeoutId = window.setTimeout(() => {
-      onClose();
-      window.location.reload();
-    }, 800);
+    const formElement = event.currentTarget;
+    const formData = new FormData(formElement);
 
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [state.ok, onClose]);
+    startTransition(async () => {
+      const result = await createItemFormAction(undefined, formData);
+      setState(result);
+
+      if (result.ok) {
+        formElement.reset();
+        setOpen(false);
+        router.refresh();
+      }
+    });
+  }
 
   return (
-    <form action={formAction} className="space-y-5">
-      <input type="hidden" name="item_type" value={itemType} />
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button />}>
+        <Plus className="mr-2 size-4" />
+        Add Raw Material
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Raw Material</DialogTitle>
+        </DialogHeader>
 
-      {/* Item type toggle */}
-      <div>
-        <p className="erp-kpi-label mb-2">Item Classification</p>
-        <div className="grid grid-cols-2 gap-2">
-          {(["COIL", "PIPE"] as const).map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setItemType(type)}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-all ${
-                itemType === type
-                  ? "bg-[var(--erp-accent)] text-[var(--primary-foreground)]"
-                  : "bg-[var(--erp-bg-surface)] text-[var(--erp-text-muted)] border border-[var(--erp-border-default)] hover:border-[var(--erp-accent)]"
-              }`}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input type="hidden" name="item_type" value="COIL" />
+
+          <div className="space-y-1">
+            <Label htmlFor="raw-name">Material Name</Label>
+            <Input
+              id="raw-name"
+              name="name"
+              required
+              placeholder="e.g. Hot Rolled Carbon Steel Coil"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="raw-thickness">Thickness (mm)</Label>
+              <Input
+                id="raw-thickness"
+                name="thickness"
+                type="number"
+                step="0.01"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="raw-width">Width (mm)</Label>
+              <Input
+                id="raw-width"
+                name="width"
+                type="number"
+                step="0.01"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="raw-coil-weight">Initial Weight (MT)</Label>
+            <Input
+              id="raw-coil-weight"
+              name="coil_weight"
+              type="number"
+              step="0.01"
+              required
+            />
+          </div>
+
+          {state.message ? (
+            <p
+              className={`text-sm ${state.ok ? "text-emerald-600" : "text-red-600"}`}
             >
-              {type}
-            </button>
-          ))}
-        </div>
-      </div>
+              {state.message}
+            </p>
+          ) : null}
 
-      {/* Form fields */}
-      <div className="space-y-3">
-        <div>
-          <label className="erp-kpi-label mb-1 block">Material Name</label>
-          <input
-            name="name"
-            required
-            placeholder="e.g. Hot Rolled Carbon Steel Coil"
-            className="w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none focus:border-[var(--erp-accent)] transition-colors"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="erp-kpi-label mb-1 block">Thickness (mm)</label>
-            <input
-              name="thickness"
-              type="number"
-              step="0.01"
-              placeholder="4.50"
-              className="w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none focus:border-[var(--erp-accent)] transition-colors"
-            />
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Creating..." : "Create"}
+            </Button>
           </div>
-          <div>
-            <label className="erp-kpi-label mb-1 block">Width (mm)</label>
-            <input
-              name="width"
-              type="number"
-              step="0.01"
-              placeholder="1250.0"
-              className="w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none focus:border-[var(--erp-accent)] transition-colors"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="erp-kpi-label mb-1 block">
-            Initial Weight (MT)
-          </label>
-          <input
-            name="coil_weight"
-            type="number"
-            step="0.01"
-            placeholder="18.420"
-            className="w-full rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none focus:border-[var(--erp-accent)] transition-colors"
-          />
-        </div>
-      </div>
-
-      {state.message && (
-        <p
-          className={`text-sm rounded-lg px-3 py-2 ${state.ok ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" : "bg-red-500/10 text-red-400 border border-red-500/30"}`}
-        >
-          {state.message}
-        </p>
-      )}
-
-      <div className="flex gap-3 pt-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex-1 rounded-lg border border-[var(--erp-border-default)] py-2.5 text-sm font-medium text-[var(--erp-text-secondary)] hover:bg-[var(--erp-bg-surface)] transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="flex-1 rounded-lg bg-[var(--erp-accent)] py-2.5 text-sm font-semibold text-[var(--primary-foreground)] hover:bg-[var(--erp-accent-bright)] disabled:opacity-50 transition-colors"
-        >
-          {isPending ? "Creating..." : "Create Item"}
-        </button>
-      </div>
-    </form>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
