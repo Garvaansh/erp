@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -69,6 +70,33 @@ func RequireAuth(c *fiber.Ctx) error {
 	c.Locals("userID", userID)
 	c.Locals("email", email)
 	c.Locals("role", role)
+	c.Locals("isAdmin", extractIsAdminClaim(claims["is_admin"]))
 
 	return c.Next()
+}
+
+func RequireAdmin(c *fiber.Ctx) error {
+	isAdmin, ok := c.Locals("isAdmin").(bool)
+	if !ok || !isAdmin {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Admin privileges required",
+		})
+	}
+
+	return c.Next()
+}
+
+func extractIsAdminClaim(raw any) bool {
+	switch typed := raw.(type) {
+	case bool:
+		return typed
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(typed))
+		return err == nil && parsed
+	case float64:
+		return typed != 0
+	default:
+		return false
+	}
 }

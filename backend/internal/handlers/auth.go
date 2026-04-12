@@ -58,10 +58,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	expiresAt := time.Now().Add(time.Hour * 24)
 
 	claims := jwt.MapClaims{
-		"user_id": userID,
-		"email":   user.Email,
-		"role":    user.RoleCode,
-		"exp":     expiresAt.Unix(),
+		"user_id":  userID,
+		"email":    user.Email,
+		"role":     user.RoleCode,
+		"is_admin": user.IsAdmin,
+		"exp":      expiresAt.Unix(),
 	}
 
 	expiresIn := int64(time.Until(expiresAt).Seconds())
@@ -80,9 +81,10 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		"expires_in": expiresIn,
 		"expires_at": expiresAt.Unix(),
 		"user": fiber.Map{
-			"id":    userID,
-			"email": user.Email,
-			"role":  user.RoleCode,
+			"id":       userID,
+			"email":    user.Email,
+			"role":     user.RoleCode,
+			"is_admin": user.IsAdmin,
 		},
 	})
 }
@@ -110,9 +112,10 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"user": fiber.Map{
-			"id":    userID,
-			"email": user.Email,
-			"role":  user.RoleCode,
+			"id":       userID,
+			"email":    user.Email,
+			"role":     user.RoleCode,
+			"is_admin": user.IsAdmin,
 		},
 	})
 }
