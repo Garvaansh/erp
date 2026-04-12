@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,11 +17,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  receiveStockAction,
-  voidReceiptAction,
-} from "@/features/procurement/actions";
 import { ReceiveStockSchema } from "@/features/procurement/schemas";
+import {
+  receivePurchaseOrderStock,
+  voidProcurementReceipt,
+} from "@/lib/api/procurement";
+import { ApiClientError } from "@/lib/api/api-client";
+import { procurementKeys } from "@/lib/react-query/keys";
 import type { ReceiveStockInput } from "@/features/procurement/types";
 
 type ReceiveStockDialogProps = {
@@ -35,9 +37,8 @@ export function ReceiveStockDialog({
   poNumber,
   remainingQty,
 }: ReceiveStockDialogProps) {
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [isSubmitting, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm<ReceiveStockInput>({
@@ -50,6 +51,27 @@ export function ReceiveStockDialog({
     mode: "onBlur",
   });
 
+  const receiveMutation = useMutation({
+    mutationFn: receivePurchaseOrderStock,
+    onError: (error) => {
+      if (error instanceof ApiClientError && error.message.trim()) {
+        setFormError(error.message);
+        return;
+      }
+
+      if (error instanceof Error && error.message.trim()) {
+        setFormError(error.message);
+        return;
+      }
+
+      setFormError("Unable to receive this order.");
+    },
+  });
+
+  const voidMutation = useMutation({
+    mutationFn: voidProcurementReceipt,
+  });
+
   useEffect(() => {
     form.reset({
       po_id: poId,
@@ -60,43 +82,54 @@ export function ReceiveStockDialog({
 
   const onSubmit = (values: ReceiveStockInput) => {
     setFormError(null);
+    receiveMutation.mutate(values, {
+      onSuccess: async (result) => {
+        setOpen(false);
 
-    startTransition(async () => {
-      const result = await receiveStockAction(values);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: procurementKeys.orders() }),
+          queryClient.invalidateQueries({
+            queryKey: procurementKeys.orderDetails(poId),
+          }),
+        ]);
 
-      if (!result.ok) {
-        setFormError(result.error ?? "Unable to receive this order.");
-        return;
-      }
+        const generatedBatchCode = result.batch_code?.trim() || "LOT generated";
+        const generatedTransactionID = result.transaction_id?.trim() || "";
 
-      setOpen(false);
-      router.refresh();
+        toast.success(`PO Received. ${generatedBatchCode}.`, {
+          duration: 5000,
+          action: generatedTransactionID
+            ? {
+                label: "UNDO",
+                onClick: async () => {
+                  try {
+                    await voidMutation.mutateAsync({
+                      po_id: poId,
+                      transaction_id: generatedTransactionID,
+                    });
 
-      const generatedBatchCode =
-        result.data?.batch_code?.trim() || "LOT generated";
-      const generatedTransactionID = result.data?.transaction_id?.trim() || "";
+                    await Promise.all([
+                      queryClient.invalidateQueries({
+                        queryKey: procurementKeys.orders(),
+                      }),
+                      queryClient.invalidateQueries({
+                        queryKey: procurementKeys.orderDetails(poId),
+                      }),
+                    ]);
 
-      toast.success(`PO Received. ${generatedBatchCode}.`, {
-        duration: 5000,
-        action: generatedTransactionID
-          ? {
-              label: "UNDO",
-              onClick: async () => {
-                const undoResult = await voidReceiptAction(
-                  generatedTransactionID,
-                  poId,
-                );
-                if (!undoResult.ok) {
-                  toast.error(undoResult.error ?? "Undo failed.");
-                  return;
-                }
-
-                toast.success("Receipt rolled back.");
-                router.refresh();
-              },
-            }
-          : undefined,
-      });
+                    toast.success("Receipt rolled back.");
+                  } catch (error) {
+                    if (error instanceof Error && error.message.trim()) {
+                      toast.error(error.message);
+                    } else {
+                      toast.error("Undo failed.");
+                    }
+                  }
+                },
+              }
+            : undefined,
+        });
+      },
     });
   };
 
@@ -147,8 +180,11 @@ export function ReceiveStockDialog({
           ) : null}
 
           <DialogFooter>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Receiving..." : "Confirm Receipt"}
+            <Button
+              type="submit"
+              disabled={receiveMutation.isPending || voidMutation.isPending}
+            >
+              {receiveMutation.isPending ? "Receiving..." : "Confirm Receipt"}
             </Button>
           </DialogFooter>
         </form>

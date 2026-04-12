@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,8 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createPOAction } from "@/features/procurement/actions";
 import { CreatePOSchema } from "@/features/procurement/schemas";
+import { createPurchaseOrder } from "@/lib/api/procurement";
+import { ApiClientError } from "@/lib/api/api-client";
+import { procurementKeys } from "@/lib/react-query/keys";
 import type {
   CreatePOInput,
   ProcurementMaterialOption,
@@ -28,7 +31,7 @@ type POCreateFormProps = {
 
 export function POCreateForm({ materials }: POCreateFormProps) {
   const router = useRouter();
-  const [isSubmitting, startTransition] = useTransition();
+  const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
 
   const form = useForm<CreatePOInput>({
@@ -42,19 +45,32 @@ export function POCreateForm({ materials }: POCreateFormProps) {
     mode: "onBlur",
   });
 
-  const onSubmit = (values: CreatePOInput) => {
-    setFormError(null);
-
-    startTransition(async () => {
-      const result = await createPOAction(values);
-      if (!result.ok) {
-        setFormError(result.error ?? "Unable to create purchase order.");
+  const createMutation = useMutation({
+    mutationFn: createPurchaseOrder,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: procurementKeys.orders(),
+      });
+      router.push("/procurement");
+    },
+    onError: (error) => {
+      if (error instanceof ApiClientError && error.message.trim()) {
+        setFormError(error.message);
         return;
       }
 
-      router.push("/procurement");
-      router.refresh();
-    });
+      if (error instanceof Error && error.message.trim()) {
+        setFormError(error.message);
+        return;
+      }
+
+      setFormError("Unable to create purchase order.");
+    },
+  });
+
+  const onSubmit = (values: CreatePOInput) => {
+    setFormError(null);
+    createMutation.mutate(values);
   };
 
   return (
@@ -144,8 +160,8 @@ export function POCreateForm({ materials }: POCreateFormProps) {
             </p>
           ) : null}
 
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Creating..." : "Create Purchase Order"}
+          <Button type="submit" disabled={createMutation.isPending}>
+            {createMutation.isPending ? "Creating..." : "Create Purchase Order"}
           </Button>
         </form>
       </CardContent>

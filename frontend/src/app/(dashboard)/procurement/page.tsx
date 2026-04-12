@@ -1,26 +1,36 @@
+"use client";
+
+import { useMemo } from "react";
 import Link from "next/link";
-import { ApiClientError } from "@/lib/api-client";
-import { getProcurementOrders } from "@/features/procurement/queries";
+import { useQuery } from "@tanstack/react-query";
 import { POTable } from "@/features/procurement/components/po-table";
-import type { ProcurementOrderListItem } from "@/features/procurement/types";
 import { Plus, AlertTriangle } from "lucide-react";
+import { getProcurementOrders } from "@/lib/api/procurement";
+import { ApiClientError } from "@/lib/api/api-client";
+import { procurementKeys } from "@/lib/react-query/keys";
 
-export const dynamic = "force-dynamic";
+export default function ProcurementPage() {
+  const ordersQuery = useQuery({
+    queryKey: procurementKeys.orders(),
+    queryFn: getProcurementOrders,
+  });
 
-export default async function ProcurementPage() {
-  let serviceAlert: string | undefined;
-  let orders: ProcurementOrderListItem[] = [];
-
-  try {
-    orders = await getProcurementOrders();
-  } catch (error) {
-    if (error instanceof ApiClientError && error.statusCode >= 500) {
-      serviceAlert =
-        "Procurement services are temporarily unavailable. Please retry shortly.";
-    } else {
-      throw error;
+  const serviceAlert = useMemo(() => {
+    if (
+      ordersQuery.error instanceof ApiClientError &&
+      ordersQuery.error.statusCode >= 500
+    ) {
+      return "Procurement services are temporarily unavailable. Please retry shortly.";
     }
+
+    return undefined;
+  }, [ordersQuery.error]);
+
+  if (ordersQuery.error && !serviceAlert) {
+    throw ordersQuery.error;
   }
+
+  const orders = ordersQuery.data ?? [];
 
   return (
     <div className="space-y-5">

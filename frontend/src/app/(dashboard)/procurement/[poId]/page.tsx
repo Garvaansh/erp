@@ -1,37 +1,93 @@
+"use client";
+
+import { use } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ApiClientError } from "@/lib/api-client";
+import { useQuery } from "@tanstack/react-query";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { POBatchList } from "@/features/procurement/components/po-batch-list";
 import { POSummaryCard } from "@/features/procurement/components/po-summary-card";
 import { ReceiveStockDialog } from "@/features/procurement/components/receive-stock-dialog";
-import { getProcurementOrderDetails } from "@/features/procurement/queries";
-import type { ProcurementOrderDetails } from "@/features/procurement/types";
-
-export const dynamic = "force-dynamic";
+import { getProcurementOrderDetails } from "@/lib/api/procurement";
+import { ApiClientError } from "@/lib/api/api-client";
+import { procurementKeys } from "@/lib/react-query/keys";
 
 type ProcurementDetailPageProps = {
   params: Promise<{ poId: string }>;
 };
 
-export default async function ProcurementDetailPage({
+export default function ProcurementDetailPage({
   params,
 }: ProcurementDetailPageProps) {
-  const { poId } = await params;
+  const { poId } = use(params);
 
-  let details: ProcurementOrderDetails;
-  try {
-    details = await getProcurementOrderDetails(poId);
-  } catch (error) {
-    if (error instanceof ApiClientError && error.statusCode === 404) {
-      notFound();
-    }
+  const detailsQuery = useQuery({
+    queryKey: procurementKeys.orderDetails(poId),
+    queryFn: () => getProcurementOrderDetails(poId),
+    enabled: Boolean(poId),
+  });
 
-    throw error;
+  if (
+    detailsQuery.error instanceof ApiClientError &&
+    detailsQuery.error.statusCode === 404
+  ) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Link
+            href="/procurement"
+            className={cn(buttonVariants({ variant: "outline" }))}
+          >
+            Back to Orders
+          </Link>
+        </div>
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Purchase Order Not Found
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-600">
+              The requested procurement order could not be located.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
+  if (detailsQuery.error) {
+    throw detailsQuery.error;
+  }
+
+  if (!detailsQuery.data) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Link
+            href="/procurement"
+            className={cn(buttonVariants({ variant: "outline" }))}
+          >
+            Back to Orders
+          </Link>
+        </div>
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle className="text-base">Loading Purchase Order</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-600">
+              Fetching procurement details...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const details = detailsQuery.data;
   const { order, batches } = details;
 
   return (

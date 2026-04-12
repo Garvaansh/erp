@@ -1,28 +1,38 @@
+"use client";
+
+import { useMemo } from "react";
 import Link from "next/link";
-import { ApiClientError } from "@/lib/api-client";
+import { useQuery } from "@tanstack/react-query";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { POCreateForm } from "@/features/procurement/components/po-create-form";
-import { getProcurementMaterialOptions } from "@/features/procurement/queries";
-import type { ProcurementMaterialOption } from "@/features/procurement/types";
+import { getProcurementMaterialOptions } from "@/lib/api/procurement";
+import { ApiClientError } from "@/lib/api/api-client";
+import { procurementKeys } from "@/lib/react-query/keys";
 
-export const dynamic = "force-dynamic";
+export default function ProcurementCreatePage() {
+  const materialsQuery = useQuery({
+    queryKey: procurementKeys.materialOptions(),
+    queryFn: getProcurementMaterialOptions,
+  });
 
-export default async function ProcurementCreatePage() {
-  let serviceAlert: string | undefined;
-  let materials: ProcurementMaterialOption[] = [];
-
-  try {
-    materials = await getProcurementMaterialOptions();
-  } catch (error) {
-    if (error instanceof ApiClientError && error.statusCode >= 500) {
-      serviceAlert =
-        "Material lookup is unavailable. Verify backend connectivity and retry.";
-    } else {
-      throw error;
+  const serviceAlert = useMemo(() => {
+    if (
+      materialsQuery.error instanceof ApiClientError &&
+      materialsQuery.error.statusCode >= 500
+    ) {
+      return "Material lookup is unavailable. Verify backend connectivity and retry.";
     }
+
+    return undefined;
+  }, [materialsQuery.error]);
+
+  if (materialsQuery.error && !serviceAlert) {
+    throw materialsQuery.error;
   }
+
+  const materials = materialsQuery.data ?? [];
 
   return (
     <div className="space-y-4">
