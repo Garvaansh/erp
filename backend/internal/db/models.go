@@ -98,6 +98,49 @@ func (ns NullBatchStatus) Value() (driver.Value, error) {
 	return string(ns.BatchStatus), nil
 }
 
+type BatchType string
+
+const (
+	BatchTypeRAW      BatchType = "RAW"
+	BatchTypeMOLDED   BatchType = "MOLDED"
+	BatchTypeFINISHED BatchType = "FINISHED"
+)
+
+func (e *BatchType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BatchType(s)
+	case string:
+		*e = BatchType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BatchType: %T", src)
+	}
+	return nil
+}
+
+type NullBatchType struct {
+	BatchType BatchType `json:"batch_type"`
+	Valid     bool      `json:"valid"` // Valid is true if BatchType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBatchType) Scan(value interface{}) error {
+	if value == nil {
+		ns.BatchType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BatchType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBatchType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BatchType), nil
+}
+
 type BomStatus string
 
 const (
@@ -183,6 +226,49 @@ func (ns NullItemCategory) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.ItemCategory), nil
+}
+
+type ProductionJournalStatus string
+
+const (
+	ProductionJournalStatusFINAL           ProductionJournalStatus = "FINAL"
+	ProductionJournalStatusPENDINGAPPROVAL ProductionJournalStatus = "PENDING_APPROVAL"
+	ProductionJournalStatusREJECTED        ProductionJournalStatus = "REJECTED"
+)
+
+func (e *ProductionJournalStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ProductionJournalStatus(s)
+	case string:
+		*e = ProductionJournalStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ProductionJournalStatus: %T", src)
+	}
+	return nil
+}
+
+type NullProductionJournalStatus struct {
+	ProductionJournalStatus ProductionJournalStatus `json:"production_journal_status"`
+	Valid                   bool                    `json:"valid"` // Valid is true if ProductionJournalStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullProductionJournalStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.ProductionJournalStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ProductionJournalStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullProductionJournalStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ProductionJournalStatus), nil
 }
 
 type ProductionOrderStatus string
@@ -392,6 +478,10 @@ type InventoryBatch struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	DailySequence int32              `json:"daily_sequence"`
+	Type          BatchType          `json:"type"`
+	Diameter      pgtype.Numeric     `json:"diameter"`
+	ReservedQty   pgtype.Numeric     `json:"reserved_qty"`
+	ParentBatchID pgtype.UUID        `json:"parent_batch_id"`
 }
 
 type InventoryTransaction struct {
@@ -422,16 +512,23 @@ type Item struct {
 }
 
 type ProductionJournal struct {
-	ID                pgtype.UUID        `json:"id"`
-	ProductionOrderID pgtype.UUID        `json:"production_order_id"`
-	MovementGroupID   pgtype.UUID        `json:"movement_group_id"`
-	SourceBatchID     pgtype.UUID        `json:"source_batch_id"`
-	InputQty          pgtype.Numeric     `json:"input_qty"`
-	FinishedQty       pgtype.Numeric     `json:"finished_qty"`
-	ScrapQty          pgtype.Numeric     `json:"scrap_qty"`
-	LossReason        pgtype.Text        `json:"loss_reason"`
-	CreatedBy         pgtype.UUID        `json:"created_by"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	ID                pgtype.UUID             `json:"id"`
+	ProductionOrderID pgtype.UUID             `json:"production_order_id"`
+	MovementGroupID   pgtype.UUID             `json:"movement_group_id"`
+	SourceBatchID     pgtype.UUID             `json:"source_batch_id"`
+	InputQty          pgtype.Numeric          `json:"input_qty"`
+	FinishedQty       pgtype.Numeric          `json:"finished_qty"`
+	ScrapQty          pgtype.Numeric          `json:"scrap_qty"`
+	LossReason        pgtype.Text             `json:"loss_reason"`
+	CreatedBy         pgtype.UUID             `json:"created_by"`
+	CreatedAt         pgtype.Timestamptz      `json:"created_at"`
+	Status            ProductionJournalStatus `json:"status"`
+	Diameter          pgtype.Numeric          `json:"diameter"`
+	ProcessLossQty    pgtype.Numeric          `json:"process_loss_qty"`
+	ShortlengthQty    pgtype.Numeric          `json:"shortlength_qty"`
+	Note              pgtype.Text             `json:"note"`
+	ApprovedBy        pgtype.UUID             `json:"approved_by"`
+	ApprovedAt        pgtype.Timestamptz      `json:"approved_at"`
 }
 
 type ProductionOrder struct {
@@ -479,4 +576,5 @@ type User struct {
 	IsActive     bool               `json:"is_active"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	IsAdmin      bool               `json:"is_admin"`
 }

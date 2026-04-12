@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, name, role_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, role_id, name, email, password_hash, is_active, created_at, updated_at
+RETURNING id, role_id, name, email, password_hash, is_active, created_at, updated_at, is_admin
 `
 
 type CreateUserParams struct {
@@ -41,6 +41,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsAdmin,
 	)
 	return i, err
 }
@@ -69,6 +70,7 @@ SELECT
     u.password_hash, 
     u.name, 
     u.is_active, 
+    u.is_admin,
     r.code as role_code 
 FROM users u 
 JOIN roles r ON u.role_id = r.id 
@@ -81,6 +83,7 @@ type GetUserWithRoleByEmailRow struct {
 	PasswordHash string      `json:"password_hash"`
 	Name         string      `json:"name"`
 	IsActive     bool        `json:"is_active"`
+	IsAdmin      bool        `json:"is_admin"`
 	RoleCode     string      `json:"role_code"`
 }
 
@@ -93,6 +96,7 @@ func (q *Queries) GetUserWithRoleByEmail(ctx context.Context, email string) (Get
 		&i.PasswordHash,
 		&i.Name,
 		&i.IsActive,
+		&i.IsAdmin,
 		&i.RoleCode,
 	)
 	return i, err

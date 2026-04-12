@@ -5,6 +5,7 @@ SELECT
     u.password_hash, 
     u.name, 
     u.is_active, 
+    u.is_admin,
     r.code as role_code 
 FROM users u 
 JOIN roles r ON u.role_id = r.id 

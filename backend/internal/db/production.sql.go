@@ -11,6 +11,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const approveJournal = `-- name: ApproveJournal :one
+UPDATE production_journals
+SET status = 'FINAL',
+        approved_by = $1,
+    approved_at = NOW(),
+        note = COALESCE(NULLIF($2, ''), note)
+WHERE id = $3
+  AND status = 'PENDING_APPROVAL'
+RETURNING id, production_order_id, movement_group_id, source_batch_id, input_qty, finished_qty, scrap_qty, loss_reason, created_by, created_at, status, diameter, process_loss_qty, shortlength_qty, note, approved_by, approved_at
+`
+
+type ApproveJournalParams struct {
+	ApprovedBy   pgtype.UUID `json:"approved_by"`
+	ApprovalNote interface{} `json:"approval_note"`
+	ID           pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) ApproveJournal(ctx context.Context, arg ApproveJournalParams) (ProductionJournal, error) {
+	row := q.db.QueryRow(ctx, approveJournal, arg.ApprovedBy, arg.ApprovalNote, arg.ID)
+	var i ProductionJournal
+	err := row.Scan(
+		&i.ID,
+		&i.ProductionOrderID,
+		&i.MovementGroupID,
+		&i.SourceBatchID,
+		&i.InputQty,
+		&i.FinishedQty,
+		&i.ScrapQty,
+		&i.LossReason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.Status,
+		&i.Diameter,
+		&i.ProcessLossQty,
+		&i.ShortlengthQty,
+		&i.Note,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+	)
+	return i, err
+}
+
 const createJournal = `-- name: CreateJournal :one
 INSERT INTO production_journals (
     movement_group_id,
@@ -51,8 +93,112 @@ func (q *Queries) CreateJournal(ctx context.Context, arg CreateJournalParams) (p
 	return id, err
 }
 
+const createWIPJournal = `-- name: CreateWIPJournal :one
+INSERT INTO production_journals (
+    movement_group_id,
+    source_batch_id,
+    input_qty,
+    finished_qty,
+    scrap_qty,
+    shortlength_qty,
+    process_loss_qty,
+    loss_reason,
+    status,
+    diameter,
+    note,
+    created_by
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+)
+RETURNING id, production_order_id, movement_group_id, source_batch_id, input_qty, finished_qty, scrap_qty, loss_reason, created_by, created_at, status, diameter, process_loss_qty, shortlength_qty, note, approved_by, approved_at
+`
+
+type CreateWIPJournalParams struct {
+	MovementGroupID pgtype.UUID             `json:"movement_group_id"`
+	SourceBatchID   pgtype.UUID             `json:"source_batch_id"`
+	InputQty        pgtype.Numeric          `json:"input_qty"`
+	FinishedQty     pgtype.Numeric          `json:"finished_qty"`
+	ScrapQty        pgtype.Numeric          `json:"scrap_qty"`
+	ShortlengthQty  pgtype.Numeric          `json:"shortlength_qty"`
+	ProcessLossQty  pgtype.Numeric          `json:"process_loss_qty"`
+	LossReason      pgtype.Text             `json:"loss_reason"`
+	Status          ProductionJournalStatus `json:"status"`
+	Diameter        pgtype.Numeric          `json:"diameter"`
+	Note            pgtype.Text             `json:"note"`
+	CreatedBy       pgtype.UUID             `json:"created_by"`
+}
+
+func (q *Queries) CreateWIPJournal(ctx context.Context, arg CreateWIPJournalParams) (ProductionJournal, error) {
+	row := q.db.QueryRow(ctx, createWIPJournal,
+		arg.MovementGroupID,
+		arg.SourceBatchID,
+		arg.InputQty,
+		arg.FinishedQty,
+		arg.ScrapQty,
+		arg.ShortlengthQty,
+		arg.ProcessLossQty,
+		arg.LossReason,
+		arg.Status,
+		arg.Diameter,
+		arg.Note,
+		arg.CreatedBy,
+	)
+	var i ProductionJournal
+	err := row.Scan(
+		&i.ID,
+		&i.ProductionOrderID,
+		&i.MovementGroupID,
+		&i.SourceBatchID,
+		&i.InputQty,
+		&i.FinishedQty,
+		&i.ScrapQty,
+		&i.LossReason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.Status,
+		&i.Diameter,
+		&i.ProcessLossQty,
+		&i.ShortlengthQty,
+		&i.Note,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+	)
+	return i, err
+}
+
+const getJournalByIDForUpdate = `-- name: GetJournalByIDForUpdate :one
+SELECT id, production_order_id, movement_group_id, source_batch_id, input_qty, finished_qty, scrap_qty, loss_reason, created_by, created_at, status, diameter, process_loss_qty, shortlength_qty, note, approved_by, approved_at FROM production_journals
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetJournalByIDForUpdate(ctx context.Context, id pgtype.UUID) (ProductionJournal, error) {
+	row := q.db.QueryRow(ctx, getJournalByIDForUpdate, id)
+	var i ProductionJournal
+	err := row.Scan(
+		&i.ID,
+		&i.ProductionOrderID,
+		&i.MovementGroupID,
+		&i.SourceBatchID,
+		&i.InputQty,
+		&i.FinishedQty,
+		&i.ScrapQty,
+		&i.LossReason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.Status,
+		&i.Diameter,
+		&i.ProcessLossQty,
+		&i.ShortlengthQty,
+		&i.Note,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+	)
+	return i, err
+}
+
 const getJournalByMovementGroup = `-- name: GetJournalByMovementGroup :one
-SELECT id, production_order_id, movement_group_id, source_batch_id, input_qty, finished_qty, scrap_qty, loss_reason, created_by, created_at FROM production_journals
+SELECT id, production_order_id, movement_group_id, source_batch_id, input_qty, finished_qty, scrap_qty, loss_reason, created_by, created_at, status, diameter, process_loss_qty, shortlength_qty, note, approved_by, approved_at FROM production_journals
 WHERE movement_group_id = $1
 LIMIT 1
 `
@@ -71,6 +217,223 @@ func (q *Queries) GetJournalByMovementGroup(ctx context.Context, movementGroupID
 		&i.LossReason,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.Status,
+		&i.Diameter,
+		&i.ProcessLossQty,
+		&i.ShortlengthQty,
+		&i.Note,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
+	)
+	return i, err
+}
+
+const listPendingApprovals = `-- name: ListPendingApprovals :many
+SELECT
+    j.id, j.production_order_id, j.movement_group_id, j.source_batch_id, j.input_qty, j.finished_qty, j.scrap_qty, j.loss_reason, j.created_by, j.created_at, j.status, j.diameter, j.process_loss_qty, j.shortlength_qty, j.note, j.approved_by, j.approved_at, 
+    b.batch_code,
+    b.type AS source_batch_type
+FROM production_journals j
+JOIN inventory_batches b ON b.id = j.source_batch_id
+WHERE j.status = 'PENDING_APPROVAL'
+ORDER BY j.created_at DESC
+LIMIT $2
+OFFSET $1
+`
+
+type ListPendingApprovalsParams struct {
+	PageOffset int32 `json:"page_offset"`
+	PageLimit  int32 `json:"page_limit"`
+}
+
+type ListPendingApprovalsRow struct {
+	ID                pgtype.UUID             `json:"id"`
+	ProductionOrderID pgtype.UUID             `json:"production_order_id"`
+	MovementGroupID   pgtype.UUID             `json:"movement_group_id"`
+	SourceBatchID     pgtype.UUID             `json:"source_batch_id"`
+	InputQty          pgtype.Numeric          `json:"input_qty"`
+	FinishedQty       pgtype.Numeric          `json:"finished_qty"`
+	ScrapQty          pgtype.Numeric          `json:"scrap_qty"`
+	LossReason        pgtype.Text             `json:"loss_reason"`
+	CreatedBy         pgtype.UUID             `json:"created_by"`
+	CreatedAt         pgtype.Timestamptz      `json:"created_at"`
+	Status            ProductionJournalStatus `json:"status"`
+	Diameter          pgtype.Numeric          `json:"diameter"`
+	ProcessLossQty    pgtype.Numeric          `json:"process_loss_qty"`
+	ShortlengthQty    pgtype.Numeric          `json:"shortlength_qty"`
+	Note              pgtype.Text             `json:"note"`
+	ApprovedBy        pgtype.UUID             `json:"approved_by"`
+	ApprovedAt        pgtype.Timestamptz      `json:"approved_at"`
+	BatchCode         string                  `json:"batch_code"`
+	SourceBatchType   BatchType               `json:"source_batch_type"`
+}
+
+func (q *Queries) ListPendingApprovals(ctx context.Context, arg ListPendingApprovalsParams) ([]ListPendingApprovalsRow, error) {
+	rows, err := q.db.Query(ctx, listPendingApprovals, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingApprovalsRow
+	for rows.Next() {
+		var i ListPendingApprovalsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProductionOrderID,
+			&i.MovementGroupID,
+			&i.SourceBatchID,
+			&i.InputQty,
+			&i.FinishedQty,
+			&i.ScrapQty,
+			&i.LossReason,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.Status,
+			&i.Diameter,
+			&i.ProcessLossQty,
+			&i.ShortlengthQty,
+			&i.Note,
+			&i.ApprovedBy,
+			&i.ApprovedAt,
+			&i.BatchCode,
+			&i.SourceBatchType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWIPActivityEntries = `-- name: ListWIPActivityEntries :many
+SELECT
+    j.id,
+    j.created_at,
+    b.batch_code,
+    COALESCE(i.sku, '') AS item_sku,
+    i.name AS item_name,
+    b.type AS source_batch_type,
+    j.input_qty,
+    j.finished_qty,
+    j.scrap_qty,
+    j.shortlength_qty,
+    j.process_loss_qty,
+    j.status,
+    COALESCE(u.name, '') AS operator_name
+FROM production_journals j
+JOIN inventory_batches b ON b.id = j.source_batch_id
+JOIN items i ON i.id = b.item_id
+LEFT JOIN users u ON u.id = j.created_by
+WHERE j.created_at >= $1
+    AND j.created_at < $2
+ORDER BY j.created_at DESC
+LIMIT $4
+OFFSET $3
+`
+
+type ListWIPActivityEntriesParams struct {
+	FromTs     pgtype.Timestamptz `json:"from_ts"`
+	ToTs       pgtype.Timestamptz `json:"to_ts"`
+	PageOffset int32              `json:"page_offset"`
+	PageLimit  int32              `json:"page_limit"`
+}
+
+type ListWIPActivityEntriesRow struct {
+	ID              pgtype.UUID             `json:"id"`
+	CreatedAt       pgtype.Timestamptz      `json:"created_at"`
+	BatchCode       string                  `json:"batch_code"`
+	ItemSku         string                  `json:"item_sku"`
+	ItemName        string                  `json:"item_name"`
+	SourceBatchType BatchType               `json:"source_batch_type"`
+	InputQty        pgtype.Numeric          `json:"input_qty"`
+	FinishedQty     pgtype.Numeric          `json:"finished_qty"`
+	ScrapQty        pgtype.Numeric          `json:"scrap_qty"`
+	ShortlengthQty  pgtype.Numeric          `json:"shortlength_qty"`
+	ProcessLossQty  pgtype.Numeric          `json:"process_loss_qty"`
+	Status          ProductionJournalStatus `json:"status"`
+	OperatorName    string                  `json:"operator_name"`
+}
+
+func (q *Queries) ListWIPActivityEntries(ctx context.Context, arg ListWIPActivityEntriesParams) ([]ListWIPActivityEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listWIPActivityEntries,
+		arg.FromTs,
+		arg.ToTs,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWIPActivityEntriesRow
+	for rows.Next() {
+		var i ListWIPActivityEntriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.BatchCode,
+			&i.ItemSku,
+			&i.ItemName,
+			&i.SourceBatchType,
+			&i.InputQty,
+			&i.FinishedQty,
+			&i.ScrapQty,
+			&i.ShortlengthQty,
+			&i.ProcessLossQty,
+			&i.Status,
+			&i.OperatorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rejectJournal = `-- name: RejectJournal :one
+UPDATE production_journals
+SET status = 'REJECTED',
+        approved_by = $1,
+        approved_at = NOW(),
+        note = COALESCE(NULLIF($2, ''), note)
+WHERE id = $3
+    AND status = 'PENDING_APPROVAL'
+RETURNING id, production_order_id, movement_group_id, source_batch_id, input_qty, finished_qty, scrap_qty, loss_reason, created_by, created_at, status, diameter, process_loss_qty, shortlength_qty, note, approved_by, approved_at
+`
+
+type RejectJournalParams struct {
+	RejectedBy    pgtype.UUID `json:"rejected_by"`
+	RejectionNote interface{} `json:"rejection_note"`
+	ID            pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) RejectJournal(ctx context.Context, arg RejectJournalParams) (ProductionJournal, error) {
+	row := q.db.QueryRow(ctx, rejectJournal, arg.RejectedBy, arg.RejectionNote, arg.ID)
+	var i ProductionJournal
+	err := row.Scan(
+		&i.ID,
+		&i.ProductionOrderID,
+		&i.MovementGroupID,
+		&i.SourceBatchID,
+		&i.InputQty,
+		&i.FinishedQty,
+		&i.ScrapQty,
+		&i.LossReason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.Status,
+		&i.Diameter,
+		&i.ProcessLossQty,
+		&i.ShortlengthQty,
+		&i.Note,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
