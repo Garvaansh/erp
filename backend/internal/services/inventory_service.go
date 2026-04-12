@@ -22,6 +22,8 @@ import (
 var (
 	ErrInvalidInventoryPayload = errors.New("invalid inventory payload")
 	ErrInvalidItemID           = errors.New("invalid item")
+	ErrInvalidBatchTypeFilter  = errors.New("invalid batch type filter")
+	ErrBatchQueryFilterMissing = errors.New("batch lookup requires item_id or type")
 	ErrReceiveStockFailed      = errors.New("unable to receive stock")
 	ErrGetActiveBatchesFailed  = errors.New("unable to get active batches")
 	ErrGetInventoryViewFailed  = errors.New("unable to get inventory view")
@@ -39,8 +41,11 @@ type ReceiveStockResult struct {
 }
 
 type ActiveBatchOption struct {
+	ID              string  `json:"id"`
 	BatchID         string  `json:"batch_id"`
 	BatchCode       string  `json:"batch_code"`
+	SKU             string  `json:"sku"`
+	RemainingQty    float64 `json:"remaining_qty"`
 	ArrivalDate     string  `json:"arrival_date"`
 	InitialWeight   float64 `json:"initial_weight"`
 	RemainingWeight float64 `json:"remaining_weight"`
@@ -48,11 +53,13 @@ type ActiveBatchOption struct {
 }
 
 type InventoryViewRow struct {
-	ItemID   string  `json:"item_id"`
-	SKU      string  `json:"sku,omitempty"`
-	Name     string  `json:"name"`
-	Specs    any     `json:"specs"`
-	TotalQty float64 `json:"total_qty"`
+	ItemID       string  `json:"item_id"`
+	SKU          string  `json:"sku,omitempty"`
+	Name         string  `json:"name"`
+	Specs        any     `json:"specs"`
+	TotalQty     float64 `json:"total_qty"`
+	AvailableQty float64 `json:"available_qty"`
+	ReservedQty  float64 `json:"reserved_qty"`
 }
 
 func NewInventoryService(pool *pgxpool.Pool, itemService *ItemService) *InventoryService {
@@ -153,59 +160,123 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 	}, nil
 }
 
-func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID string) ([]ActiveBatchOption, error) {
+func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID string, batchType string) ([]ActiveBatchOption, error) {
 	if s == nil || s.pool == nil {
 		return nil, ErrGetActiveBatchesFailed
 	}
 
-	parsedItemID, ok := parseUUID(itemID)
+	trimmedItemID := strings.TrimSpace(itemID)
+	if trimmedItemID == "" && strings.TrimSpace(batchType) == "" {
+		return nil, ErrBatchQueryFilterMissing
+	}
+
+	parsedBatchType, hasBatchType := parseBatchTypeFilter(batchType)
+	if strings.TrimSpace(batchType) != "" && !hasBatchType {
+		return nil, ErrInvalidBatchTypeFilter
+	}
+
+	queries := db.New(s.pool)
+
+	batches := make([]ActiveBatchOption, 0)
+
+	appendRow := func(id pgtype.UUID, batchCode string, sku string, initialQtyNumeric pgtype.Numeric, remainingQtyNumeric pgtype.Numeric, status db.BatchStatus, createdAt pgtype.Timestamptz) error {
+		initialQty, ok := numericToFloat64(initialQtyNumeric)
+		if !ok {
+			return ErrGetActiveBatchesFailed
+		}
+
+		remainingQty, ok := numericToFloat64(remainingQtyNumeric)
+		if !ok {
+			return ErrGetActiveBatchesFailed
+		}
+
+		arrival := ""
+		if createdAt.Valid {
+			arrival = createdAt.Time.UTC().Format("2006-01-02")
+		}
+
+		idString := uuidString(id)
+		batches = append(batches, ActiveBatchOption{
+			ID:              idString,
+			BatchID:         idString,
+			BatchCode:       batchCode,
+			SKU:             strings.TrimSpace(sku),
+			RemainingQty:    remainingQty,
+			ArrivalDate:     arrival,
+			InitialWeight:   initialQty,
+			RemainingWeight: remainingQty,
+			Status:          string(status),
+		})
+		return nil
+	}
+
+	if trimmedItemID == "" {
+		if !hasBatchType {
+			return nil, ErrBatchQueryFilterMissing
+		}
+
+		typedRows, err := queries.GetActiveBatchesByType(ctx, parsedBatchType)
+		if err != nil {
+			return nil, ErrGetActiveBatchesFailed
+		}
+
+		for _, row := range typedRows {
+			if err := appendRow(row.ID, row.BatchCode, row.Sku, row.InitialQty, row.RemainingQty, row.Status, row.CreatedAt); err != nil {
+				return nil, err
+			}
+		}
+
+		return batches, nil
+	}
+
+	parsedItemID, ok := parseUUID(trimmedItemID)
 	if !ok {
 		return nil, ErrInvalidItemID
 	}
 
-	queries := db.New(s.pool)
+	if hasBatchType {
+		typedRows, err := queries.GetActiveBatchesByItemAndType(ctx, db.GetActiveBatchesByItemAndTypeParams{
+			ItemID: parsedItemID,
+			Type:   parsedBatchType,
+		})
+		if err != nil {
+			return nil, ErrGetActiveBatchesFailed
+		}
+
+		for _, row := range typedRows {
+			if err := appendRow(row.ID, row.BatchCode, row.Sku, row.InitialQty, row.RemainingQty, row.Status, row.CreatedAt); err != nil {
+				return nil, err
+			}
+		}
+
+		return batches, nil
+	}
+
 	rows, err := queries.GetActiveBatchesByItem(ctx, parsedItemID)
 	if err != nil {
 		return nil, ErrGetActiveBatchesFailed
 	}
 
-	batches := make([]ActiveBatchOption, 0, len(rows))
 	for _, row := range rows {
-		initialQty, ok := numericToFloat64(row.InitialQty)
-		if !ok {
-			return nil, ErrGetActiveBatchesFailed
+		if err := appendRow(row.ID, row.BatchCode, row.Sku, row.InitialQty, row.RemainingQty, row.Status, row.CreatedAt); err != nil {
+			return nil, err
 		}
-
-		remainingQty, ok := numericToFloat64(row.RemainingQty)
-		if !ok {
-			return nil, ErrGetActiveBatchesFailed
-		}
-
-		status := "IN USE"
-		cmp, cmpErr := compareNumerics(row.InitialQty, row.RemainingQty)
-		if cmpErr != nil {
-			return nil, ErrGetActiveBatchesFailed
-		}
-		if cmp == 0 {
-			status = "NEW"
-		}
-
-		arrival := ""
-		if row.CreatedAt.Valid {
-			arrival = row.CreatedAt.Time.UTC().Format("2006-01-02")
-		}
-
-		batches = append(batches, ActiveBatchOption{
-			BatchID:         uuidString(row.ID),
-			BatchCode:       row.BatchCode,
-			ArrivalDate:     arrival,
-			InitialWeight:   initialQty,
-			RemainingWeight: remainingQty,
-			Status:          status,
-		})
 	}
 
 	return batches, nil
+}
+
+func parseBatchTypeFilter(raw string) (db.BatchType, bool) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "RAW":
+		return db.BatchTypeRAW, true
+	case "MWIP", "MOLDED":
+		return db.BatchTypeMOLDED, true
+	case "BNDL", "FINISHED":
+		return db.BatchTypeFINISHED, true
+	default:
+		return "", false
+	}
 }
 
 func (s *InventoryService) GetInventoryView(ctx context.Context) (map[string][]InventoryViewRow, error) {
@@ -232,12 +303,24 @@ func (s *InventoryService) GetInventoryView(ctx context.Context) (map[string][]I
 			return nil, ErrGetInventoryViewFailed
 		}
 
+		availableQty, ok := aggregatedQtyToFloat64(row.AvailableQty)
+		if !ok {
+			return nil, ErrGetInventoryViewFailed
+		}
+
+		reservedQty, ok := aggregatedQtyToFloat64(row.ReservedQty)
+		if !ok {
+			return nil, ErrGetInventoryViewFailed
+		}
+
 		entry := InventoryViewRow{
-			ItemID:   uuidString(row.ItemID),
-			SKU:      row.Sku.String,
-			Name:     row.Name,
-			Specs:    decodeSpecs(row.Specs),
-			TotalQty: totalQty,
+			ItemID:       uuidString(row.ItemID),
+			SKU:          row.Sku.String,
+			Name:         row.Name,
+			Specs:        decodeSpecs(row.Specs),
+			TotalQty:     totalQty,
+			AvailableQty: availableQty,
+			ReservedQty:  reservedQty,
 		}
 
 		category := string(row.Category)
@@ -307,7 +390,7 @@ func decodeSpecs(raw []byte) any {
 	return out
 }
 
-func nextDailyBatchCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, sku string) (string, int32, error) {
+func nextDailyBatchCode(ctx context.Context, tx pgx.Tx, _ pgtype.UUID, sku string) (string, int32, error) {
 	skuToken := sanitizeLotSKUToken(sku)
 	if skuToken == "" {
 		return "", 0, errors.New("missing sku")
@@ -315,8 +398,8 @@ func nextDailyBatchCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, sku 
 
 	nowUTC := time.Now().UTC()
 	todayToken := nowUTC.Format("20060102")
-	prefix := fmt.Sprintf("LOT-%s-%s", skuToken, todayToken)
-	lockKey := fmt.Sprintf("lot-seq:%s:%s", skuToken, todayToken)
+	prefix := fmt.Sprintf("LOT-RAW-%s-%s", skuToken, todayToken)
+	lockKey := fmt.Sprintf("lot-seq:RAW:%s", todayToken)
 
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
 		return "", 0, err
@@ -329,10 +412,10 @@ func nextDailyBatchCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, sku 
 	err := tx.QueryRow(ctx, `
 		SELECT COALESCE(MAX(daily_sequence), 0) + 1
 		FROM inventory_batches
-		WHERE item_id = $1
-		  AND created_at >= $2
-		  AND created_at < $3
-	`, itemID, dayStartUTC, dayEndUTC).Scan(&nextSequence)
+		WHERE type = 'RAW'::batch_type
+		  AND created_at >= $1
+		  AND created_at < $2
+	`, dayStartUTC, dayEndUTC).Scan(&nextSequence)
 	if err != nil {
 		return "", 0, err
 	}

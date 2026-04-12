@@ -74,12 +74,14 @@ func main() {
 	itemService := services.NewItemService(queries)
 	inventoryService := services.NewInventoryService(dbpool, itemService)
 	productionService := services.NewProductionService(dbpool)
+	wipProductionService := services.NewWIPProductionService(dbpool)
 	procurementService := services.NewProcurementService(dbpool)
 	dashboardService := services.NewDashboardService(queries)
 	requestValidator := validator.New(validator.WithRequiredStructEnabled())
 	itemHandler := handlers.NewItemHandler(itemService, requestValidator)
 	inventoryHandler := handlers.NewInventoryHandler(inventoryService, requestValidator)
 	productionHandler := handlers.NewDailyLogHandler(productionService, requestValidator)
+	wipProductionHandler := handlers.NewWIPProductionHandler(wipProductionService, requestValidator)
 	procurementHandler := handlers.NewProcurementHandler(procurementService, requestValidator)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 
@@ -150,6 +152,14 @@ func main() {
 
 	logsGroup := api.Group("/logs", middleware.RequireAuth)
 	logsGroup.Post("/", productionHandler.CreateLog)
+
+	productionGroup := api.Group("/production", middleware.RequireAuth)
+	productionGroup.Post("/molding", wipProductionHandler.CreateMolding)
+	productionGroup.Post("/polishing", wipProductionHandler.CreatePolishing)
+	productionGroup.Get("/entries", wipProductionHandler.GetActivityEntries)
+	productionGroup.Get("/pending", middleware.RequireAdmin, wipProductionHandler.GetPendingApprovals)
+	productionGroup.Patch("/approve/:id", middleware.RequireAdmin, wipProductionHandler.ApproveJournal)
+	productionGroup.Patch("/reject/:id", middleware.RequireAdmin, wipProductionHandler.RejectJournal)
 
 	procurementGroup := api.Group("/procurement", middleware.RequireAuth)
 	procurementGroup.Get("/orders", procurementHandler.ListOrders)

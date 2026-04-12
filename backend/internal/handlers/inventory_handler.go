@@ -13,7 +13,7 @@ import (
 
 type inventoryService interface {
 	ReceiveStock(ctx context.Context, req models.ReceiveStockRequest, performedBy string) (*services.ReceiveStockResult, error)
-	GetActiveBatchesByItem(ctx context.Context, itemID string) ([]services.ActiveBatchOption, error)
+	GetActiveBatchesByItem(ctx context.Context, itemID string, batchType string) ([]services.ActiveBatchOption, error)
 	GetInventoryView(ctx context.Context) (map[string][]services.InventoryViewRow, error)
 }
 
@@ -23,11 +23,13 @@ type InventoryHandler struct {
 }
 
 type inventoryViewCategoryRow struct {
-	ItemID   string  `json:"item_id"`
-	SKU      string  `json:"sku,omitempty"`
-	Name     string  `json:"name"`
-	Specs    any     `json:"specs"`
-	TotalQty float64 `json:"total_qty"`
+	ItemID       string  `json:"item_id"`
+	SKU          string  `json:"sku,omitempty"`
+	Name         string  `json:"name"`
+	Specs        any     `json:"specs"`
+	TotalQty     float64 `json:"total_qty"`
+	AvailableQty float64 `json:"available_qty"`
+	ReservedQty  float64 `json:"reserved_qty"`
 }
 
 func NewInventoryHandler(inventoryService inventoryService, v *validator.Validate) *InventoryHandler {
@@ -90,19 +92,44 @@ func (h *InventoryHandler) ReceiveStock(c *fiber.Ctx) error {
 
 func (h *InventoryHandler) GetActiveBatches(c *fiber.Ctx) error {
 	itemID := strings.TrimSpace(c.Query("item_id"))
-	if err := h.validator.Var(itemID, "required,uuid4"); err != nil {
+	batchType := strings.ToUpper(strings.TrimSpace(c.Query("type")))
+
+	if itemID == "" && batchType == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
-			"message": "item_id query parameter is required and must be a valid UUID",
+			"message": "either item_id or type query parameter is required",
 		})
 	}
 
-	batches, err := h.inventoryService.GetActiveBatchesByItem(c.Context(), itemID)
+	if itemID != "" {
+		if err := h.validator.Var(itemID, "uuid4"); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": "item_id must be a valid UUID",
+			})
+		}
+	}
+
+	batches, err := h.inventoryService.GetActiveBatchesByItem(c.Context(), itemID, batchType)
 	if err != nil {
 		if errors.Is(err, services.ErrInvalidItemID) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": "invalid item_id",
+			})
+		}
+
+		if errors.Is(err, services.ErrInvalidBatchTypeFilter) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": "invalid type filter; allowed values are RAW, MOLDED, FINISHED (aliases: MWIP, BNDL)",
+			})
+		}
+
+		if errors.Is(err, services.ErrBatchQueryFilterMissing) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": "either item_id or type query parameter is required",
 			})
 		}
 
@@ -135,11 +162,13 @@ func (h *InventoryHandler) GetInventoryView(c *fiber.Ctx) error {
 		mapped := make([]inventoryViewCategoryRow, 0, len(rows))
 		for _, row := range rows {
 			mapped = append(mapped, inventoryViewCategoryRow{
-				ItemID:   row.ItemID,
-				SKU:      row.SKU,
-				Name:     row.Name,
-				Specs:    row.Specs,
-				TotalQty: row.TotalQty,
+				ItemID:       row.ItemID,
+				SKU:          row.SKU,
+				Name:         row.Name,
+				Specs:        row.Specs,
+				TotalQty:     row.TotalQty,
+				AvailableQty: row.AvailableQty,
+				ReservedQty:  row.ReservedQty,
 			})
 		}
 		out[category] = mapped

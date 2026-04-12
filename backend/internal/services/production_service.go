@@ -184,18 +184,27 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 	}
 
 	if input.FinishedQty > 0 {
-		finishedDailySequence, seqErr := nextProductionDailySequence(ctx, tx, outputItem.ID)
+		finishedDailySequence, seqErr := nextWIPDailySequenceByType(ctx, tx, db.BatchTypeFINISHED)
 		if seqErr != nil {
 			return nil, fmt.Errorf("generate production batch daily sequence: %w", seqErr)
 		}
 
-		finishedBatch, createErr := qtx.CreateBatch(ctx, db.CreateBatchParams{
+		reservedQty, ok := numericFromSignedFloat(0)
+		if !ok {
+			return nil, fmt.Errorf("parse reserved quantity: %w", ErrProcessDailyLogFailed)
+		}
+
+		finishedBatch, createErr := qtx.CreateDerivedBatch(ctx, db.CreateDerivedBatchParams{
 			ItemID:        outputItem.ID,
-			BatchCode:     generateProductionBatchCode(movementGroupUUID),
+			BatchCode:     generateProductionBatchCode(outputItem.Sku.String, time.Now().UTC(), finishedDailySequence),
 			DailySequence: finishedDailySequence,
 			InitialQty:    finishedQty,
 			RemainingQty:  finishedQty,
+			ReservedQty:   reservedQty,
 			Status:        db.BatchStatusACTIVE,
+			Type:          db.BatchTypeFINISHED,
+			Diameter:      sourceBatch.Diameter,
+			ParentBatchID: sourceBatch.ID,
 		})
 		if createErr != nil {
 			return nil, fmt.Errorf("create finished batch: %w", createErr)
@@ -314,37 +323,6 @@ func numericToFloat64(value pgtype.Numeric) (float64, bool) {
 	return floatValue.Float64, true
 }
 
-func generateProductionBatchCode(movementGroupID uuid.UUID) string {
-	prefix := strings.ToUpper(strings.ReplaceAll(movementGroupID.String(), "-", ""))
-	if len(prefix) > 8 {
-		prefix = prefix[:8]
-	}
-	return fmt.Sprintf("P-%s-%s", time.Now().UTC().Format("20060102"), prefix)
-}
-
-func nextProductionDailySequence(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID) (int32, error) {
-	nowUTC := time.Now().UTC()
-	todayToken := nowUTC.Format("20060102")
-	lockKey := fmt.Sprintf("production-seq:%s:%s", uuidString(itemID), todayToken)
-
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
-		return 0, err
-	}
-
-	dayStartUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
-	dayEndUTC := dayStartUTC.Add(24 * time.Hour)
-
-	var nextSequence int32
-	err := tx.QueryRow(ctx, `
-		SELECT COALESCE(MAX(daily_sequence), 0) + 1
-		FROM inventory_batches
-		WHERE item_id = $1
-		  AND created_at >= $2
-		  AND created_at < $3
-	`, itemID, dayStartUTC, dayEndUTC).Scan(&nextSequence)
-	if err != nil {
-		return 0, err
-	}
-
-	return nextSequence, nil
+func generateProductionBatchCode(sku string, createdAt time.Time, sequence int32) string {
+	return generateFinishedBundleBatchCode(sku, createdAt, sequence)
 }
