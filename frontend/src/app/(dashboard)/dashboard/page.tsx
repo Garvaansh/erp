@@ -5,11 +5,9 @@ import { ApiClientError } from "@/lib/api-client";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+async function loadDashboardSummaryOrRedirect() {
   try {
-    const summary = await getDashboardSummary();
-
-    return <DashboardSummaryCard summary={summary} />;
+    return await getDashboardSummary();
   } catch (error) {
     if (error instanceof ApiClientError && error.statusCode === 401) {
       redirect("/login?next=/dashboard");
@@ -17,4 +15,9 @@ export default async function DashboardPage() {
 
     throw error;
   }
+}
+
+export default async function DashboardPage() {
+  const summary = await loadDashboardSummaryOrRedirect();
+  return <DashboardSummaryCard summary={summary} />;
 }

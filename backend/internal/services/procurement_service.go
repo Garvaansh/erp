@@ -496,7 +496,7 @@ func (s *ProcurementService) ExecuteProcurementReceipt(ctx context.Context, poID
 	}, nil
 }
 
-func nextProcurementLotCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, itemSKU string) (string, int32, error) {
+func nextProcurementLotCode(ctx context.Context, tx pgx.Tx, _ pgtype.UUID, itemSKU string) (string, int32, error) {
 	skuToken := sanitizeLotSKUToken(itemSKU)
 	if skuToken == "" {
 		return "", 0, errors.New("missing item sku")
@@ -504,8 +504,8 @@ func nextProcurementLotCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, 
 
 	nowUTC := time.Now().UTC()
 	dateToken := nowUTC.Format("20060102")
-	prefix := fmt.Sprintf("LOT-%s-%s", skuToken, dateToken)
-	lockKey := fmt.Sprintf("lot-seq:%s:%s", skuToken, dateToken)
+	prefix := fmt.Sprintf("LOT-RAW-%s-%s", skuToken, dateToken)
+	lockKey := fmt.Sprintf("lot-seq:RAW:%s", dateToken)
 
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
 		return "", 0, err
@@ -518,10 +518,10 @@ func nextProcurementLotCode(ctx context.Context, tx pgx.Tx, itemID pgtype.UUID, 
 	err := tx.QueryRow(ctx, `
 		SELECT COALESCE(MAX(daily_sequence), 0) + 1
 		FROM inventory_batches
-		WHERE item_id = $1
-		  AND created_at >= $2
-		  AND created_at < $3
-	`, itemID, dayStartUTC, dayEndUTC).Scan(&nextIndex)
+		WHERE type = 'RAW'::batch_type
+		  AND created_at >= $1
+		  AND created_at < $2
+	`, dayStartUTC, dayEndUTC).Scan(&nextIndex)
 	if err != nil {
 		return "", 0, err
 	}
