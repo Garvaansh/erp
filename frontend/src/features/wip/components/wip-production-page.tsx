@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, AlertTriangle, RefreshCcw } from "lucide-react";
@@ -41,7 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ApiClientError } from "@/lib/api-client";
+import { ApiClientError } from "@/lib/api/api-client";
 import {
   approvePendingApproval,
   getPendingApprovals,
@@ -50,7 +51,8 @@ import {
   rejectPendingApproval,
   submitMolding,
   submitPolishing,
-} from "@/features/wip/api";
+} from "@/lib/api/wip";
+import { inventoryKeys, wipKeys } from "@/lib/react-query/keys";
 import type {
   MoldingPayload,
   PendingWIPApproval,
@@ -217,6 +219,7 @@ function readApiErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>("molding");
 
   const [moldingForm, setMoldingForm] = useState<MoldingFormState>({
@@ -246,20 +249,8 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
     entry_date: todayISODate(),
   });
 
-  const [moldingItems, setMoldingItems] = useState<WIPSelectableItem[]>([]);
-  const [polishingItems, setPolishingItems] = useState<WIPSelectableItem[]>([]);
-  const [moldingLots, setMoldingLots] = useState<WIPLotOption[]>([]);
-  const [polishingLots, setPolishingLots] = useState<WIPLotOption[]>([]);
-
-  const [loadingMoldingItems, setLoadingMoldingItems] = useState(false);
-  const [loadingPolishingItems, setLoadingPolishingItems] = useState(false);
-  const [loadingMoldingLots, setLoadingMoldingLots] = useState(false);
-  const [loadingPolishingLots, setLoadingPolishingLots] = useState(false);
-
   const [submittingStage, setSubmittingStage] = useState<WIPStage | null>(null);
 
-  const [pendingRows, setPendingRows] = useState<PendingWIPApproval[]>([]);
-  const [loadingPendingRows, setLoadingPendingRows] = useState(false);
   const [actingJournalID, setActingJournalID] = useState<string | null>(null);
 
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
@@ -271,6 +262,55 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
     Record<string, string>
   >({});
   const warnedEntryDateRef = useRef<Record<string, string>>({});
+
+  const moldingItemsQuery = useQuery({
+    queryKey: wipKeys.selectableItems("molding"),
+    queryFn: () => getWIPSelectableItems("molding"),
+  });
+
+  const polishingItemsQuery = useQuery({
+    queryKey: wipKeys.selectableItems("polishing"),
+    queryFn: () => getWIPSelectableItems("polishing"),
+  });
+
+  const moldingLotsQuery = useQuery({
+    queryKey: wipKeys.lots("molding", moldingForm.item_id),
+    queryFn: () => getWIPLots(moldingForm.item_id, "molding"),
+    enabled: Boolean(moldingForm.item_id.trim()),
+  });
+
+  const polishingLotsQuery = useQuery({
+    queryKey: wipKeys.lots("polishing", polishingForm.item_id),
+    queryFn: () => getWIPLots(polishingForm.item_id, "polishing"),
+    enabled: Boolean(polishingForm.item_id.trim()),
+  });
+
+  const pendingQuery = useQuery({
+    queryKey: wipKeys.pendingApprovals(),
+    queryFn: getPendingApprovals,
+    enabled: isAdmin && activeTab === "pending",
+  });
+
+  const submitMoldingMutation = useMutation({ mutationFn: submitMolding });
+  const submitPolishingMutation = useMutation({ mutationFn: submitPolishing });
+  const approveMutation = useMutation({
+    mutationFn: (journalID: string) => approvePendingApproval(journalID),
+  });
+  const rejectMutation = useMutation({
+    mutationFn: (journalID: string) => rejectPendingApproval(journalID),
+  });
+
+  const moldingItems: WIPSelectableItem[] = moldingItemsQuery.data ?? [];
+  const polishingItems: WIPSelectableItem[] = polishingItemsQuery.data ?? [];
+  const moldingLots: WIPLotOption[] = moldingLotsQuery.data ?? [];
+  const polishingLots: WIPLotOption[] = polishingLotsQuery.data ?? [];
+  const pendingRows: PendingWIPApproval[] = pendingQuery.data ?? [];
+
+  const loadingMoldingItems = moldingItemsQuery.isFetching;
+  const loadingPolishingItems = polishingItemsQuery.isFetching;
+  const loadingMoldingLots = moldingLotsQuery.isFetching;
+  const loadingPolishingLots = polishingLotsQuery.isFetching;
+  const loadingPendingRows = pendingQuery.isFetching;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -294,98 +334,60 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
     );
   }, [diameterByItemID]);
 
-  const loadStageItems = useCallback(async (stage: WIPStage) => {
-    if (stage === "molding") {
-      setLoadingMoldingItems(true);
-    } else {
-      setLoadingPolishingItems(true);
-    }
-
-    try {
-      const rows = await getWIPSelectableItems(stage);
-      if (stage === "molding") {
-        setMoldingItems(rows);
-      } else {
-        setPolishingItems(rows);
-      }
-    } catch (error) {
+  useEffect(() => {
+    if (moldingItemsQuery.error) {
       toast.error(
-        readApiErrorMessage(error, `Failed to load ${stage} SKU options.`),
+        readApiErrorMessage(
+          moldingItemsQuery.error,
+          "Failed to load molding SKU options.",
+        ),
       );
-    } finally {
-      if (stage === "molding") {
-        setLoadingMoldingItems(false);
-      } else {
-        setLoadingPolishingItems(false);
-      }
     }
-  }, []);
-
-  const loadLotsForItem = useCallback(
-    async (stage: WIPStage, itemID: string) => {
-      if (!itemID.trim()) {
-        if (stage === "molding") {
-          setMoldingLots([]);
-        } else {
-          setPolishingLots([]);
-        }
-        return;
-      }
-
-      if (stage === "molding") {
-        setLoadingMoldingLots(true);
-      } else {
-        setLoadingPolishingLots(true);
-      }
-
-      try {
-        const rows = await getWIPLots(itemID, stage);
-        if (stage === "molding") {
-          setMoldingLots(rows);
-        } else {
-          setPolishingLots(rows);
-        }
-      } catch (error) {
-        toast.error(readApiErrorMessage(error, "Failed to load LOT options."));
-      } finally {
-        if (stage === "molding") {
-          setLoadingMoldingLots(false);
-        } else {
-          setLoadingPolishingLots(false);
-        }
-      }
-    },
-    [],
-  );
-
-  const loadPending = useCallback(async () => {
-    if (!isAdmin) {
-      return;
-    }
-
-    setLoadingPendingRows(true);
-    try {
-      const rows = await getPendingApprovals();
-      setPendingRows(rows);
-    } catch (error) {
-      toast.error(
-        readApiErrorMessage(error, "Failed to load pending approvals."),
-      );
-    } finally {
-      setLoadingPendingRows(false);
-    }
-  }, [isAdmin]);
+  }, [moldingItemsQuery.error]);
 
   useEffect(() => {
-    void loadStageItems("molding");
-    void loadStageItems("polishing");
-  }, [loadStageItems]);
+    if (polishingItemsQuery.error) {
+      toast.error(
+        readApiErrorMessage(
+          polishingItemsQuery.error,
+          "Failed to load polishing SKU options.",
+        ),
+      );
+    }
+  }, [polishingItemsQuery.error]);
 
   useEffect(() => {
-    if (isAdmin && activeTab === "pending") {
-      void loadPending();
+    if (moldingLotsQuery.error) {
+      toast.error(
+        readApiErrorMessage(
+          moldingLotsQuery.error,
+          "Failed to load molding LOT options.",
+        ),
+      );
     }
-  }, [activeTab, isAdmin, loadPending]);
+  }, [moldingLotsQuery.error]);
+
+  useEffect(() => {
+    if (polishingLotsQuery.error) {
+      toast.error(
+        readApiErrorMessage(
+          polishingLotsQuery.error,
+          "Failed to load polishing LOT options.",
+        ),
+      );
+    }
+  }, [polishingLotsQuery.error]);
+
+  useEffect(() => {
+    if (pendingQuery.error) {
+      toast.error(
+        readApiErrorMessage(
+          pendingQuery.error,
+          "Failed to load pending approvals.",
+        ),
+      );
+    }
+  }, [pendingQuery.error]);
 
   const filteredMoldingItems = useMemo(() => {
     const query = moldingForm.sku_query.trim().toLowerCase();
@@ -576,7 +578,7 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
 
         setSubmittingStage("molding");
         try {
-          const result = await submitMolding(payload);
+          const result = await submitMoldingMutation.mutateAsync(payload);
           const detail = `Diff ${result.difference} kg | Allowed ${result.tolerance} kg`;
 
           if (
@@ -590,10 +592,19 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
             toast.success("Molding submitted.", { description: detail });
           }
 
-          await loadLotsForItem("molding", moldingForm.item_id);
-          if (isAdmin && activeTab === "pending") {
-            await loadPending();
-          }
+          await Promise.all([
+            queryClient.invalidateQueries({
+              queryKey: wipKeys.lots("molding", moldingForm.item_id),
+            }),
+            queryClient.invalidateQueries({
+              queryKey: inventoryKeys.snapshot(),
+            }),
+            isAdmin && activeTab === "pending"
+              ? queryClient.invalidateQueries({
+                  queryKey: wipKeys.pendingApprovals(),
+                })
+              : Promise.resolve(),
+          ]);
         } catch (error) {
           toast.error(readApiErrorMessage(error, "Failed to submit molding."));
         } finally {
@@ -634,7 +645,7 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
 
       setSubmittingStage("polishing");
       try {
-        const result = await submitPolishing(payload);
+        const result = await submitPolishingMutation.mutateAsync(payload);
         const detail = `Diff ${result.difference} kg | Allowed ${result.tolerance} kg`;
 
         if (result.requires_approval || result.status === "PENDING_APPROVAL") {
@@ -645,10 +656,19 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
           toast.success("Polishing submitted.", { description: detail });
         }
 
-        await loadLotsForItem("polishing", polishingForm.item_id);
-        if (isAdmin && activeTab === "pending") {
-          await loadPending();
-        }
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: wipKeys.lots("polishing", polishingForm.item_id),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: inventoryKeys.snapshot(),
+          }),
+          isAdmin && activeTab === "pending"
+            ? queryClient.invalidateQueries({
+                queryKey: wipKeys.pendingApprovals(),
+              })
+            : Promise.resolve(),
+        ]);
       } catch (error) {
         toast.error(readApiErrorMessage(error, "Failed to submit polishing."));
       } finally {
@@ -660,14 +680,15 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
     [
       activeTab,
       isAdmin,
-      loadLotsForItem,
-      loadPending,
       moldingCanSubmit,
       moldingForm,
       moldingMassBalance.withinTolerance,
       polishingCanSubmit,
       polishingForm,
       polishingMassBalance.withinTolerance,
+      queryClient,
+      submitMoldingMutation,
+      submitPolishingMutation,
       submittingStage,
     ],
   );
@@ -725,21 +746,26 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
       setActingJournalID(journalID);
       try {
         if (action === "approve") {
-          await approvePendingApproval(journalID);
+          await approveMutation.mutateAsync(journalID);
           toast.success("Pending approval approved.");
         } else {
-          await rejectPendingApproval(journalID);
+          await rejectMutation.mutateAsync(journalID);
           toast.success("Pending approval rejected.");
         }
 
-        await loadPending();
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: wipKeys.pendingApprovals(),
+          }),
+          queryClient.invalidateQueries({ queryKey: inventoryKeys.snapshot() }),
+        ]);
       } catch (error) {
         toast.error(readApiErrorMessage(error, `Failed to ${action} journal.`));
       } finally {
         setActingJournalID(null);
       }
     },
-    [loadPending],
+    [approveMutation, queryClient, rejectMutation],
   );
 
   return (
@@ -826,7 +852,6 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
                             diameterByItemID[nextItemID] ||
                             "",
                         }));
-                        void loadLotsForItem("molding", nextItemID);
                       }}
                     >
                       <SelectTrigger className="w-full">
@@ -1200,7 +1225,6 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
                           item_id: nextItemID,
                           source_batch_id: "",
                         }));
-                        void loadLotsForItem("polishing", nextItemID);
                       }}
                     >
                       <SelectTrigger className="w-full">
@@ -1512,7 +1536,7 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
                     variant="outline"
                     size="sm"
                     disabled={loadingPendingRows}
-                    onClick={() => void loadPending()}
+                    onClick={() => void pendingQuery.refetch()}
                   >
                     <RefreshCcw className="mr-1 size-3.5" />
                     Refresh

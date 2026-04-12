@@ -1,11 +1,17 @@
-import { getCurrentUser } from "@/features/auth/api";
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
 import { WIPProductionPage } from "@/features/wip/components/wip-production-page";
+import { getCurrentUser } from "@/lib/api/auth";
+import { authKeys } from "@/lib/react-query/keys";
 
-export const dynamic = "force-dynamic";
+export default function InventoryWIPPage() {
+  const meQuery = useQuery({
+    queryKey: authKeys.me(),
+    queryFn: getCurrentUser,
+  });
 
-export default async function InventoryWIPPage() {
-  const user = await getCurrentUser();
-  const isAdmin = user?.is_admin === true;
+  const isAdmin = meQuery.data?.is_admin === true;
 
   return <WIPProductionPage isAdmin={isAdmin} />;
 }
