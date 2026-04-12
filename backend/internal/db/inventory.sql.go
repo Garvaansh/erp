@@ -427,7 +427,13 @@ SELECT i.category,
     SUM(b.reserved_qty) as reserved_qty
 FROM inventory_batches b
 JOIN items i ON b.item_id = i.id
-WHERE b.remaining_qty > 0 OR b.reserved_qty > 0
+WHERE (b.remaining_qty > 0 OR b.reserved_qty > 0)
+    AND (
+        (i.category = 'RAW'::item_category AND b.type = 'RAW'::batch_type)
+        OR (i.category = 'SEMI_FINISHED'::item_category AND b.type = 'MOLDED'::batch_type)
+        OR (i.category = 'FINISHED'::item_category AND b.type = 'FINISHED'::batch_type)
+        OR i.category = 'SCRAP'::item_category
+    )
 GROUP BY i.category, i.id, i.sku, i.name, i.specs
 ORDER BY i.category, i.name
 `
