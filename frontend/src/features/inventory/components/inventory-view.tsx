@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { AlertTriangle, Filter, Plus, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createItemFormAction } from "@/features/inventory/actions";
+import { createItemDefinition } from "@/lib/api/inventory";
+import { ApiClientError } from "@/lib/api/api-client";
+import { inventoryKeys } from "@/lib/react-query/keys";
 import type {
   InventorySnapshot,
   InventoryViewRow,
@@ -347,13 +349,29 @@ function InventoryTable({
 }
 
 function AddRawMaterialDialog() {
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState({
     ok: false,
     message: "",
   });
-  const [isPending, startTransition] = useTransition();
+
+  const createItemMutation = useMutation({
+    mutationFn: createItemDefinition,
+    onError: (error) => {
+      if (error instanceof ApiClientError && error.message.trim()) {
+        setState({ ok: false, message: error.message });
+        return;
+      }
+
+      if (error instanceof Error && error.message.trim()) {
+        setState({ ok: false, message: error.message });
+        return;
+      }
+
+      setState({ ok: false, message: "Service unavailable." });
+    },
+  });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -361,16 +379,34 @@ function AddRawMaterialDialog() {
     const formElement = event.currentTarget;
     const formData = new FormData(formElement);
 
-    startTransition(async () => {
-      const result = await createItemFormAction(undefined, formData);
-      setState(result);
+    createItemMutation.mutate(
+      {
+        name: String(formData.get("name") ?? "").trim(),
+        category: "RAW",
+        base_unit: "WEIGHT",
+        specs: {
+          thickness: Number(formData.get("thickness") ?? 0) || 0,
+          width: Number(formData.get("width") ?? 0) || 0,
+          coil_weight: Number(formData.get("coil_weight") ?? 0) || 0,
+        },
+      },
+      {
+        onSuccess: async (item) => {
+          if (!item) {
+            setState({ ok: false, message: "Service unavailable." });
+            return;
+          }
 
-      if (result.ok) {
-        formElement.reset();
-        setOpen(false);
-        router.refresh();
-      }
-    });
+          await queryClient.invalidateQueries({
+            queryKey: inventoryKeys.snapshot(),
+          });
+
+          setState({ ok: true, message: "Item created successfully." });
+          formElement.reset();
+          setOpen(false);
+        },
+      },
+    );
   }
 
   return (
@@ -447,8 +483,8 @@ function AddRawMaterialDialog() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating..." : "Create"}
+            <Button type="submit" disabled={createItemMutation.isPending}>
+              {createItemMutation.isPending ? "Creating..." : "Create"}
             </Button>
           </div>
         </form>

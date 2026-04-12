@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, type FormEvent } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,18 +12,60 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { receiveStockFormAction } from "@/features/inventory/actions";
-
-const INITIAL_STATE = {
-  ok: false,
-  message: "",
-};
+import { receiveStock } from "@/lib/api/inventory";
+import { ApiClientError } from "@/lib/api/api-client";
+import { inventoryKeys } from "@/lib/react-query/keys";
 
 export function ReceiveStockForm() {
-  const [state, formAction, isPending] = useActionState(
-    receiveStockFormAction,
-    INITIAL_STATE,
-  );
+  const queryClient = useQueryClient();
+  const [state, setState] = useState({ ok: false, message: "" });
+
+  const receiveMutation = useMutation({
+    mutationFn: receiveStock,
+    onError: (error) => {
+      if (error instanceof ApiClientError && error.message.trim()) {
+        setState({ ok: false, message: error.message });
+        return;
+      }
+
+      if (error instanceof Error && error.message.trim()) {
+        setState({ ok: false, message: error.message });
+        return;
+      }
+
+      setState({ ok: false, message: "Failed to receive stock." });
+    },
+  });
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const itemID = String(formData.get("item_id") ?? "").trim();
+    const quantity = Number(formData.get("quantity") ?? 0);
+
+    receiveMutation.mutate(
+      {
+        item_id: itemID,
+        quantity,
+      },
+      {
+        onSuccess: async () => {
+          await Promise.all([
+            queryClient.invalidateQueries({
+              queryKey: inventoryKeys.snapshot(),
+            }),
+            queryClient.invalidateQueries({
+              queryKey: inventoryKeys.activeBatches(itemID),
+            }),
+          ]);
+
+          setState({ ok: true, message: "Stock received successfully." });
+          event.currentTarget.reset();
+        },
+      },
+    );
+  }
 
   return (
     <Card>
@@ -33,7 +76,7 @@ export function ReceiveStockForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form action={formAction} className="grid gap-4 md:grid-cols-2">
+        <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="item_id">Item ID</Label>
             <Input id="item_id" name="item_id" required />
@@ -63,8 +106,8 @@ export function ReceiveStockForm() {
           ) : null}
 
           <div className="md:col-span-2">
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Receiving..." : "Receive Stock"}
+            <Button type="submit" disabled={receiveMutation.isPending}>
+              {receiveMutation.isPending ? "Receiving..." : "Receive Stock"}
             </Button>
           </div>
         </form>

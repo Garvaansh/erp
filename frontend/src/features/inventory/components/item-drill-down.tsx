@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -17,7 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listActiveBatches } from "@/features/inventory/api";
+import { listActiveBatches } from "@/lib/api/inventory";
+import { inventoryKeys } from "@/lib/react-query/keys";
 import type { ActiveBatch, ItemDefinition } from "@/features/inventory/types";
 
 type ItemDrillDownProps = {
@@ -60,59 +61,44 @@ function deriveStatus(
     : "IN USE";
 }
 
+function mapCategoryToBatchType(category: ItemDefinition["category"]) {
+  if (category === "SEMI_FINISHED") {
+    return "MOLDED" as const;
+  }
+
+  if (category === "FINISHED") {
+    return "FINISHED" as const;
+  }
+
+  return "RAW" as const;
+}
+
 export function ItemDrillDown({
   item,
   open,
   onOpenChange,
 }: ItemDrillDownProps) {
-  const [batches, setBatches] = useState<ActiveBatch[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const activeItemID = open && item ? item.id : "";
+  const activeBatchType = item ? mapCategoryToBatchType(item.category) : "RAW";
+
+  const batchesQuery = useQuery({
+    queryKey: inventoryKeys.activeBatches(activeItemID, activeBatchType),
+    queryFn: () => listActiveBatches(activeItemID, activeBatchType),
+    enabled: Boolean(activeItemID),
+  });
+
+  const batches: ActiveBatch[] = batchesQuery.data ?? [];
+  const isLoading = batchesQuery.isFetching;
+  const errorMessage =
+    batchesQuery.error instanceof Error
+      ? batchesQuery.error.message
+      : batchesQuery.error
+        ? "Failed to load batch drill-down."
+        : null;
 
   const sortedBatches = [...batches].sort((left, right) =>
     right.arrival_date.localeCompare(left.arrival_date),
   );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadBatches() {
-      if (!open || !item) {
-        setBatches([]);
-        setErrorMessage(null);
-        return;
-      }
-
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const rows = await listActiveBatches(item.id);
-        if (!cancelled) {
-          setBatches(rows);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setBatches([]);
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Failed to load batch drill-down.",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadBatches();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, item]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

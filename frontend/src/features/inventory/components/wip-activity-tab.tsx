@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -31,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ApiClientError } from "@/lib/api-client";
+import { ApiClientError } from "@/lib/api/api-client";
 import {
   approvePendingApproval,
   getWIPActivityEntries,
@@ -40,7 +41,8 @@ import {
   rejectPendingApproval,
   submitMolding,
   submitPolishing,
-} from "@/features/wip/api";
+} from "@/lib/api/wip";
+import { inventoryKeys, wipKeys } from "@/lib/react-query/keys";
 import {
   calculateDifference,
   calculateTolerance,
@@ -161,6 +163,7 @@ type WIPActivityTabProps = {
 
 export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>({
     workstation: "MOLDING",
     item_id: "",
@@ -174,15 +177,6 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
   });
   const [fromDate, setFromDate] = useState<string>(dateDaysAgoISO(6));
   const [toDate, setToDate] = useState<string>(todayISODate());
-
-  const [items, setItems] = useState<WIPSelectableItem[]>([]);
-  const [lots, setLots] = useState<WIPLotOption[]>([]);
-  const [entries, setEntries] = useState<WIPActivityEntry[]>([]);
-
-  const [loadingItems, setLoadingItems] = useState(false);
-  const [loadingLots, setLoadingLots] = useState(false);
-  const [loadingEntries, setLoadingEntries] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [actingJournalID, setActingJournalID] = useState<string | null>(null);
 
   const [diameterByItemID, setDiameterByItemID] = useState<
@@ -195,6 +189,47 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
   const reasonRef = useRef<HTMLInputElement>(null);
 
   const stage = form.workstation === "MOLDING" ? "molding" : "polishing";
+
+  const selectableItemsQuery = useQuery({
+    queryKey: wipKeys.selectableItems(stage),
+    queryFn: () => getWIPSelectableItems(stage),
+  });
+
+  const lotsQuery = useQuery({
+    queryKey: wipKeys.lots(stage, form.item_id),
+    queryFn: () => getWIPLots(form.item_id, stage),
+    enabled: stage === "polishing" || Boolean(form.item_id.trim()),
+  });
+
+  const entriesQuery = useQuery({
+    queryKey: wipKeys.activityEntries(fromDate, toDate, 200, 0),
+    queryFn: () =>
+      getWIPActivityEntries({
+        from: fromDate,
+        to: toDate,
+        limit: 200,
+      }),
+    enabled: Boolean(fromDate && toDate) && fromDate <= toDate,
+  });
+
+  const submitMoldingMutation = useMutation({ mutationFn: submitMolding });
+  const submitPolishingMutation = useMutation({ mutationFn: submitPolishing });
+  const approveMutation = useMutation({
+    mutationFn: (journalID: string) => approvePendingApproval(journalID),
+  });
+  const rejectMutation = useMutation({
+    mutationFn: (journalID: string) => rejectPendingApproval(journalID),
+  });
+
+  const items: WIPSelectableItem[] = selectableItemsQuery.data ?? [];
+  const lots: WIPLotOption[] = lotsQuery.data ?? [];
+  const entries: WIPActivityEntry[] = entriesQuery.data ?? [];
+
+  const loadingItems = selectableItemsQuery.isFetching;
+  const loadingLots = lotsQuery.isFetching;
+  const loadingEntries = entriesQuery.isFetching;
+  const submitting =
+    submitMoldingMutation.isPending || submitPolishingMutation.isPending;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -215,78 +250,41 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
     );
   }, [diameterByItemID]);
 
-  const loadItems = useCallback(async () => {
-    setLoadingItems(true);
-    try {
-      const rows = await getWIPSelectableItems(stage);
-      setItems(rows);
-    } catch (error) {
-      toast.error(readErrorMessage(error, "Failed to load SKU options."));
-    } finally {
-      setLoadingItems(false);
-    }
-  }, [stage]);
-
-  const loadLots = useCallback(
-    async (itemID: string, stageOverride?: Workstation) => {
-      const lookupStage =
-        stageOverride === "MOLDING"
-          ? "molding"
-          : stageOverride === "POLISHING"
-            ? "polishing"
-            : stage;
-
-      if (!itemID.trim() && lookupStage === "molding") {
-        setLots([]);
-        return;
-      }
-
-      setLoadingLots(true);
-      try {
-        const rows = await getWIPLots(itemID, lookupStage);
-        setLots(rows);
-      } catch (error) {
-        toast.error(
-          readErrorMessage(error, "Failed to load batches for selected SKU."),
-        );
-      } finally {
-        setLoadingLots(false);
-      }
-    },
-    [stage],
-  );
-
-  const loadEntries = useCallback(async () => {
-    if (!fromDate || !toDate) {
-      return;
-    }
-    if (fromDate > toDate) {
+  useEffect(() => {
+    if (fromDate && toDate && fromDate > toDate) {
       toast.error("From date must be before To date.");
-      return;
-    }
-
-    setLoadingEntries(true);
-    try {
-      const rows = await getWIPActivityEntries({
-        from: fromDate,
-        to: toDate,
-        limit: 200,
-      });
-      setEntries(rows);
-    } catch (error) {
-      toast.error(readErrorMessage(error, "Failed to load WIP entries."));
-    } finally {
-      setLoadingEntries(false);
     }
   }, [fromDate, toDate]);
 
   useEffect(() => {
-    void loadItems();
-  }, [loadItems]);
+    if (selectableItemsQuery.error) {
+      toast.error(
+        readErrorMessage(
+          selectableItemsQuery.error,
+          "Failed to load SKU options.",
+        ),
+      );
+    }
+  }, [selectableItemsQuery.error]);
 
   useEffect(() => {
-    void loadEntries();
-  }, [loadEntries]);
+    if (lotsQuery.error) {
+      toast.error(
+        readErrorMessage(
+          lotsQuery.error,
+          "Failed to load batches for selected SKU.",
+        ),
+      );
+    }
+  }, [lotsQuery.error]);
+
+  useEffect(() => {
+    if (entriesQuery.error) {
+      toast.error(
+        readErrorMessage(entriesQuery.error, "Failed to load WIP entries."),
+      );
+    }
+  }, [entriesQuery.error]);
 
   const selectedLot = useMemo(
     () => lots.find((lot) => lot.batch_id === form.source_batch_id),
@@ -344,12 +342,11 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
       return;
     }
 
-    setSubmitting(true);
     try {
       const reason = form.reason.trim();
 
       if (form.workstation === "MOLDING") {
-        const result = await submitMolding({
+        const result = await submitMoldingMutation.mutateAsync({
           source_batch_id: form.source_batch_id,
           input_weight: form.input_qty,
           molded_output: form.output_qty,
@@ -369,7 +366,7 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
           },
         );
       } else {
-        const result = await submitPolishing({
+        const result = await submitPolishingMutation.mutateAsync({
           source_batch_id: form.source_batch_id,
           molded_input: form.input_qty,
           finished_output: form.output_qty,
@@ -399,14 +396,29 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
         reason: "",
       }));
 
-      await loadLots(form.workstation === "POLISHING" ? "" : form.item_id);
-      await loadEntries();
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: wipKeys.lots(stage, form.item_id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: wipKeys.activityEntries(fromDate, toDate, 200, 0),
+        }),
+        queryClient.invalidateQueries({ queryKey: inventoryKeys.snapshot() }),
+      ]);
     } catch (error) {
       toast.error(readErrorMessage(error, "Failed to log production entry."));
-    } finally {
-      setSubmitting(false);
     }
-  }, [canSubmit, form, loadEntries, loadLots, submitting]);
+  }, [
+    canSubmit,
+    form,
+    fromDate,
+    queryClient,
+    stage,
+    submitMoldingMutation,
+    submitPolishingMutation,
+    submitting,
+    toDate,
+  ]);
 
   const handleEnterNext = useCallback(
     (
@@ -439,15 +451,22 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
       setActingJournalID(journalID);
       try {
         if (action === "approve") {
-          await approvePendingApproval(journalID);
+          await approveMutation.mutateAsync(journalID);
           toast.success("Journal approved.");
         } else {
-          await rejectPendingApproval(journalID);
+          await rejectMutation.mutateAsync(journalID);
           toast.success("Journal rejected and stock released.");
         }
 
-        await loadEntries();
-        await loadLots(form.workstation === "POLISHING" ? "" : form.item_id);
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: wipKeys.activityEntries(fromDate, toDate, 200, 0),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: wipKeys.lots(stage, form.item_id),
+          }),
+          queryClient.invalidateQueries({ queryKey: inventoryKeys.snapshot() }),
+        ]);
       } catch (error) {
         toast.error(
           readErrorMessage(error, `Failed to ${action} pending journal.`),
@@ -456,7 +475,17 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
         setActingJournalID(null);
       }
     },
-    [actingJournalID, form.item_id, isAdmin, loadEntries, loadLots],
+    [
+      actingJournalID,
+      approveMutation,
+      form.item_id,
+      fromDate,
+      isAdmin,
+      queryClient,
+      rejectMutation,
+      stage,
+      toDate,
+    ],
   );
 
   return (
@@ -486,7 +515,7 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
           <div className="flex items-end gap-2">
             <Button
               variant="outline"
-              onClick={() => void loadEntries()}
+              onClick={() => void entriesQuery.refetch()}
               disabled={loadingEntries}
             >
               {loadingEntries ? "Filtering..." : "Filter"}
@@ -531,10 +560,6 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
                       source_batch_id: "",
                       diameter: "",
                     }));
-                    setLots([]);
-                    if (nextWorkstation === "POLISHING") {
-                      void loadLots("", "POLISHING");
-                    }
                   }}
                 >
                   <SelectTrigger className="w-full">
@@ -565,7 +590,6 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
                               ""
                             : "",
                       }));
-                      void loadLots(nextItemID);
                     }}
                   >
                     <SelectTrigger className="w-full">

@@ -1,19 +1,19 @@
-import { getInventorySnapshot } from "@/features/inventory/api";
-import { getCurrentUser } from "@/features/auth/api";
+"use client";
+
+import { Suspense, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { InventoryView } from "@/features/inventory/components/inventory-view";
 import type { InventorySnapshot } from "@/features/inventory/types";
-import { ApiClientError } from "@/lib/api-client";
-
-export const dynamic = "force-dynamic";
+import { getCurrentUser } from "@/lib/api/auth";
+import { getInventorySnapshot } from "@/lib/api/inventory";
+import { ApiClientError } from "@/lib/api/api-client";
+import { authKeys, inventoryKeys } from "@/lib/react-query/keys";
 
 type InventoryTab = "raw" | "wip" | "finished";
 
-type InventoryPageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-function normalizeTab(value: string | string[] | undefined): InventoryTab {
-  const tab = Array.isArray(value) ? value[0] : value;
+function normalizeTab(value: string | null): InventoryTab {
+  const tab = value ?? "";
 
   if (tab === "wip" || tab === "finished") {
     return tab;
@@ -22,12 +22,19 @@ function normalizeTab(value: string | string[] | undefined): InventoryTab {
   return "raw";
 }
 
-export default async function InventoryPage({
-  searchParams,
-}: InventoryPageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+export default function InventoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <InventoryPageContent />
+    </Suspense>
+  );
+}
+
+function InventoryPageContent() {
+  const searchParams = useSearchParams();
+
   const initialTab = normalizeTab(
-    resolvedSearchParams?.tab ?? resolvedSearchParams?.lane,
+    searchParams.get("tab") ?? searchParams.get("lane"),
   );
 
   const emptySnapshot: InventorySnapshot = {
@@ -37,25 +44,40 @@ export default async function InventoryPage({
     SCRAP: [],
   };
 
-  let snapshot: InventorySnapshot = emptySnapshot;
-  let isAdmin = false;
-  let serviceAlert: string | undefined;
+  const snapshotQuery = useQuery({
+    queryKey: inventoryKeys.snapshot(),
+    queryFn: getInventorySnapshot,
+  });
 
-  try {
-    const [inventorySnapshot, user] = await Promise.all([
-      getInventorySnapshot(),
-      getCurrentUser(),
-    ]);
-    snapshot = inventorySnapshot;
-    isAdmin = user?.is_admin === true;
-  } catch (error) {
-    if (error instanceof ApiClientError && error.statusCode >= 500) {
-      serviceAlert =
-        "Inventory services are temporarily unavailable. Please verify backend API connectivity and retry.";
-    } else {
-      throw error;
+  const meQuery = useQuery({
+    queryKey: authKeys.me(),
+    queryFn: getCurrentUser,
+  });
+
+  const serviceAlert = useMemo(() => {
+    if (
+      snapshotQuery.error instanceof ApiClientError &&
+      snapshotQuery.error.statusCode >= 500
+    ) {
+      return "Inventory services are temporarily unavailable. Please verify backend API connectivity and retry.";
     }
+
+    return undefined;
+  }, [snapshotQuery.error]);
+
+  if (snapshotQuery.error && !serviceAlert) {
+    throw snapshotQuery.error;
   }
+
+  if (
+    meQuery.error instanceof ApiClientError &&
+    meQuery.error.statusCode >= 500
+  ) {
+    throw meQuery.error;
+  }
+
+  const snapshot = snapshotQuery.data ?? emptySnapshot;
+  const isAdmin = meQuery.data?.is_admin === true;
 
   return (
     <InventoryView
