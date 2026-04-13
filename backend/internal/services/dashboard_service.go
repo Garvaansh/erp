@@ -9,16 +9,18 @@ import (
 	"github.com/erp/backend/internal/db"
 	"github.com/erp/backend/internal/models"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrGetDashboardSummaryFailed = errors.New("unable to get dashboard summary")
 
 type DashboardService struct {
 	queries *db.Queries
+	pool    *pgxpool.Pool
 }
 
-func NewDashboardService(queries *db.Queries) *DashboardService {
-	return &DashboardService{queries: queries}
+func NewDashboardService(queries *db.Queries, pool *pgxpool.Pool) *DashboardService {
+	return &DashboardService{queries: queries, pool: pool}
 }
 
 func (s *DashboardService) GetSummary(ctx context.Context) (*models.DashboardSummaryDTO, error) {
@@ -76,11 +78,100 @@ func (s *DashboardService) GetSummary(ctx context.Context) (*models.DashboardSum
 		})
 	}
 
+	// Enhanced: Pending PO count
+	pendingPOCount := s.getPendingPOCount(ctx)
+
+	// Enhanced: Total active users
+	totalActiveUsers := s.getTotalActiveUsers(ctx)
+
+	// Enhanced: Total items (SKUs)
+	totalItemsSKU := s.getTotalItemsSKU(ctx)
+
+	// Phase B: Low stock count
+	lowStockCount := s.getLowStockCount(ctx)
+
+	// Phase B: Total vendors
+	totalVendors := s.getTotalVendors(ctx)
+
 	return &models.DashboardSummaryDTO{
 		TotalRawMaterialWeight:   rawValue,
 		TotalFinishedPipesWeight: finishedValue,
+		PendingPOCount:           pendingPOCount,
+		TotalActiveUsers:         totalActiveUsers,
+		TotalItemsSKU:            totalItemsSKU,
+		LowStockCount:            lowStockCount,
+		TotalVendors:             totalVendors,
 		RecentActivity:           recentActivity,
 	}, nil
+}
+
+func (s *DashboardService) getPendingPOCount(ctx context.Context) int64 {
+	if s.pool == nil {
+		return 0
+	}
+	var count int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM purchase_orders WHERE status = 'PENDING'`).Scan(&count)
+	if err != nil {
+		return 0
+	}
+	return count
+}
+
+func (s *DashboardService) getTotalActiveUsers(ctx context.Context) int64 {
+	if s.pool == nil {
+		return 0
+	}
+	var count int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE is_active = true`).Scan(&count)
+	if err != nil {
+		return 0
+	}
+	return count
+}
+
+func (s *DashboardService) getTotalItemsSKU(ctx context.Context) int64 {
+	if s.pool == nil {
+		return 0
+	}
+	var count int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM items WHERE is_active = true`).Scan(&count)
+	if err != nil {
+		return 0
+	}
+	return count
+}
+
+func (s *DashboardService) getLowStockCount(ctx context.Context) int64 {
+	if s.pool == nil {
+		return 0
+	}
+	var count int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM (
+			SELECT i.id
+			FROM items i
+			LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.status IN ('NEW','ACTIVE')
+			WHERE i.is_active = true AND i.min_qty > 0
+			GROUP BY i.id, i.min_qty
+			HAVING COALESCE(SUM(b.remaining_qty), 0) < i.min_qty
+		) sub
+	`).Scan(&count)
+	if err != nil {
+		return 0
+	}
+	return count
+}
+
+func (s *DashboardService) getTotalVendors(ctx context.Context) int64 {
+	if s.pool == nil {
+		return 0
+	}
+	var count int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM vendors WHERE is_active = true`).Scan(&count)
+	if err != nil {
+		return 0
+	}
+	return count
 }
 
 func numericToFloat64Value(value pgtype.Numeric) (float64, bool) {

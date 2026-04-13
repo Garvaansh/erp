@@ -15,5 +15,10 @@ type DashboardRecentActivityDTO struct {
 type DashboardSummaryDTO struct {
 	TotalRawMaterialWeight   float64                      `json:"total_raw_material_weight"`
 	TotalFinishedPipesWeight float64                      `json:"total_finished_pipes_weight"`
+	PendingPOCount           int64                        `json:"pending_po_count"`
+	TotalActiveUsers         int64                        `json:"total_active_users"`
+	TotalItemsSKU            int64                        `json:"total_items_sku"`
+	LowStockCount            int64                        `json:"low_stock_count"`
+	TotalVendors             int64                        `json:"total_vendors"`
 	RecentActivity           []DashboardRecentActivityDTO `json:"recent_activity"`
 }
