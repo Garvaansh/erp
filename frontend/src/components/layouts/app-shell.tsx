@@ -18,6 +18,9 @@ import {
   Menu,
   X,
   ChevronRight,
+  Users,
+  Building2,
+  BarChart3,
 } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useAuthStore } from "@/stores/auth.store";
@@ -36,8 +39,10 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inventory", label: "Inventory", icon: PackageSearch },
   { href: "/procurement", label: "Procurement", icon: Truck },
+  { href: "/procurement/vendors", label: "Vendors", icon: Building2 },
+  { href: "/users", label: "Users", icon: Users },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/finance", label: "Finance", icon: Landmark },
-  { href: "/logs", label: "Logs", icon: ClipboardList },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -14,6 +14,11 @@ import {
 type DashboardSummary = {
   total_raw_material_weight: number;
   total_finished_pipes_weight: number;
+  pending_po_count: number;
+  total_active_users: number;
+  total_items_sku: number;
+  low_stock_count: number;
+  total_vendors: number;
   recent_activity: Array<{
     journal_id: string;
     created_at: string;
@@ -31,6 +36,11 @@ function sanitizeSummary(payload: unknown): DashboardSummary {
     return {
       total_raw_material_weight: 0,
       total_finished_pipes_weight: 0,
+      pending_po_count: 0,
+      total_active_users: 0,
+      total_items_sku: 0,
+      low_stock_count: 0,
+      total_vendors: 0,
       recent_activity: [],
     };
   }
@@ -43,6 +53,26 @@ function sanitizeSummary(payload: unknown): DashboardSummary {
     total_finished_pipes_weight:
       typeof rawPayload.total_finished_pipes_weight === "number"
         ? rawPayload.total_finished_pipes_weight
+        : 0,
+    pending_po_count:
+      typeof rawPayload.pending_po_count === "number"
+        ? rawPayload.pending_po_count
+        : 0,
+    total_active_users:
+      typeof rawPayload.total_active_users === "number"
+        ? rawPayload.total_active_users
+        : 0,
+    total_items_sku:
+      typeof rawPayload.total_items_sku === "number"
+        ? rawPayload.total_items_sku
+        : 0,
+    low_stock_count:
+      typeof rawPayload.low_stock_count === "number"
+        ? rawPayload.low_stock_count
+        : 0,
+    total_vendors:
+      typeof rawPayload.total_vendors === "number"
+        ? rawPayload.total_vendors
         : 0,
     recent_activity: Array.isArray(rawPayload.recent_activity)
       ? rawPayload.recent_activity.filter(

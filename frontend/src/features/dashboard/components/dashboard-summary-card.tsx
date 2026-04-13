@@ -8,9 +8,12 @@ import {
   PackagePlus,
   Truck,
   Activity,
-  Thermometer,
   Users,
   HeartPulse,
+  ShoppingCart,
+  Layers,
+  AlertTriangle,
+  Building2,
 } from "lucide-react";
 import type { DashboardSummary } from "@/features/dashboard/types";
 import Link from "next/link";
@@ -54,6 +57,11 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
   const finishedWeight = summary.total_finished_pipes_weight ?? 0;
   const totalCoils = rawWeight + finishedWeight;
   const recentActivity = summary.recent_activity ?? [];
+  const pendingPOs = summary.pending_po_count ?? 0;
+  const totalActiveUsers = summary.total_active_users ?? 0;
+  const totalItems = summary.total_items_sku ?? 0;
+  const lowStockCount = summary.low_stock_count ?? 0;
+  const totalVendors = summary.total_vendors ?? 0;
 
   return (
     <div className="space-y-6">
@@ -90,10 +98,12 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
                   <span className="erp-kpi-value">
                     {formatNumber(totalCoils)}
                   </span>
-                  <span className="flex items-center gap-1 text-xs text-[var(--erp-success)] font-medium mb-1">
-                    <ArrowUpRight className="size-3" />
-                    +12.4%
-                  </span>
+                  {totalCoils > 0 && (
+                    <span className="flex items-center gap-1 text-xs text-[var(--erp-success)] font-medium mb-1">
+                      <ArrowUpRight className="size-3" />
+                      Active
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-5 pt-4 border-t border-[var(--erp-border-subtle)]">
                   <div>
@@ -263,8 +273,8 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
         </div>
       </div>
 
-      {/* System Health Footer */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Dynamic System KPIs Footer */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="erp-card-static p-4 flex items-center gap-4">
           <HeartPulse className="size-5 text-[var(--erp-success)]" />
           <div>
@@ -274,34 +284,80 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
             </p>
           </div>
         </div>
-        <div className="erp-card-static p-4 flex items-center gap-4">
+        <Link
+          href="/users"
+          className="erp-card-static p-4 flex items-center gap-4 hover:border-[var(--erp-accent)] transition-colors"
+        >
           <Users className="size-5 text-[var(--erp-accent)]" />
           <div>
-            <p className="erp-kpi-label">Active Shifts</p>
-            <div className="flex items-center gap-2">
-              <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">
-                14 / 15
-              </p>
-              <span className="text-[10px] text-[var(--erp-success)] font-medium">
-                +1
-              </span>
-            </div>
+            <p className="erp-kpi-label">Active Users</p>
+            <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">
+              {totalActiveUsers}
+            </p>
           </div>
-        </div>
-        <div className="erp-card-static p-4 flex items-center gap-4">
-          <Thermometer className="size-5 text-[var(--erp-accent)]" />
+        </Link>
+        <Link
+          href="/procurement"
+          className="erp-card-static p-4 flex items-center gap-4 hover:border-[var(--erp-accent)] transition-colors"
+        >
+          <ShoppingCart className="size-5 text-amber-400" />
           <div>
-            <p className="erp-kpi-label">Factory Temperature</p>
+            <p className="erp-kpi-label">Pending Orders</p>
             <div className="flex items-center gap-2">
               <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">
-                24.2°C
+                {pendingPOs}
               </p>
-              <span className="text-[10px] text-[var(--erp-success)]">
-                • Stable
-              </span>
+              {pendingPOs > 0 && (
+                <span className="text-[10px] text-amber-400 font-semibold animate-pulse">
+                  • Action Required
+                </span>
+              )}
             </div>
           </div>
-        </div>
+        </Link>
+        <Link
+          href="/inventory"
+          className="erp-card-static p-4 flex items-center gap-4 hover:border-[var(--erp-accent)] transition-colors"
+        >
+          <Layers className="size-5 text-purple-400" />
+          <div>
+            <p className="erp-kpi-label">Registered SKUs</p>
+            <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">
+              {totalItems}
+            </p>
+          </div>
+        </Link>
+        <Link
+          href="/inventory"
+          className={`erp-card-static p-4 flex items-center gap-4 hover:border-[var(--erp-accent)] transition-colors ${lowStockCount > 0 ? 'border-red-500/40 bg-red-500/5' : ''}`}
+        >
+          <AlertTriangle className={`size-5 ${lowStockCount > 0 ? 'text-red-400 animate-pulse' : 'text-[var(--erp-text-muted)]'}`} />
+          <div>
+            <p className="erp-kpi-label">Low Stock Alerts</p>
+            <div className="flex items-center gap-2">
+              <p className={`text-xl font-bold tabular-nums ${lowStockCount > 0 ? 'text-red-400' : 'text-[var(--erp-text-primary)]'}`}>
+                {lowStockCount}
+              </p>
+              {lowStockCount > 0 && (
+                <span className="text-[10px] text-red-400 font-semibold animate-pulse">
+                  • Critical
+                </span>
+              )}
+            </div>
+          </div>
+        </Link>
+        <Link
+          href="/procurement/vendors"
+          className="erp-card-static p-4 flex items-center gap-4 hover:border-[var(--erp-accent)] transition-colors"
+        >
+          <Building2 className="size-5 text-teal-400" />
+          <div>
+            <p className="erp-kpi-label">Total Vendors</p>
+            <p className="text-xl font-bold text-[var(--erp-text-primary)] tabular-nums">
+              {totalVendors}
+            </p>
+          </div>
+        </Link>
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import { CreatePOSchema } from "@/features/procurement/schemas";
 import { createPurchaseOrder } from "@/lib/api/procurement";
 import { ApiClientError } from "@/lib/api/api-client";
 import { procurementKeys } from "@/lib/react-query/keys";
+import { getVendors } from "@/features/vendors/api";
 import type {
   CreatePOInput,
   ProcurementMaterialOption,
@@ -33,6 +34,14 @@ export function POCreateForm({ materials }: POCreateFormProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
+
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["vendors"],
+    queryFn: getVendors,
+    refetchOnWindowFocus: false,
+  });
+
+  const activeVendors = vendors.filter(v => v.is_active);
 
   const form = useForm<CreatePOInput>({
     resolver: zodResolver(CreatePOSchema),
@@ -111,8 +120,30 @@ export function POCreateForm({ materials }: POCreateFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="supplier_name">Supplier Name</Label>
-            <Input id="supplier_name" {...form.register("supplier_name")} />
+            <Label htmlFor="supplier_name">Vendor / Supplier</Label>
+            {activeVendors.length > 0 ? (
+              <Controller
+                control={form.control}
+                name="supplier_name"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="supplier_name" className="w-full">
+                      <SelectValue placeholder="Select vendor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeVendors.map((vendor) => (
+                        <SelectItem key={vendor.id} value={vendor.name}>
+                          {vendor.name}
+                          {vendor.gstin ? ` (${vendor.gstin})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            ) : (
+              <Input id="supplier_name" placeholder="Enter supplier name" {...form.register("supplier_name")} />
+            )}
             {form.formState.errors.supplier_name ? (
               <p className="text-sm text-destructive">
                 {form.formState.errors.supplier_name.message}
