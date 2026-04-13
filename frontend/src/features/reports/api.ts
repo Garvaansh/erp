@@ -1,14 +1,38 @@
-import { apiClient } from "@/lib/api/api-client";
-import type { InventoryReport, PurchaseReport, UsersReport } from "./types";
+import type { ReportFilters, ReportResponse, ReportType } from "./types";
+import { getMockInventoryReport } from "@/mocks/reports/inventory.mock";
+import { getMockPurchaseReport } from "@/mocks/reports/purchase.mock";
+import { getMockSalesReport } from "@/mocks/reports/sales.mock";
 
-export async function getInventoryReport(days = 30): Promise<InventoryReport> {
-  return apiClient<InventoryReport>(`/reports/inventory?days=${days}`, { method: "GET" });
-}
+export const getInventoryReport = async (
+  filters: ReportFilters,
+): Promise<ReportResponse> => {
+  return getMockInventoryReport(filters);
+};
 
-export async function getPurchaseReport(days = 30): Promise<PurchaseReport> {
-  return apiClient<PurchaseReport>(`/reports/purchase?days=${days}`, { method: "GET" });
-}
+export const getPurchaseReport = async (
+  filters: ReportFilters,
+): Promise<ReportResponse> => {
+  return getMockPurchaseReport(filters);
+};
 
-export async function getUsersReport(): Promise<UsersReport> {
-  return apiClient<UsersReport>("/reports/users", { method: "GET" });
-}
+export const getSalesReport = async (
+  filters: ReportFilters,
+): Promise<ReportResponse> => {
+  return getMockSalesReport(filters);
+};
+
+const reportFetchers: Record<
+  ReportType,
+  (filters: ReportFilters) => Promise<ReportResponse>
+> = {
+  inventory: getInventoryReport,
+  purchase: getPurchaseReport,
+  sales: getSalesReport,
+};
+
+export const getReportByType = async (
+  type: ReportType,
+  filters: ReportFilters,
+): Promise<ReportResponse> => {
+  return reportFetchers[type](filters);
+};
