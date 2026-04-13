@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   PackageSearch,
@@ -92,6 +92,7 @@ function SidebarNavItem({
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [mobileOpen, setMobileOpen] = useState(false);
   const clearAuthSession = useAuthStore((state) => state.clearAuthSession);
 
@@ -99,6 +100,7 @@ export function AppShell({ children }: AppShellProps) {
     mutationFn: logout,
     onSettled: () => {
       clearAuthSession();
+      queryClient.clear();
       router.push("/login");
       router.refresh();
     },
