@@ -24,6 +24,7 @@ import type {
   CreateUserPayload,
   UpdateUserPayload,
 } from "@/features/users/types";
+import { usersKeys } from "@/lib/react-query/keys";
 
 function roleBadge(role: string, isAdmin: boolean) {
   if (isAdmin || role === "SUPER_ADMIN") {
@@ -95,13 +96,11 @@ function CreateUserSlideout({
   const mutation = useMutation({
     mutationFn: (payload: CreateUserPayload) => createUser(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: usersKeys.list() });
       onClose();
     },
     onError: (err) => {
-      setError(
-        err instanceof Error ? err.message : "Failed to create user",
-      );
+      setError(err instanceof Error ? err.message : "Failed to create user");
     },
   });
 
@@ -120,7 +119,13 @@ function CreateUserSlideout({
       return;
     }
 
-    mutation.mutate({ name, email, password, role_code: roleCode, is_admin: isAdmin });
+    mutation.mutate({
+      name,
+      email,
+      password,
+      role_code: roleCode,
+      is_admin: isAdmin,
+    });
   }
 
   if (!open) return null;
@@ -215,9 +220,7 @@ function CreateUserSlideout({
               >
                 <option value="WORKER">Staff (Limited Access)</option>
                 <option value="ADMIN">Manager (Can Approve POs)</option>
-                <option value="SUPER_ADMIN">
-                  Administrator (Full Access)
-                </option>
+                <option value="SUPER_ADMIN">Administrator (Full Access)</option>
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-[var(--erp-text-muted)] pointer-events-none" />
             </div>
@@ -264,10 +267,9 @@ function EditUserRow({
   const [error, setError] = useState("");
 
   const toggleActive = useMutation({
-    mutationFn: (payload: UpdateUserPayload) =>
-      updateUser(user.id, payload),
+    mutationFn: (payload: UpdateUserPayload) => updateUser(user.id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: usersKeys.list() });
       onDone();
     },
     onError: (err) =>
@@ -279,9 +281,7 @@ function EditUserRow({
       <button
         type="button"
         disabled={toggleActive.isPending}
-        onClick={() =>
-          toggleActive.mutate({ is_active: !user.is_active })
-        }
+        onClick={() => toggleActive.mutate({ is_active: !user.is_active })}
         className={`text-[10px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
           user.is_active
             ? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
@@ -297,9 +297,7 @@ function EditUserRow({
       >
         Cancel
       </button>
-      {error && (
-        <span className="text-[10px] text-red-400">{error}</span>
-      )}
+      {error && <span className="text-[10px] text-red-400">{error}</span>}
     </div>
   );
 }
@@ -311,8 +309,12 @@ export function UsersView() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const { data: users = [], isLoading, error } = useQuery({
-    queryKey: ["users"],
+  const {
+    data: users = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: usersKeys.list(),
     queryFn: getUsers,
     refetchOnWindowFocus: false,
   });
@@ -412,7 +414,9 @@ export function UsersView() {
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Users className="size-10 text-[var(--erp-text-muted)]" />
             <p className="text-sm text-[var(--erp-text-muted)]">
-              {search ? "No users match your search" : "No users registered yet"}
+              {search
+                ? "No users match your search"
+                : "No users registered yet"}
             </p>
           </div>
         ) : (

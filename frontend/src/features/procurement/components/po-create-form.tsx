@@ -19,7 +19,7 @@ import {
 import { CreatePOSchema } from "@/features/procurement/schemas";
 import { createPurchaseOrder } from "@/lib/api/procurement";
 import { ApiClientError } from "@/lib/api/api-client";
-import { procurementKeys } from "@/lib/react-query/keys";
+import { procurementKeys, vendorsKeys } from "@/lib/react-query/keys";
 import { getVendors } from "@/features/vendors/api";
 import type {
   CreatePOInput,
@@ -36,12 +36,12 @@ export function POCreateForm({ materials }: POCreateFormProps) {
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ["vendors"],
+    queryKey: vendorsKeys.list(),
     queryFn: getVendors,
     refetchOnWindowFocus: false,
   });
 
-  const activeVendors = vendors.filter(v => v.is_active);
+  const activeVendors = vendors.filter((v) => v.is_active);
 
   const form = useForm<CreatePOInput>({
     resolver: zodResolver(CreatePOSchema),
@@ -142,7 +142,11 @@ export function POCreateForm({ materials }: POCreateFormProps) {
                 )}
               />
             ) : (
-              <Input id="supplier_name" placeholder="Enter supplier name" {...form.register("supplier_name")} />
+              <Input
+                id="supplier_name"
+                placeholder="Enter supplier name"
+                {...form.register("supplier_name")}
+              />
             )}
             {form.formState.errors.supplier_name ? (
               <p className="text-sm text-destructive">
