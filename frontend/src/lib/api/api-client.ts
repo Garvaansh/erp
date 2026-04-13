@@ -78,39 +78,6 @@ async function resolveApiUrl(path: string): Promise<string> {
   return `${DEFAULT_APP_ORIGIN}${normalizedPath}`;
 }
 
-function readCookieOnClient(name: string): string | null {
-  if (typeof document === "undefined") {
-    return null;
-  }
-
-  const target = `${name}=`;
-  const parts = document.cookie.split(";");
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (trimmed.startsWith(target)) {
-      const value = decodeURIComponent(trimmed.slice(target.length));
-      return value || null;
-    }
-  }
-
-  return null;
-}
-
-async function getTokenFromCookiesOnServer(): Promise<string | null> {
-  if (typeof window !== "undefined") {
-    return null;
-  }
-
-  try {
-    const { cookies } = await import("next/headers");
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session")?.value?.trim();
-    return token || null;
-  } catch {
-    return null;
-  }
-}
-
 async function getServerCookieHeader(): Promise<string | null> {
   if (typeof window !== "undefined") {
     return null;
@@ -125,59 +92,6 @@ async function getServerCookieHeader(): Promise<string | null> {
   }
 }
 
-async function waitForAuthHydration(timeoutMs = 1500): Promise<void> {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const { useAuthStore } = await import("@/stores/auth.store");
-  if (useAuthStore.getState().isHydrated) {
-    return;
-  }
-
-  await new Promise<void>((resolve) => {
-    let done = false;
-
-    const finish = () => {
-      if (done) {
-        return;
-      }
-      done = true;
-      unsubscribe();
-      clearTimeout(timerId);
-      resolve();
-    };
-
-    const unsubscribe = useAuthStore.subscribe((state) => {
-      if (state.isHydrated) {
-        finish();
-      }
-    });
-
-    const timerId = setTimeout(finish, timeoutMs);
-  });
-}
-
-async function resolveAuthToken(): Promise<string | null> {
-  if (typeof window !== "undefined") {
-    try {
-      const { useAuthStore } = await import("@/stores/auth.store");
-      await waitForAuthHydration();
-
-      const fromStore = useAuthStore.getState().token?.trim();
-      if (fromStore) {
-        return fromStore;
-      }
-    } catch {
-      // Ignore dynamic import issues.
-    }
-
-    return readCookieOnClient("session");
-  }
-
-  return getTokenFromCookiesOnServer();
-}
-
 export async function apiClient<T>(
   path: string,
   init: RequestInit = {},
@@ -189,11 +103,6 @@ export async function apiClient<T>(
 
   if (init.body !== undefined && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
-  }
-
-  const authToken = await resolveAuthToken();
-  if (authToken && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${authToken}`);
   }
 
   const serverCookie = await getServerCookieHeader();

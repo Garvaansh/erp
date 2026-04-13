@@ -31,8 +31,21 @@ export const procurementKeys = {
   materialOptions: () => [...procurementKeys.all, "materials"] as const,
 };
 
+export const usersKeys = {
+  all: ["users"] as const,
+  list: () => [...usersKeys.all, "list"] as const,
+};
+
+export const vendorsKeys = {
+  all: ["vendors"] as const,
+  list: () => [...vendorsKeys.all, "list"] as const,
+};
+
 export const reportsKeys = {
   all: ["reports"] as const,
+  inventory: (days: number) => [...reportsKeys.all, "inventory", days] as const,
+  purchase: (days: number) => [...reportsKeys.all, "purchase", days] as const,
+  users: () => [...reportsKeys.all, "users"] as const,
   production: (date: string, lot: string) =>
     [...reportsKeys.all, "production", date, lot] as const,
 };
