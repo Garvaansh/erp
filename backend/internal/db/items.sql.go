@@ -17,7 +17,7 @@ INSERT INTO items (
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
-RETURNING id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at
+RETURNING id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty
 `
 
 type CreateItemParams struct {
@@ -50,12 +50,14 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, e
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MinQty,
+		&i.MaxQty,
 	)
 	return i, err
 }
 
 const getItem = `-- name: GetItem :one
-SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at FROM items
+SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty FROM items
 WHERE id = $1 LIMIT 1
 `
 
@@ -73,6 +75,8 @@ func (q *Queries) GetItem(ctx context.Context, id pgtype.UUID) (Item, error) {
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MinQty,
+		&i.MaxQty,
 	)
 	return i, err
 }
@@ -117,7 +121,7 @@ func (q *Queries) GetSelectableItems(ctx context.Context) ([]GetSelectableItemsR
 }
 
 const listActiveItemsByCategory = `-- name: ListActiveItemsByCategory :many
-SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at FROM items
+SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty FROM items
 WHERE category = $1 AND is_active = true
 ORDER BY name
 LIMIT $2 OFFSET $3
@@ -149,6 +153,8 @@ func (q *Queries) ListActiveItemsByCategory(ctx context.Context, arg ListActiveI
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MinQty,
+			&i.MaxQty,
 		); err != nil {
 			return nil, err
 		}
@@ -161,7 +167,7 @@ func (q *Queries) ListActiveItemsByCategory(ctx context.Context, arg ListActiveI
 }
 
 const listVariantsByParent = `-- name: ListVariantsByParent :many
-SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at FROM items
+SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty FROM items
 WHERE parent_id = $1 AND is_active = true
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -193,6 +199,8 @@ func (q *Queries) ListVariantsByParent(ctx context.Context, arg ListVariantsByPa
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MinQty,
+			&i.MaxQty,
 		); err != nil {
 			return nil, err
 		}

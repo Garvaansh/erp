@@ -17,7 +17,7 @@ INSERT INTO inventory_batches (
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date
 `
 
 type CreateBatchParams struct {
@@ -53,6 +53,7 @@ func (q *Queries) CreateBatch(ctx context.Context, arg CreateBatchParams) (Inven
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }
@@ -72,7 +73,7 @@ INSERT INTO inventory_batches (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date
 `
 
 type CreateDerivedBatchParams struct {
@@ -116,6 +117,7 @@ func (q *Queries) CreateDerivedBatch(ctx context.Context, arg CreateDerivedBatch
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }
@@ -126,7 +128,7 @@ SET remaining_qty = 0,
         status = 'EXHAUSTED',
         updated_at = NOW()
 WHERE id = $1
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date
 `
 
 func (q *Queries) ExhaustBatchByID(ctx context.Context, id pgtype.UUID) (InventoryBatch, error) {
@@ -146,6 +148,7 @@ func (q *Queries) ExhaustBatchByID(ctx context.Context, id pgtype.UUID) (Invento
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }
@@ -163,7 +166,7 @@ SET reserved_qty = reserved_qty - $1,
 WHERE id = $2
     AND $1 > 0
     AND reserved_qty >= $1
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date
 `
 
 type FinalizeBatchReservationParams struct {
@@ -188,6 +191,7 @@ func (q *Queries) FinalizeBatchReservation(ctx context.Context, arg FinalizeBatc
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }
@@ -364,7 +368,7 @@ func (q *Queries) GetActiveBatchesByType(ctx context.Context, type_ BatchType) (
 }
 
 const getBatch = `-- name: GetBatch :one
-SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id FROM inventory_batches
+SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date FROM inventory_batches
 WHERE id = $1 LIMIT 1
 `
 
@@ -385,12 +389,13 @@ func (q *Queries) GetBatch(ctx context.Context, id pgtype.UUID) (InventoryBatch,
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }
 
 const getBatchForUpdate = `-- name: GetBatchForUpdate :one
-SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id FROM inventory_batches
+SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date FROM inventory_batches
 WHERE id = $1
 FOR UPDATE
 `
@@ -412,6 +417,7 @@ func (q *Queries) GetBatchForUpdate(ctx context.Context, id pgtype.UUID) (Invent
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }
@@ -641,7 +647,7 @@ SET remaining_qty = remaining_qty + $1,
 WHERE id = $2
     AND $1 > 0
     AND reserved_qty >= $1
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date
 `
 
 type ReleaseBatchReservationParams struct {
@@ -666,6 +672,7 @@ func (q *Queries) ReleaseBatchReservation(ctx context.Context, arg ReleaseBatchR
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }
@@ -684,7 +691,7 @@ SET remaining_qty = remaining_qty - $1,
 WHERE id = $2
     AND $1 > 0
     AND remaining_qty >= $1
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date
 `
 
 type ReserveBatchStockParams struct {
@@ -709,6 +716,7 @@ func (q *Queries) ReserveBatchStock(ctx context.Context, arg ReserveBatchStockPa
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }
@@ -723,7 +731,7 @@ SET remaining_qty = remaining_qty + $2,
         ELSE status
     END
 WHERE id = $1
-RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date
 `
 
 type UpdateBatchQuantityParams struct {
@@ -748,6 +756,7 @@ func (q *Queries) UpdateBatchQuantity(ctx context.Context, arg UpdateBatchQuanti
 		&i.Diameter,
 		&i.ReservedQty,
 		&i.ParentBatchID,
+		&i.ExpiryDate,
 	)
 	return i, err
 }

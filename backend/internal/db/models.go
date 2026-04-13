@@ -482,6 +482,7 @@ type InventoryBatch struct {
 	Diameter      pgtype.Numeric     `json:"diameter"`
 	ReservedQty   pgtype.Numeric     `json:"reserved_qty"`
 	ParentBatchID pgtype.UUID        `json:"parent_batch_id"`
+	ExpiryDate    pgtype.Date        `json:"expiry_date"`
 }
 
 type InventoryTransaction struct {
@@ -509,6 +510,8 @@ type Item struct {
 	IsActive  bool               `json:"is_active"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	MinQty    pgtype.Numeric     `json:"min_qty"`
+	MaxQty    pgtype.Numeric     `json:"max_qty"`
 }
 
 type ProductionJournal struct {
@@ -558,6 +561,7 @@ type PurchaseOrder struct {
 	CreatedBy  pgtype.UUID         `json:"created_by"`
 	CreatedAt  pgtype.Timestamptz  `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz  `json:"updated_at"`
+	VendorID   pgtype.UUID         `json:"vendor_id"`
 }
 
 type Role struct {
@@ -577,4 +581,18 @@ type User struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	IsAdmin      bool               `json:"is_admin"`
+}
+
+type Vendor struct {
+	ID            pgtype.UUID        `json:"id"`
+	Name          string             `json:"name"`
+	ContactPerson pgtype.Text        `json:"contact_person"`
+	Phone         pgtype.Text        `json:"phone"`
+	Email         pgtype.Text        `json:"email"`
+	Address       pgtype.Text        `json:"address"`
+	Gstin         pgtype.Text        `json:"gstin"`
+	PaymentTerms  pgtype.Text        `json:"payment_terms"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }

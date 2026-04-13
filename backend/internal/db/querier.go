@@ -32,7 +32,7 @@ type Querier interface {
 	GetJournalByMovementGroup(ctx context.Context, movementGroupID pgtype.UUID) (ProductionJournal, error)
 	GetProcurementOrderDetails(ctx context.Context, id pgtype.UUID) (GetProcurementOrderDetailsRow, error)
 	GetProcurementReceiptTransactionForUpdate(ctx context.Context, id pgtype.UUID) (InventoryTransaction, error)
-	GetPurchaseOrderForUpdate(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error)
+	GetPurchaseOrderForUpdate(ctx context.Context, id pgtype.UUID) (GetPurchaseOrderForUpdateRow, error)
 	GetRecentActivity(ctx context.Context) ([]GetRecentActivityRow, error)
 	GetRoleByCode(ctx context.Context, code string) (GetRoleByCodeRow, error)
 	GetSelectableItems(ctx context.Context) ([]GetSelectableItemsRow, error)

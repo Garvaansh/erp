@@ -23,7 +23,7 @@ INSERT INTO purchase_orders (
 ) VALUES (
     $1, $2, $3, $4, $5, 'PENDING', $6
 )
-RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at
+RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id
 `
 
 type DraftPurchaseOrderParams struct {
@@ -56,6 +56,7 @@ func (q *Queries) DraftPurchaseOrder(ctx context.Context, arg DraftPurchaseOrder
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.VendorID,
 	)
 	return i, err
 }
@@ -138,9 +139,22 @@ WHERE po.id = $1
 FOR UPDATE
 `
 
-func (q *Queries) GetPurchaseOrderForUpdate(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error) {
+type GetPurchaseOrderForUpdateRow struct {
+	ID         pgtype.UUID         `json:"id"`
+	PoNumber   string              `json:"po_number"`
+	VendorName string              `json:"vendor_name"`
+	ItemID     pgtype.UUID         `json:"item_id"`
+	OrderedQty pgtype.Numeric      `json:"ordered_qty"`
+	UnitPrice  pgtype.Numeric      `json:"unit_price"`
+	Status     PurchaseOrderStatus `json:"status"`
+	CreatedBy  pgtype.UUID         `json:"created_by"`
+	CreatedAt  pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz  `json:"updated_at"`
+}
+
+func (q *Queries) GetPurchaseOrderForUpdate(ctx context.Context, id pgtype.UUID) (GetPurchaseOrderForUpdateRow, error) {
 	row := q.db.QueryRow(ctx, getPurchaseOrderForUpdate, id)
-	var i PurchaseOrder
+	var i GetPurchaseOrderForUpdateRow
 	err := row.Scan(
 		&i.ID,
 		&i.PoNumber,
@@ -338,7 +352,7 @@ SET status = 'DELIVERED',
     updated_at = NOW()
 WHERE id = $1
   AND status = 'PENDING'
-RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at
+RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id
 `
 
 func (q *Queries) MarkPurchaseOrderDelivered(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error) {
@@ -355,6 +369,7 @@ func (q *Queries) MarkPurchaseOrderDelivered(ctx context.Context, id pgtype.UUID
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.VendorID,
 	)
 	return i, err
 }
@@ -364,7 +379,7 @@ UPDATE purchase_orders
 SET status = 'PENDING',
         updated_at = NOW()
 WHERE id = $1
-RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at
+RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id
 `
 
 func (q *Queries) MarkPurchaseOrderPending(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error) {
@@ -381,6 +396,7 @@ func (q *Queries) MarkPurchaseOrderPending(ctx context.Context, id pgtype.UUID) 
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.VendorID,
 	)
 	return i, err
 }
