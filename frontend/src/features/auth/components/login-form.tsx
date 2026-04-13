@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Zap,
   Mail,
@@ -15,7 +15,8 @@ import {
   Server,
 } from "lucide-react";
 import { ApiClientError } from "@/lib/api/api-client";
-import { login } from "@/lib/api/auth";
+import { getCurrentUser, login } from "@/lib/api/auth";
+import { authKeys } from "@/lib/react-query/keys";
 import { useAuthStore } from "@/stores/auth.store";
 
 function readLoginErrorMessage(error: unknown): string {
@@ -36,6 +37,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const setAuthSession = useAuthStore((state) => state.setAuthSession);
+  const queryClient = useQueryClient();
 
   // Look for ?next= in the URL and only allow safe in-app paths.
   const nextParam = searchParams.get("next") || "";
@@ -46,8 +48,21 @@ export function LoginForm() {
 
   const loginMutation = useMutation({
     mutationFn: login,
-    onSuccess: (user) => {
-      setAuthSession({ user, token: null });
+    onSuccess: async (user) => {
+      setAuthSession(user);
+      queryClient.setQueryData(authKeys.me(), user);
+
+      try {
+        const currentUser = await queryClient.fetchQuery({
+          queryKey: authKeys.me(),
+          queryFn: getCurrentUser,
+          staleTime: 0,
+        });
+        setAuthSession(currentUser);
+      } catch {
+        // Keep login responsive during temporary backend hiccups.
+      }
+
       router.push(nextUrl);
       router.refresh();
     },
