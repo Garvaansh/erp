@@ -62,14 +62,15 @@ func main() {
 	var email string
 	err = pool.QueryRow(
 		ctx,
-		`INSERT INTO users (email, password_hash, name, role_id, is_active)
-		 VALUES ($1, $2, $3, $4, TRUE)
+		`INSERT INTO users (email, password_hash, name, role_id, is_active, is_admin)
+		 VALUES ($1, $2, $3, $4, TRUE, TRUE)
 		 ON CONFLICT (email)
 		 DO UPDATE SET
 		   password_hash = EXCLUDED.password_hash,
 		   name = EXCLUDED.name,
 		   role_id = EXCLUDED.role_id,
 		   is_active = TRUE,
+		   is_admin = TRUE,
 		   updated_at = NOW()
 		 RETURNING email`,
 		superAdminEmail,

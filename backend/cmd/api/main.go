@@ -76,13 +76,21 @@ func main() {
 	productionService := services.NewProductionService(dbpool)
 	wipProductionService := services.NewWIPProductionService(dbpool)
 	procurementService := services.NewProcurementService(dbpool)
-	dashboardService := services.NewDashboardService(queries)
+	userService := services.NewUserService(dbpool)
+	vendorService := services.NewVendorService(dbpool)
+	stockAdjustmentService := services.NewStockAdjustmentService(dbpool)
+	reportService := services.NewReportService(dbpool)
+	dashboardService := services.NewDashboardService(queries, dbpool)
 	requestValidator := validator.New(validator.WithRequiredStructEnabled())
 	itemHandler := handlers.NewItemHandler(itemService, requestValidator)
 	inventoryHandler := handlers.NewInventoryHandler(inventoryService, requestValidator)
 	productionHandler := handlers.NewDailyLogHandler(productionService, requestValidator)
 	wipProductionHandler := handlers.NewWIPProductionHandler(wipProductionService, requestValidator)
 	procurementHandler := handlers.NewProcurementHandler(procurementService, requestValidator)
+	userHandler := handlers.NewUserHandler(userService, requestValidator)
+	vendorHandler := handlers.NewVendorHandler(vendorService, requestValidator)
+	stockAdjustmentHandler := handlers.NewStockAdjustmentHandler(stockAdjustmentService, requestValidator)
+	reportHandler := handlers.NewReportHandler(reportService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 
 	// 4. Initialize Fiber App
@@ -171,6 +179,25 @@ func main() {
 
 	dashboardGroup := api.Group("/dashboard", middleware.RequireAuth)
 	dashboardGroup.Get("", dashboardHandler.GetSummary)
+
+	usersGroup := api.Group("/users", middleware.RequireAuth, middleware.RequireAdmin)
+	usersGroup.Get("/", userHandler.ListUsers)
+	usersGroup.Post("/", userHandler.CreateUser)
+	usersGroup.Put("/:userId", userHandler.UpdateUser)
+
+	vendorsGroup := api.Group("/vendors", middleware.RequireAuth)
+	vendorsGroup.Get("/", vendorHandler.ListVendors)
+	vendorsGroup.Post("/", vendorHandler.CreateVendor)
+	vendorsGroup.Put("/:vendorId", vendorHandler.UpdateVendor)
+
+	inventoryAdjGroup := api.Group("/inventory", middleware.RequireAuth)
+	inventoryAdjGroup.Post("/adjust", stockAdjustmentHandler.AdjustStock)
+	inventoryAdjGroup.Get("/alerts", stockAdjustmentHandler.GetLowStockAlerts)
+
+	reportsGroup := api.Group("/reports", middleware.RequireAuth)
+	reportsGroup.Get("/inventory", reportHandler.GetInventoryReport)
+	reportsGroup.Get("/purchase", reportHandler.GetPurchaseReport)
+	reportsGroup.Get("/users", reportHandler.GetUsersReport)
 
 	// 6. Graceful Shutdown
 	go func() {
