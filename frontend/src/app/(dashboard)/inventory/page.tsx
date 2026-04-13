@@ -5,10 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { InventoryView } from "@/features/inventory/components/inventory-view";
 import type { InventorySnapshot } from "@/features/inventory/types";
-import { getCurrentUser } from "@/lib/api/auth";
 import { getInventorySnapshot } from "@/lib/api/inventory";
 import { ApiClientError } from "@/lib/api/api-client";
-import { authKeys, inventoryKeys } from "@/lib/react-query/keys";
+import { inventoryKeys } from "@/lib/react-query/keys";
+import { useAuthStore } from "@/stores/auth.store";
 
 type InventoryTab = "raw" | "wip" | "finished";
 
@@ -32,6 +32,7 @@ export default function InventoryPage() {
 
 function InventoryPageContent() {
   const searchParams = useSearchParams();
+  const user = useAuthStore((state) => state.user);
 
   const initialTab = normalizeTab(
     searchParams.get("tab") ?? searchParams.get("lane"),
@@ -49,11 +50,6 @@ function InventoryPageContent() {
     queryFn: getInventorySnapshot,
   });
 
-  const meQuery = useQuery({
-    queryKey: authKeys.me(),
-    queryFn: getCurrentUser,
-  });
-
   const serviceAlert = useMemo(() => {
     if (
       snapshotQuery.error instanceof ApiClientError &&
@@ -69,15 +65,8 @@ function InventoryPageContent() {
     throw snapshotQuery.error;
   }
 
-  if (
-    meQuery.error instanceof ApiClientError &&
-    meQuery.error.statusCode >= 500
-  ) {
-    throw meQuery.error;
-  }
-
   const snapshot = snapshotQuery.data ?? emptySnapshot;
-  const isAdmin = meQuery.data?.is_admin === true;
+  const isAdmin = user?.is_admin === true;
 
   return (
     <InventoryView
