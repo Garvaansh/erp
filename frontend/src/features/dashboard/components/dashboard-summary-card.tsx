@@ -221,7 +221,7 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
             <p className="erp-kpi-label mb-4">Quick Operations</p>
             <div className="space-y-2">
               <Link
-                href="/procurement/create"
+                href="/procurement"
                 className="flex items-center gap-3 rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] p-3 hover:border-[var(--erp-accent)] hover:bg-[var(--erp-accent-glow)] transition-all group"
               >
                 <div className="flex size-9 items-center justify-center rounded-lg bg-[var(--erp-accent-glow)] text-[var(--erp-accent)] group-hover:bg-[var(--erp-accent-glow-strong)]">
@@ -329,13 +329,17 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
         </Link>
         <Link
           href="/inventory"
-          className={`erp-card-static p-4 flex items-center gap-4 hover:border-[var(--erp-accent)] transition-colors ${lowStockCount > 0 ? 'border-red-500/40 bg-red-500/5' : ''}`}
+          className={`erp-card-static p-4 flex items-center gap-4 hover:border-[var(--erp-accent)] transition-colors ${lowStockCount > 0 ? "border-red-500/40 bg-red-500/5" : ""}`}
         >
-          <AlertTriangle className={`size-5 ${lowStockCount > 0 ? 'text-red-400 animate-pulse' : 'text-[var(--erp-text-muted)]'}`} />
+          <AlertTriangle
+            className={`size-5 ${lowStockCount > 0 ? "text-red-400 animate-pulse" : "text-[var(--erp-text-muted)]"}`}
+          />
           <div>
             <p className="erp-kpi-label">Low Stock Alerts</p>
             <div className="flex items-center gap-2">
-              <p className={`text-xl font-bold tabular-nums ${lowStockCount > 0 ? 'text-red-400' : 'text-[var(--erp-text-primary)]'}`}>
+              <p
+                className={`text-xl font-bold tabular-nums ${lowStockCount > 0 ? "text-red-400" : "text-[var(--erp-text-primary)]"}`}
+              >
                 {lowStockCount}
               </p>
               {lowStockCount > 0 && (

@@ -25,9 +25,16 @@ export const wipKeys = {
 
 export const procurementKeys = {
   all: ["procurement"] as const,
-  orders: () => [...procurementKeys.all, "orders"] as const,
-  orderDetails: (poId: string) =>
-    [...procurementKeys.all, "order", poId] as const,
+  list: (filters?: { limit?: number; offset?: number }) =>
+    [
+      ...procurementKeys.all,
+      "list",
+      filters?.limit ?? null,
+      filters?.offset ?? null,
+    ] as const,
+  detail: (id: string) => [...procurementKeys.all, "detail", id] as const,
+  orders: () => procurementKeys.list(),
+  orderDetails: (poId: string) => procurementKeys.detail(poId),
   materialOptions: () => [...procurementKeys.all, "materials"] as const,
 };
 
@@ -43,8 +50,10 @@ export const vendorsKeys = {
 
 export const reportsKeys = {
   all: ["reports"] as const,
-  inventory: (days: number) => [...reportsKeys.all, "inventory", days] as const,
-  purchase: (days: number) => [...reportsKeys.all, "purchase", days] as const,
+  inventory: (filters: { from: string; to: string }) =>
+    [...reportsKeys.all, "inventory", filters.from, filters.to] as const,
+  purchase: (filters: { from: string; to: string }) =>
+    [...reportsKeys.all, "purchase", filters.from, filters.to] as const,
   users: () => [...reportsKeys.all, "users"] as const,
   production: (date: string, lot: string) =>
     [...reportsKeys.all, "production", date, lot] as const,
