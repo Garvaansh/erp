@@ -11,37 +11,208 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const draftPurchaseOrder = `-- name: DraftPurchaseOrder :one
+const createInventoryBatch = `-- name: CreateInventoryBatch :one
+INSERT INTO inventory_batches (
+    item_id,
+    batch_code,
+    daily_sequence,
+    initial_qty,
+    remaining_qty,
+    reserved_qty,
+    unit_cost,
+    parent_po_id,
+    status,
+    type
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    'RAW'
+)
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date, parent_po_id, unit_cost
+`
+
+type CreateInventoryBatchParams struct {
+	ItemID        pgtype.UUID    `json:"item_id"`
+	BatchCode     string         `json:"batch_code"`
+	DailySequence int32          `json:"daily_sequence"`
+	InitialQty    pgtype.Numeric `json:"initial_qty"`
+	RemainingQty  pgtype.Numeric `json:"remaining_qty"`
+	ReservedQty   pgtype.Numeric `json:"reserved_qty"`
+	UnitCost      pgtype.Numeric `json:"unit_cost"`
+	ParentPoID    pgtype.UUID    `json:"parent_po_id"`
+	Status        BatchStatus    `json:"status"`
+}
+
+func (q *Queries) CreateInventoryBatch(ctx context.Context, arg CreateInventoryBatchParams) (InventoryBatch, error) {
+	row := q.db.QueryRow(ctx, createInventoryBatch,
+		arg.ItemID,
+		arg.BatchCode,
+		arg.DailySequence,
+		arg.InitialQty,
+		arg.RemainingQty,
+		arg.ReservedQty,
+		arg.UnitCost,
+		arg.ParentPoID,
+		arg.Status,
+	)
+	var i InventoryBatch
+	err := row.Scan(
+		&i.ID,
+		&i.ItemID,
+		&i.BatchCode,
+		&i.InitialQty,
+		&i.RemainingQty,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DailySequence,
+		&i.Type,
+		&i.Diameter,
+		&i.ReservedQty,
+		&i.ParentBatchID,
+		&i.ExpiryDate,
+		&i.ParentPoID,
+		&i.UnitCost,
+	)
+	return i, err
+}
+
+const createInventoryTransaction = `-- name: CreateInventoryTransaction :one
+INSERT INTO inventory_transactions (
+    movement_group_id,
+    item_id,
+    batch_id,
+    direction,
+    quantity,
+    reference_type,
+    reference_id,
+    performed_by,
+    notes
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9
+)
+RETURNING id, movement_group_id, item_id, batch_id, direction, quantity, reference_type, reference_id, performed_by, notes, created_at
+`
+
+type CreateInventoryTransactionParams struct {
+	MovementGroupID pgtype.UUID    `json:"movement_group_id"`
+	ItemID          pgtype.UUID    `json:"item_id"`
+	BatchID         pgtype.UUID    `json:"batch_id"`
+	Direction       TxDirection    `json:"direction"`
+	Quantity        pgtype.Numeric `json:"quantity"`
+	ReferenceType   string         `json:"reference_type"`
+	ReferenceID     pgtype.UUID    `json:"reference_id"`
+	PerformedBy     pgtype.UUID    `json:"performed_by"`
+	Notes           pgtype.Text    `json:"notes"`
+}
+
+func (q *Queries) CreateInventoryTransaction(ctx context.Context, arg CreateInventoryTransactionParams) (InventoryTransaction, error) {
+	row := q.db.QueryRow(ctx, createInventoryTransaction,
+		arg.MovementGroupID,
+		arg.ItemID,
+		arg.BatchID,
+		arg.Direction,
+		arg.Quantity,
+		arg.ReferenceType,
+		arg.ReferenceID,
+		arg.PerformedBy,
+		arg.Notes,
+	)
+	var i InventoryTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.MovementGroupID,
+		&i.ItemID,
+		&i.BatchID,
+		&i.Direction,
+		&i.Quantity,
+		&i.ReferenceType,
+		&i.ReferenceID,
+		&i.PerformedBy,
+		&i.Notes,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createPurchaseOrder = `-- name: CreatePurchaseOrder :one
 INSERT INTO purchase_orders (
     po_number,
+    transaction_id,
+    vendor_id,
     vendor_name,
     item_id,
     ordered_qty,
     unit_price,
+    received_qty,
+    vendor_invoice_ref,
+    notes,
+    payment_status,
     status,
     created_by
 ) VALUES (
-    $1, $2, $3, $4, $5, 'PENDING', $6
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12,
+    $13
 )
-RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id
+RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes, payment_status
 `
 
-type DraftPurchaseOrderParams struct {
-	PoNumber   string         `json:"po_number"`
-	VendorName string         `json:"vendor_name"`
-	ItemID     pgtype.UUID    `json:"item_id"`
-	OrderedQty pgtype.Numeric `json:"ordered_qty"`
-	UnitPrice  pgtype.Numeric `json:"unit_price"`
-	CreatedBy  pgtype.UUID    `json:"created_by"`
+type CreatePurchaseOrderParams struct {
+	PoNumber         string              `json:"po_number"`
+	TransactionID    string              `json:"transaction_id"`
+	VendorID         pgtype.UUID         `json:"vendor_id"`
+	VendorName       pgtype.Text         `json:"vendor_name"`
+	ItemID           pgtype.UUID         `json:"item_id"`
+	OrderedQty       pgtype.Numeric      `json:"ordered_qty"`
+	UnitPrice        pgtype.Numeric      `json:"unit_price"`
+	ReceivedQty      pgtype.Numeric      `json:"received_qty"`
+	VendorInvoiceRef pgtype.Text         `json:"vendor_invoice_ref"`
+	Notes            pgtype.Text         `json:"notes"`
+	PaymentStatus    string              `json:"payment_status"`
+	Status           PurchaseOrderStatus `json:"status"`
+	CreatedBy        pgtype.UUID         `json:"created_by"`
 }
 
-func (q *Queries) DraftPurchaseOrder(ctx context.Context, arg DraftPurchaseOrderParams) (PurchaseOrder, error) {
-	row := q.db.QueryRow(ctx, draftPurchaseOrder,
+func (q *Queries) CreatePurchaseOrder(ctx context.Context, arg CreatePurchaseOrderParams) (PurchaseOrder, error) {
+	row := q.db.QueryRow(ctx, createPurchaseOrder,
 		arg.PoNumber,
+		arg.TransactionID,
+		arg.VendorID,
 		arg.VendorName,
 		arg.ItemID,
 		arg.OrderedQty,
 		arg.UnitPrice,
+		arg.ReceivedQty,
+		arg.VendorInvoiceRef,
+		arg.Notes,
+		arg.PaymentStatus,
+		arg.Status,
 		arg.CreatedBy,
 	)
 	var i PurchaseOrder
@@ -57,284 +228,261 @@ func (q *Queries) DraftPurchaseOrder(ctx context.Context, arg DraftPurchaseOrder
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.VendorID,
+		&i.TransactionID,
+		&i.ReceivedQty,
+		&i.VendorInvoiceRef,
+		&i.Notes,
+		&i.PaymentStatus,
 	)
 	return i, err
 }
 
-const getProcurementOrderDetails = `-- name: GetProcurementOrderDetails :one
+const getBatchByID = `-- name: GetBatchByID :one
+SELECT id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date, parent_po_id, unit_cost
+FROM inventory_batches
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetBatchByID(ctx context.Context, id pgtype.UUID) (InventoryBatch, error) {
+	row := q.db.QueryRow(ctx, getBatchByID, id)
+	var i InventoryBatch
+	err := row.Scan(
+		&i.ID,
+		&i.ItemID,
+		&i.BatchCode,
+		&i.InitialQty,
+		&i.RemainingQty,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DailySequence,
+		&i.Type,
+		&i.Diameter,
+		&i.ReservedQty,
+		&i.ParentBatchID,
+		&i.ExpiryDate,
+		&i.ParentPoID,
+		&i.UnitCost,
+	)
+	return i, err
+}
+
+const getProcurementDetail = `-- name: GetProcurementDetail :one
 SELECT
     po.id,
     po.po_number,
-    po.vendor_name,
+    po.transaction_id,
+    po.vendor_id,
+    v.vendor_code,
+    COALESCE(v.name, '') AS vendor_name,
+    COALESCE(v.contact_person, '') AS vendor_contact_person,
+    COALESCE(v.phone, '') AS vendor_phone,
     po.item_id,
     i.name AS item_name,
     i.sku,
     po.ordered_qty,
+    po.received_qty,
     po.unit_price,
+    po.vendor_invoice_ref,
+    po.payment_status,
+    po.notes,
     po.status,
+    po.created_by,
     po.created_at,
-    COALESCE(SUM(
-        CASE
-            WHEN t.direction = 'IN' THEN t.quantity::numeric
-            WHEN t.direction = 'OUT' THEN (t.quantity * -1)::numeric
-            ELSE 0::numeric
-        END
-    ), 0::numeric)::numeric AS received_qty
+    po.updated_at,
+    COALESCE(batch_stats.total_batches, 0)::int AS total_batches,
+    COALESCE(batch_stats.active_batches, 0)::int AS active_batches,
+    COALESCE(batch_stats.reversed_batches, 0)::int AS reversed_batches,
+    COALESCE(last_log.action, '') AS last_action,
+    last_log.note AS last_log_note,
+    last_log.created_at AS last_action_at
 FROM purchase_orders po
 JOIN items i ON i.id = po.item_id
-LEFT JOIN inventory_transactions t
-    ON t.reference_type = 'PURCHASE_ORDER'
-   AND t.reference_id = po.id
+JOIN vendors v ON v.id = po.vendor_id
+LEFT JOIN LATERAL (
+    SELECT
+        COUNT(*) AS total_batches,
+        COUNT(*) FILTER (WHERE status = 'ACTIVE') AS active_batches,
+        COUNT(*) FILTER (WHERE status = 'REVERSED') AS reversed_batches
+    FROM inventory_batches
+    WHERE parent_po_id = po.id
+) batch_stats ON TRUE
+LEFT JOIN LATERAL (
+    SELECT action, note, created_at
+    FROM purchase_order_logs
+    WHERE po_id = po.id
+    ORDER BY created_at DESC
+    LIMIT 1
+) last_log ON TRUE
 WHERE po.id = $1
-GROUP BY po.id, i.name, i.sku
 `
 
-type GetProcurementOrderDetailsRow struct {
-	ID          pgtype.UUID         `json:"id"`
-	PoNumber    string              `json:"po_number"`
-	VendorName  string              `json:"vendor_name"`
-	ItemID      pgtype.UUID         `json:"item_id"`
-	ItemName    string              `json:"item_name"`
-	Sku         pgtype.Text         `json:"sku"`
-	OrderedQty  pgtype.Numeric      `json:"ordered_qty"`
-	UnitPrice   pgtype.Numeric      `json:"unit_price"`
-	Status      PurchaseOrderStatus `json:"status"`
-	CreatedAt   pgtype.Timestamptz  `json:"created_at"`
-	ReceivedQty pgtype.Numeric      `json:"received_qty"`
+type GetProcurementDetailRow struct {
+	ID                  pgtype.UUID         `json:"id"`
+	PoNumber            string              `json:"po_number"`
+	TransactionID       string              `json:"transaction_id"`
+	VendorID            pgtype.UUID         `json:"vendor_id"`
+	VendorCode          string              `json:"vendor_code"`
+	VendorName          string              `json:"vendor_name"`
+	VendorContactPerson string              `json:"vendor_contact_person"`
+	VendorPhone         string              `json:"vendor_phone"`
+	ItemID              pgtype.UUID         `json:"item_id"`
+	ItemName            string              `json:"item_name"`
+	Sku                 pgtype.Text         `json:"sku"`
+	OrderedQty          pgtype.Numeric      `json:"ordered_qty"`
+	ReceivedQty         pgtype.Numeric      `json:"received_qty"`
+	UnitPrice           pgtype.Numeric      `json:"unit_price"`
+	VendorInvoiceRef    pgtype.Text         `json:"vendor_invoice_ref"`
+	PaymentStatus       string              `json:"payment_status"`
+	Notes               pgtype.Text         `json:"notes"`
+	Status              PurchaseOrderStatus `json:"status"`
+	CreatedBy           pgtype.UUID         `json:"created_by"`
+	CreatedAt           pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	TotalBatches        int32               `json:"total_batches"`
+	ActiveBatches       int32               `json:"active_batches"`
+	ReversedBatches     int32               `json:"reversed_batches"`
+	LastAction          string              `json:"last_action"`
+	LastLogNote         pgtype.Text         `json:"last_log_note"`
+	LastActionAt        pgtype.Timestamptz  `json:"last_action_at"`
 }
 
-func (q *Queries) GetProcurementOrderDetails(ctx context.Context, id pgtype.UUID) (GetProcurementOrderDetailsRow, error) {
-	row := q.db.QueryRow(ctx, getProcurementOrderDetails, id)
-	var i GetProcurementOrderDetailsRow
+func (q *Queries) GetProcurementDetail(ctx context.Context, id pgtype.UUID) (GetProcurementDetailRow, error) {
+	row := q.db.QueryRow(ctx, getProcurementDetail, id)
+	var i GetProcurementDetailRow
 	err := row.Scan(
 		&i.ID,
 		&i.PoNumber,
+		&i.TransactionID,
+		&i.VendorID,
+		&i.VendorCode,
 		&i.VendorName,
+		&i.VendorContactPerson,
+		&i.VendorPhone,
 		&i.ItemID,
 		&i.ItemName,
 		&i.Sku,
 		&i.OrderedQty,
-		&i.UnitPrice,
-		&i.Status,
-		&i.CreatedAt,
 		&i.ReceivedQty,
-	)
-	return i, err
-}
-
-const getPurchaseOrderForUpdate = `-- name: GetPurchaseOrderForUpdate :one
-SELECT
-    po.id,
-    po.po_number,
-    po.vendor_name,
-    po.item_id,
-    po.ordered_qty,
-    po.unit_price,
-    po.status,
-    po.created_by,
-    po.created_at,
-    po.updated_at
-FROM purchase_orders po
-WHERE po.id = $1
-FOR UPDATE
-`
-
-type GetPurchaseOrderForUpdateRow struct {
-	ID         pgtype.UUID         `json:"id"`
-	PoNumber   string              `json:"po_number"`
-	VendorName string              `json:"vendor_name"`
-	ItemID     pgtype.UUID         `json:"item_id"`
-	OrderedQty pgtype.Numeric      `json:"ordered_qty"`
-	UnitPrice  pgtype.Numeric      `json:"unit_price"`
-	Status     PurchaseOrderStatus `json:"status"`
-	CreatedBy  pgtype.UUID         `json:"created_by"`
-	CreatedAt  pgtype.Timestamptz  `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz  `json:"updated_at"`
-}
-
-func (q *Queries) GetPurchaseOrderForUpdate(ctx context.Context, id pgtype.UUID) (GetPurchaseOrderForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getPurchaseOrderForUpdate, id)
-	var i GetPurchaseOrderForUpdateRow
-	err := row.Scan(
-		&i.ID,
-		&i.PoNumber,
-		&i.VendorName,
-		&i.ItemID,
-		&i.OrderedQty,
 		&i.UnitPrice,
+		&i.VendorInvoiceRef,
+		&i.PaymentStatus,
+		&i.Notes,
 		&i.Status,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TotalBatches,
+		&i.ActiveBatches,
+		&i.ReversedBatches,
+		&i.LastAction,
+		&i.LastLogNote,
+		&i.LastActionAt,
 	)
 	return i, err
 }
 
-const listPendingProcurementOrders = `-- name: ListPendingProcurementOrders :many
+const getProcurementList = `-- name: GetProcurementList :many
 SELECT
     po.id,
     po.po_number,
-    po.vendor_name,
-    po.ordered_qty,
-    i.name AS item_name,
-    i.sku
-FROM purchase_orders po
-JOIN items i ON i.id = po.item_id
-WHERE po.status = 'PENDING'
-ORDER BY po.created_at ASC
-`
-
-type ListPendingProcurementOrdersRow struct {
-	ID         pgtype.UUID    `json:"id"`
-	PoNumber   string         `json:"po_number"`
-	VendorName string         `json:"vendor_name"`
-	OrderedQty pgtype.Numeric `json:"ordered_qty"`
-	ItemName   string         `json:"item_name"`
-	Sku        pgtype.Text    `json:"sku"`
-}
-
-func (q *Queries) ListPendingProcurementOrders(ctx context.Context) ([]ListPendingProcurementOrdersRow, error) {
-	rows, err := q.db.Query(ctx, listPendingProcurementOrders)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPendingProcurementOrdersRow
-	for rows.Next() {
-		var i ListPendingProcurementOrdersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.PoNumber,
-			&i.VendorName,
-			&i.OrderedQty,
-			&i.ItemName,
-			&i.Sku,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProcurementBatchesByOrder = `-- name: ListProcurementBatchesByOrder :many
-SELECT
-    b.id AS batch_id,
-    b.batch_code,
-    b.initial_qty,
-    b.remaining_qty,
-    t.id AS transaction_id,
-    t.created_at AS received_at
-FROM inventory_transactions t
-JOIN inventory_batches b ON b.id = t.batch_id
-WHERE t.reference_type = 'PURCHASE_ORDER'
-  AND t.reference_id = $1
-  AND t.direction = 'IN'
-ORDER BY t.created_at DESC
-`
-
-type ListProcurementBatchesByOrderRow struct {
-	BatchID       pgtype.UUID        `json:"batch_id"`
-	BatchCode     string             `json:"batch_code"`
-	InitialQty    pgtype.Numeric     `json:"initial_qty"`
-	RemainingQty  pgtype.Numeric     `json:"remaining_qty"`
-	TransactionID pgtype.UUID        `json:"transaction_id"`
-	ReceivedAt    pgtype.Timestamptz `json:"received_at"`
-}
-
-func (q *Queries) ListProcurementBatchesByOrder(ctx context.Context, referenceID pgtype.UUID) ([]ListProcurementBatchesByOrderRow, error) {
-	rows, err := q.db.Query(ctx, listProcurementBatchesByOrder, referenceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListProcurementBatchesByOrderRow
-	for rows.Next() {
-		var i ListProcurementBatchesByOrderRow
-		if err := rows.Scan(
-			&i.BatchID,
-			&i.BatchCode,
-			&i.InitialQty,
-			&i.RemainingQty,
-			&i.TransactionID,
-			&i.ReceivedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProcurementOrders = `-- name: ListProcurementOrders :many
-SELECT
-    po.id,
-    po.po_number,
-    po.vendor_name,
+    po.transaction_id,
+    po.vendor_id,
+    v.vendor_code,
+    COALESCE(v.name, '') AS vendor_name,
     po.item_id,
     i.name AS item_name,
     i.sku,
     po.ordered_qty,
+    po.received_qty,
     po.unit_price,
+    po.vendor_invoice_ref,
+    po.payment_status,
     po.status,
     po.created_at,
-    COALESCE(SUM(
-        CASE
-            WHEN t.direction = 'IN' THEN t.quantity::numeric
-            WHEN t.direction = 'OUT' THEN (t.quantity * -1)::numeric
-            ELSE 0::numeric
-        END
-    ), 0::numeric)::numeric AS received_qty
+    po.updated_at,
+    COALESCE(l.action, '') AS last_action,
+    l.created_at AS last_action_at
 FROM purchase_orders po
 JOIN items i ON i.id = po.item_id
-LEFT JOIN inventory_transactions t
-    ON t.reference_type = 'PURCHASE_ORDER'
-   AND t.reference_id = po.id
-GROUP BY po.id, i.name, i.sku
-ORDER BY po.created_at DESC
+JOIN vendors v ON v.id = po.vendor_id
+LEFT JOIN LATERAL (
+    SELECT action, created_at
+    FROM purchase_order_logs
+    WHERE po_id = po.id
+    ORDER BY created_at DESC
+    LIMIT 1
+) l ON TRUE
+WHERE po.status = 'PENDING'
+   OR po.status = 'PARTIAL'
+   OR (
+        po.status IN ('COMPLETED', 'CLOSED')
+        AND po.updated_at >= NOW() - INTERVAL '7 days'
+   )
+ORDER BY
+    CASE WHEN po.status IN ('PENDING', 'PARTIAL') THEN 0 ELSE 1 END,
+    po.updated_at DESC,
+    po.po_number DESC
+LIMIT $1 OFFSET $2
 `
 
-type ListProcurementOrdersRow struct {
-	ID          pgtype.UUID         `json:"id"`
-	PoNumber    string              `json:"po_number"`
-	VendorName  string              `json:"vendor_name"`
-	ItemID      pgtype.UUID         `json:"item_id"`
-	ItemName    string              `json:"item_name"`
-	Sku         pgtype.Text         `json:"sku"`
-	OrderedQty  pgtype.Numeric      `json:"ordered_qty"`
-	UnitPrice   pgtype.Numeric      `json:"unit_price"`
-	Status      PurchaseOrderStatus `json:"status"`
-	CreatedAt   pgtype.Timestamptz  `json:"created_at"`
-	ReceivedQty pgtype.Numeric      `json:"received_qty"`
+type GetProcurementListParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListProcurementOrders(ctx context.Context) ([]ListProcurementOrdersRow, error) {
-	rows, err := q.db.Query(ctx, listProcurementOrders)
+type GetProcurementListRow struct {
+	ID               pgtype.UUID         `json:"id"`
+	PoNumber         string              `json:"po_number"`
+	TransactionID    string              `json:"transaction_id"`
+	VendorID         pgtype.UUID         `json:"vendor_id"`
+	VendorCode       string              `json:"vendor_code"`
+	VendorName       string              `json:"vendor_name"`
+	ItemID           pgtype.UUID         `json:"item_id"`
+	ItemName         string              `json:"item_name"`
+	Sku              pgtype.Text         `json:"sku"`
+	OrderedQty       pgtype.Numeric      `json:"ordered_qty"`
+	ReceivedQty      pgtype.Numeric      `json:"received_qty"`
+	UnitPrice        pgtype.Numeric      `json:"unit_price"`
+	VendorInvoiceRef pgtype.Text         `json:"vendor_invoice_ref"`
+	PaymentStatus    string              `json:"payment_status"`
+	Status           PurchaseOrderStatus `json:"status"`
+	CreatedAt        pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz  `json:"updated_at"`
+	LastAction       string              `json:"last_action"`
+	LastActionAt     pgtype.Timestamptz  `json:"last_action_at"`
+}
+
+func (q *Queries) GetProcurementList(ctx context.Context, arg GetProcurementListParams) ([]GetProcurementListRow, error) {
+	rows, err := q.db.Query(ctx, getProcurementList, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListProcurementOrdersRow
+	var items []GetProcurementListRow
 	for rows.Next() {
-		var i ListProcurementOrdersRow
+		var i GetProcurementListRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PoNumber,
+			&i.TransactionID,
+			&i.VendorID,
+			&i.VendorCode,
 			&i.VendorName,
 			&i.ItemID,
 			&i.ItemName,
 			&i.Sku,
 			&i.OrderedQty,
+			&i.ReceivedQty,
 			&i.UnitPrice,
+			&i.VendorInvoiceRef,
+			&i.PaymentStatus,
 			&i.Status,
 			&i.CreatedAt,
-			&i.ReceivedQty,
+			&i.UpdatedAt,
+			&i.LastAction,
+			&i.LastActionAt,
 		); err != nil {
 			return nil, err
 		}
@@ -346,17 +494,15 @@ func (q *Queries) ListProcurementOrders(ctx context.Context) ([]ListProcurementO
 	return items, nil
 }
 
-const markPurchaseOrderDelivered = `-- name: MarkPurchaseOrderDelivered :one
-UPDATE purchase_orders
-SET status = 'DELIVERED',
-    updated_at = NOW()
+const getPurchaseOrderByID = `-- name: GetPurchaseOrderByID :one
+SELECT id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes, payment_status
+FROM purchase_orders
 WHERE id = $1
-  AND status = 'PENDING'
-RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id
+LIMIT 1
 `
 
-func (q *Queries) MarkPurchaseOrderDelivered(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error) {
-	row := q.db.QueryRow(ctx, markPurchaseOrderDelivered, id)
+func (q *Queries) GetPurchaseOrderByID(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error) {
+	row := q.db.QueryRow(ctx, getPurchaseOrderByID, id)
 	var i PurchaseOrder
 	err := row.Scan(
 		&i.ID,
@@ -370,20 +516,24 @@ func (q *Queries) MarkPurchaseOrderDelivered(ctx context.Context, id pgtype.UUID
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.VendorID,
+		&i.TransactionID,
+		&i.ReceivedQty,
+		&i.VendorInvoiceRef,
+		&i.Notes,
+		&i.PaymentStatus,
 	)
 	return i, err
 }
 
-const markPurchaseOrderPending = `-- name: MarkPurchaseOrderPending :one
-UPDATE purchase_orders
-SET status = 'PENDING',
-        updated_at = NOW()
+const getPurchaseOrderByIDForUpdate = `-- name: GetPurchaseOrderByIDForUpdate :one
+SELECT id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes, payment_status
+FROM purchase_orders
 WHERE id = $1
-RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id
+FOR UPDATE
 `
 
-func (q *Queries) MarkPurchaseOrderPending(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error) {
-	row := q.db.QueryRow(ctx, markPurchaseOrderPending, id)
+func (q *Queries) GetPurchaseOrderByIDForUpdate(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error) {
+	row := q.db.QueryRow(ctx, getPurchaseOrderByIDForUpdate, id)
 	var i PurchaseOrder
 	err := row.Scan(
 		&i.ID,
@@ -397,6 +547,151 @@ func (q *Queries) MarkPurchaseOrderPending(ctx context.Context, id pgtype.UUID) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.VendorID,
+		&i.TransactionID,
+		&i.ReceivedQty,
+		&i.VendorInvoiceRef,
+		&i.Notes,
+		&i.PaymentStatus,
+	)
+	return i, err
+}
+
+const insertPurchaseOrderLog = `-- name: InsertPurchaseOrderLog :one
+INSERT INTO purchase_order_logs (
+    po_id,
+    user_id,
+    action,
+    note
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+RETURNING id, po_id, user_id, action, note, created_at
+`
+
+type InsertPurchaseOrderLogParams struct {
+	PoID   pgtype.UUID `json:"po_id"`
+	UserID pgtype.UUID `json:"user_id"`
+	Action string      `json:"action"`
+	Note   pgtype.Text `json:"note"`
+}
+
+func (q *Queries) InsertPurchaseOrderLog(ctx context.Context, arg InsertPurchaseOrderLogParams) (PurchaseOrderLog, error) {
+	row := q.db.QueryRow(ctx, insertPurchaseOrderLog,
+		arg.PoID,
+		arg.UserID,
+		arg.Action,
+		arg.Note,
+	)
+	var i PurchaseOrderLog
+	err := row.Scan(
+		&i.ID,
+		&i.PoID,
+		&i.UserID,
+		&i.Action,
+		&i.Note,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateInventoryBatchStatus = `-- name: UpdateInventoryBatchStatus :one
+UPDATE inventory_batches
+SET
+    status = $2,
+    remaining_qty = $3,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date, parent_po_id, unit_cost
+`
+
+type UpdateInventoryBatchStatusParams struct {
+	ID           pgtype.UUID    `json:"id"`
+	Status       BatchStatus    `json:"status"`
+	RemainingQty pgtype.Numeric `json:"remaining_qty"`
+}
+
+func (q *Queries) UpdateInventoryBatchStatus(ctx context.Context, arg UpdateInventoryBatchStatusParams) (InventoryBatch, error) {
+	row := q.db.QueryRow(ctx, updateInventoryBatchStatus, arg.ID, arg.Status, arg.RemainingQty)
+	var i InventoryBatch
+	err := row.Scan(
+		&i.ID,
+		&i.ItemID,
+		&i.BatchCode,
+		&i.InitialQty,
+		&i.RemainingQty,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DailySequence,
+		&i.Type,
+		&i.Diameter,
+		&i.ReservedQty,
+		&i.ParentBatchID,
+		&i.ExpiryDate,
+		&i.ParentPoID,
+		&i.UnitCost,
+	)
+	return i, err
+}
+
+const updatePurchaseOrder = `-- name: UpdatePurchaseOrder :one
+UPDATE purchase_orders
+SET
+    item_id = $2,
+    ordered_qty = $3,
+    unit_price = $4,
+    received_qty = $5,
+    vendor_invoice_ref = $6,
+    notes = $7,
+    status = $8,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes, payment_status
+`
+
+type UpdatePurchaseOrderParams struct {
+	ID               pgtype.UUID         `json:"id"`
+	ItemID           pgtype.UUID         `json:"item_id"`
+	OrderedQty       pgtype.Numeric      `json:"ordered_qty"`
+	UnitPrice        pgtype.Numeric      `json:"unit_price"`
+	ReceivedQty      pgtype.Numeric      `json:"received_qty"`
+	VendorInvoiceRef pgtype.Text         `json:"vendor_invoice_ref"`
+	Notes            pgtype.Text         `json:"notes"`
+	Status           PurchaseOrderStatus `json:"status"`
+}
+
+func (q *Queries) UpdatePurchaseOrder(ctx context.Context, arg UpdatePurchaseOrderParams) (PurchaseOrder, error) {
+	row := q.db.QueryRow(ctx, updatePurchaseOrder,
+		arg.ID,
+		arg.ItemID,
+		arg.OrderedQty,
+		arg.UnitPrice,
+		arg.ReceivedQty,
+		arg.VendorInvoiceRef,
+		arg.Notes,
+		arg.Status,
+	)
+	var i PurchaseOrder
+	err := row.Scan(
+		&i.ID,
+		&i.PoNumber,
+		&i.VendorName,
+		&i.ItemID,
+		&i.OrderedQty,
+		&i.UnitPrice,
+		&i.Status,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.VendorID,
+		&i.TransactionID,
+		&i.ReceivedQty,
+		&i.VendorInvoiceRef,
+		&i.Notes,
+		&i.PaymentStatus,
 	)
 	return i, err
 }

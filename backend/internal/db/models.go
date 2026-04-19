@@ -61,6 +61,7 @@ const (
 	BatchStatusACTIVE    BatchStatus = "ACTIVE"
 	BatchStatusEXHAUSTED BatchStatus = "EXHAUSTED"
 	BatchStatusHOLD      BatchStatus = "HOLD"
+	BatchStatusREVERSED  BatchStatus = "REVERSED"
 )
 
 func (e *BatchStatus) Scan(src interface{}) error {
@@ -320,8 +321,9 @@ type PurchaseOrderStatus string
 
 const (
 	PurchaseOrderStatusPENDING   PurchaseOrderStatus = "PENDING"
-	PurchaseOrderStatusDELIVERED PurchaseOrderStatus = "DELIVERED"
-	PurchaseOrderStatusCANCELLED PurchaseOrderStatus = "CANCELLED"
+	PurchaseOrderStatusPARTIAL   PurchaseOrderStatus = "PARTIAL"
+	PurchaseOrderStatusCOMPLETED PurchaseOrderStatus = "COMPLETED"
+	PurchaseOrderStatusCLOSED    PurchaseOrderStatus = "CLOSED"
 )
 
 func (e *PurchaseOrderStatus) Scan(src interface{}) error {
@@ -483,6 +485,8 @@ type InventoryBatch struct {
 	ReservedQty   pgtype.Numeric     `json:"reserved_qty"`
 	ParentBatchID pgtype.UUID        `json:"parent_batch_id"`
 	ExpiryDate    pgtype.Date        `json:"expiry_date"`
+	ParentPoID    pgtype.UUID        `json:"parent_po_id"`
+	UnitCost      pgtype.Numeric     `json:"unit_cost"`
 }
 
 type InventoryTransaction struct {
@@ -492,7 +496,7 @@ type InventoryTransaction struct {
 	BatchID         pgtype.UUID        `json:"batch_id"`
 	Direction       TxDirection        `json:"direction"`
 	Quantity        pgtype.Numeric     `json:"quantity"`
-	ReferenceType   TxReferenceType    `json:"reference_type"`
+	ReferenceType   string             `json:"reference_type"`
 	ReferenceID     pgtype.UUID        `json:"reference_id"`
 	PerformedBy     pgtype.UUID        `json:"performed_by"`
 	Notes           pgtype.Text        `json:"notes"`
@@ -551,17 +555,41 @@ type ProductionOrder struct {
 }
 
 type PurchaseOrder struct {
-	ID         pgtype.UUID         `json:"id"`
-	PoNumber   string              `json:"po_number"`
-	VendorName string              `json:"vendor_name"`
-	ItemID     pgtype.UUID         `json:"item_id"`
-	OrderedQty pgtype.Numeric      `json:"ordered_qty"`
-	UnitPrice  pgtype.Numeric      `json:"unit_price"`
-	Status     PurchaseOrderStatus `json:"status"`
-	CreatedBy  pgtype.UUID         `json:"created_by"`
-	CreatedAt  pgtype.Timestamptz  `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz  `json:"updated_at"`
-	VendorID   pgtype.UUID         `json:"vendor_id"`
+	ID               pgtype.UUID         `json:"id"`
+	PoNumber         string              `json:"po_number"`
+	VendorName       pgtype.Text         `json:"vendor_name"`
+	ItemID           pgtype.UUID         `json:"item_id"`
+	OrderedQty       pgtype.Numeric      `json:"ordered_qty"`
+	UnitPrice        pgtype.Numeric      `json:"unit_price"`
+	Status           PurchaseOrderStatus `json:"status"`
+	CreatedBy        pgtype.UUID         `json:"created_by"`
+	CreatedAt        pgtype.Timestamptz  `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz  `json:"updated_at"`
+	VendorID         pgtype.UUID         `json:"vendor_id"`
+	TransactionID    string              `json:"transaction_id"`
+	ReceivedQty      pgtype.Numeric      `json:"received_qty"`
+	VendorInvoiceRef pgtype.Text         `json:"vendor_invoice_ref"`
+	Notes            pgtype.Text         `json:"notes"`
+	PaymentStatus    string              `json:"payment_status"`
+}
+
+type PurchaseOrderLog struct {
+	ID        pgtype.UUID        `json:"id"`
+	PoID      pgtype.UUID        `json:"po_id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Action    string             `json:"action"`
+	Note      pgtype.Text        `json:"note"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type PurchaseOrderPayment struct {
+	ID          pgtype.UUID        `json:"id"`
+	PoID        pgtype.UUID        `json:"po_id"`
+	Amount      pgtype.Numeric     `json:"amount"`
+	PaymentDate pgtype.Timestamptz `json:"payment_date"`
+	Note        pgtype.Text        `json:"note"`
+	CreatedBy   pgtype.UUID        `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type Role struct {
@@ -595,4 +623,5 @@ type Vendor struct {
 	IsActive      bool               `json:"is_active"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	VendorCode    string             `json:"vendor_code"`
 }
