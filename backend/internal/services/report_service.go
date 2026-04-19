@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,11 +45,11 @@ type InventoryMovementRow struct {
 }
 
 type InventoryReportResult struct {
-	StockOnHand    []InventoryReportRow   `json:"stock_on_hand"`
-	MovementByDay  []InventoryMovementRow `json:"movement_by_day"`
-	TotalItems     int                    `json:"total_items"`
-	LowStockCount  int                    `json:"low_stock_count"`
-	TotalStockQty  float64                `json:"total_stock_qty"`
+	StockOnHand   []InventoryReportRow   `json:"stock_on_hand"`
+	MovementByDay []InventoryMovementRow `json:"movement_by_day"`
+	TotalItems    int                    `json:"total_items"`
+	LowStockCount int                    `json:"low_stock_count"`
+	TotalStockQty float64                `json:"total_stock_qty"`
 }
 
 func (s *ReportService) GetInventoryReport(ctx context.Context, days int) (*InventoryReportResult, error) {
@@ -145,12 +146,29 @@ func (s *ReportService) GetInventoryReport(ctx context.Context, days int) (*Inve
 // ── Purchase Report ──
 
 type PurchaseReportRow struct {
-	VendorName  string  `json:"vendor_name"`
-	TotalOrders int     `json:"total_orders"`
-	PendingPOs  int     `json:"pending_pos"`
-	DeliveredPOs int    `json:"delivered_pos"`
-	TotalValue  float64 `json:"total_value"`
-	TotalQty    float64 `json:"total_qty"`
+	VendorID     string  `json:"vendor_id"`
+	VendorCode   string  `json:"vendor_code"`
+	VendorName   string  `json:"vendor_name"`
+	TotalOrders  int     `json:"total_orders"`
+	PendingPOs   int     `json:"pending_pos"`
+	DeliveredPOs int     `json:"delivered_pos"`
+	TotalValue   float64 `json:"total_value"`
+	TotalQty     float64 `json:"total_qty"`
+}
+
+type PurchaseFlatRow struct {
+	Date             string  `json:"date"`
+	PurchaseOrderID  string  `json:"purchase_order_id"`
+	PONumber         string  `json:"po_number"`
+	VendorID         string  `json:"vendor_id"`
+	VendorCode       string  `json:"vendor_code"`
+	VendorName       string  `json:"vendor_name"`
+	ItemName         string  `json:"item_name"`
+	QuantityReceived float64 `json:"quantity_received"`
+	UnitCost         float64 `json:"unit_cost"`
+	TotalValue       float64 `json:"total_value"`
+	PaymentStatus    string  `json:"payment_status"`
+	Status           string  `json:"status"`
 }
 
 type PurchaseTimelineRow struct {
@@ -160,6 +178,7 @@ type PurchaseTimelineRow struct {
 }
 
 type PurchaseReportResult struct {
+	Rows         []PurchaseFlatRow     `json:"rows"`
 	ByVendor     []PurchaseReportRow   `json:"by_vendor"`
 	Timeline     []PurchaseTimelineRow `json:"timeline"`
 	TotalOrders  int                   `json:"total_orders"`
@@ -178,73 +197,223 @@ func (s *ReportService) GetPurchaseReport(ctx context.Context, days int) (*Purch
 
 	since := time.Now().UTC().AddDate(0, 0, -days)
 
-	// By vendor
-	vendorRows, err := s.pool.Query(ctx, `
+	reportRows, err := s.pool.Query(ctx, `
+		WITH payment_totals AS (
+			SELECT po_id, COALESCE(SUM(amount), 0) AS paid_amount
+			FROM purchase_order_payments
+			GROUP BY po_id
+		),
+		received_rows AS (
+			SELECT
+				b.created_at AS receipt_ts,
+				po.id AS po_id,
+				po.po_number,
+				po.vendor_id,
+				COALESCE(v.vendor_code, '') AS vendor_code,
+				COALESCE(v.name, '') AS vendor_name,
+				COALESCE(i.name, '') AS item_name,
+				COALESCE(b.initial_qty, 0)::numeric AS quantity_received,
+				COALESCE(b.unit_cost, po.unit_price, 0)::numeric AS unit_cost,
+				(COALESCE(b.initial_qty, 0) * COALESCE(b.unit_cost, po.unit_price, 0))::numeric AS total_value,
+				po.status::text AS po_status
+			FROM inventory_batches b
+			JOIN purchase_orders po ON po.id = b.parent_po_id
+			JOIN vendors v ON v.id = po.vendor_id
+			LEFT JOIN items i ON i.id = po.item_id
+			WHERE b.created_at >= $1
+			  AND b.status <> 'REVERSED'
+
+			UNION ALL
+
+			SELECT
+				po.updated_at AS receipt_ts,
+				po.id AS po_id,
+				po.po_number,
+				po.vendor_id,
+				COALESCE(v.vendor_code, '') AS vendor_code,
+				COALESCE(v.name, '') AS vendor_name,
+				COALESCE(i.name, '') AS item_name,
+				COALESCE(po.received_qty, 0)::numeric AS quantity_received,
+				COALESCE(po.unit_price, 0)::numeric AS unit_cost,
+				(COALESCE(po.received_qty, 0) * COALESCE(po.unit_price, 0))::numeric AS total_value,
+				po.status::text AS po_status
+			FROM purchase_orders po
+			JOIN vendors v ON v.id = po.vendor_id
+			LEFT JOIN items i ON i.id = po.item_id
+			WHERE po.updated_at >= $1
+			  AND po.received_qty > 0
+			  AND NOT EXISTS (
+				SELECT 1
+				FROM inventory_batches b
+				WHERE b.parent_po_id = po.id
+			  )
+		),
+		po_value_totals AS (
+			SELECT po_id, COALESCE(SUM(total_value), 0) AS po_total_value
+			FROM received_rows
+			GROUP BY po_id
+		)
 		SELECT
-			vendor_name,
-			COUNT(*) AS total_orders,
-			COUNT(*) FILTER (WHERE status = 'PENDING') AS pending,
-			COUNT(*) FILTER (WHERE status = 'DELIVERED') AS delivered,
-			COALESCE(SUM(ordered_qty * unit_price), 0) AS total_value,
-			COALESCE(SUM(ordered_qty), 0) AS total_qty
-		FROM purchase_orders
-		WHERE created_at >= $1
-		GROUP BY vendor_name
-		ORDER BY total_value DESC
+			TO_CHAR(received_rows.receipt_ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS receipt_date,
+			received_rows.po_id::text,
+			received_rows.po_number,
+			received_rows.vendor_id::text,
+			received_rows.vendor_code,
+			received_rows.vendor_name,
+			received_rows.item_name,
+			received_rows.quantity_received::float8,
+			received_rows.unit_cost::float8,
+			received_rows.total_value::float8,
+			CASE
+				WHEN COALESCE(payment_totals.paid_amount, 0) <= 0 THEN 'UNPAID'
+				WHEN COALESCE(payment_totals.paid_amount, 0) >= COALESCE(po_value_totals.po_total_value, 0) THEN 'PAID'
+				ELSE 'PARTIAL'
+			END AS payment_status,
+			received_rows.po_status
+		FROM received_rows
+		LEFT JOIN payment_totals ON payment_totals.po_id = received_rows.po_id
+		LEFT JOIN po_value_totals ON po_value_totals.po_id = received_rows.po_id
+		ORDER BY received_rows.receipt_ts, received_rows.po_number
 	`, since)
 	if err != nil {
 		return nil, ErrReportQueryFailed
 	}
-	defer vendorRows.Close()
+	defer reportRows.Close()
 
-	var byVendor []PurchaseReportRow
-	var totalOrders, totalPending int
-	var totalValue float64
+	type vendorAggregate struct {
+		row          PurchaseReportRow
+		orderIDs     map[string]struct{}
+		pendingIDs   map[string]struct{}
+		deliveredIDs map[string]struct{}
+	}
 
-	for vendorRows.Next() {
-		var r PurchaseReportRow
-		if err := vendorRows.Scan(&r.VendorName, &r.TotalOrders, &r.PendingPOs,
-			&r.DeliveredPOs, &r.TotalValue, &r.TotalQty); err != nil {
+	rows := make([]PurchaseFlatRow, 0)
+	vendorAgg := make(map[string]*vendorAggregate)
+	vendorKeys := make([]string, 0)
+	timelineValue := make(map[string]float64)
+	timelineOrders := make(map[string]map[string]struct{})
+	poStatus := make(map[string]string)
+
+	totalValue := 0.0
+
+	for reportRows.Next() {
+		var row PurchaseFlatRow
+		if err := reportRows.Scan(
+			&row.Date,
+			&row.PurchaseOrderID,
+			&row.PONumber,
+			&row.VendorID,
+			&row.VendorCode,
+			&row.VendorName,
+			&row.ItemName,
+			&row.QuantityReceived,
+			&row.UnitCost,
+			&row.TotalValue,
+			&row.PaymentStatus,
+			&row.Status,
+		); err != nil {
 			return nil, ErrReportQueryFailed
 		}
-		totalOrders += r.TotalOrders
-		totalPending += r.PendingPOs
-		totalValue += r.TotalValue
-		byVendor = append(byVendor, r)
+
+		rows = append(rows, row)
+		totalValue += row.TotalValue
+
+		if _, exists := poStatus[row.PurchaseOrderID]; !exists {
+			poStatus[row.PurchaseOrderID] = row.Status
+		}
+
+		if _, exists := timelineOrders[row.Date]; !exists {
+			timelineOrders[row.Date] = make(map[string]struct{})
+		}
+		timelineOrders[row.Date][row.PurchaseOrderID] = struct{}{}
+		timelineValue[row.Date] += row.TotalValue
+
+		vendorKey := row.VendorID
+
+		agg, exists := vendorAgg[vendorKey]
+		if !exists {
+			agg = &vendorAggregate{
+				row: PurchaseReportRow{
+					VendorID:   row.VendorID,
+					VendorCode: row.VendorCode,
+					VendorName: row.VendorName,
+				},
+				orderIDs:     make(map[string]struct{}),
+				pendingIDs:   make(map[string]struct{}),
+				deliveredIDs: make(map[string]struct{}),
+			}
+			vendorAgg[vendorKey] = agg
+			vendorKeys = append(vendorKeys, vendorKey)
+		}
+
+		agg.row.TotalQty += row.QuantityReceived
+		agg.row.TotalValue += row.TotalValue
+		agg.orderIDs[row.PurchaseOrderID] = struct{}{}
+
+		if row.Status == "COMPLETED" || row.Status == "CLOSED" {
+			agg.deliveredIDs[row.PurchaseOrderID] = struct{}{}
+		} else {
+			agg.pendingIDs[row.PurchaseOrderID] = struct{}{}
+		}
 	}
+
+	if err := reportRows.Err(); err != nil {
+		return nil, ErrReportQueryFailed
+	}
+
+	if rows == nil {
+		rows = []PurchaseFlatRow{}
+	}
+
+	byVendor := make([]PurchaseReportRow, 0, len(vendorKeys))
+	for _, key := range vendorKeys {
+		agg := vendorAgg[key]
+		agg.row.TotalOrders = len(agg.orderIDs)
+		agg.row.PendingPOs = len(agg.pendingIDs)
+		agg.row.DeliveredPOs = len(agg.deliveredIDs)
+		byVendor = append(byVendor, agg.row)
+	}
+
+	sort.Slice(byVendor, func(i, j int) bool {
+		if byVendor[i].TotalValue == byVendor[j].TotalValue {
+			return byVendor[i].VendorName < byVendor[j].VendorName
+		}
+		return byVendor[i].TotalValue > byVendor[j].TotalValue
+	})
+
 	if byVendor == nil {
 		byVendor = []PurchaseReportRow{}
 	}
 
-	// Timeline
-	tlRows, err := s.pool.Query(ctx, `
-		SELECT
-			TO_CHAR(created_at, 'YYYY-MM-DD') AS dt,
-			COUNT(*),
-			COALESCE(SUM(ordered_qty * unit_price), 0)
-		FROM purchase_orders
-		WHERE created_at >= $1
-		GROUP BY dt
-		ORDER BY dt
-	`, since)
-	if err != nil {
-		return nil, ErrReportQueryFailed
+	dateKeys := make([]string, 0, len(timelineValue))
+	for dt := range timelineValue {
+		dateKeys = append(dateKeys, dt)
 	}
-	defer tlRows.Close()
+	sort.Strings(dateKeys)
 
-	var timeline []PurchaseTimelineRow
-	for tlRows.Next() {
-		var r PurchaseTimelineRow
-		if err := tlRows.Scan(&r.Date, &r.OrderCount, &r.TotalValue); err != nil {
-			return nil, ErrReportQueryFailed
-		}
-		timeline = append(timeline, r)
+	timeline := make([]PurchaseTimelineRow, 0, len(dateKeys))
+	for _, dt := range dateKeys {
+		timeline = append(timeline, PurchaseTimelineRow{
+			Date:       dt,
+			OrderCount: len(timelineOrders[dt]),
+			TotalValue: timelineValue[dt],
+		})
 	}
+
 	if timeline == nil {
 		timeline = []PurchaseTimelineRow{}
 	}
 
+	totalOrders := len(poStatus)
+	totalPending := 0
+	for _, status := range poStatus {
+		if status != "COMPLETED" && status != "CLOSED" {
+			totalPending++
+		}
+	}
+
 	return &PurchaseReportResult{
+		Rows:         rows,
 		ByVendor:     byVendor,
 		Timeline:     timeline,
 		TotalOrders:  totalOrders,

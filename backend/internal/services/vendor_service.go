@@ -35,7 +35,7 @@ func (s *VendorService) ListVendors(ctx context.Context) ([]models.VendorListRow
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, COALESCE(contact_person,''), COALESCE(phone,''), COALESCE(email,''),
+		SELECT id, vendor_code, name, COALESCE(contact_person,''), COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(address,''), COALESCE(gstin,''), COALESCE(payment_terms,''),
 		       is_active, created_at, updated_at
 		FROM vendors
@@ -50,7 +50,7 @@ func (s *VendorService) ListVendors(ctx context.Context) ([]models.VendorListRow
 	for rows.Next() {
 		var r models.VendorListRow
 		var createdAt, updatedAt time.Time
-		if err := rows.Scan(&r.ID, &r.Name, &r.ContactPerson, &r.Phone, &r.Email,
+		if err := rows.Scan(&r.ID, &r.VendorCode, &r.Name, &r.ContactPerson, &r.Phone, &r.Email,
 			&r.Address, &r.GSTIN, &r.PaymentTerms, &r.IsActive, &createdAt, &updatedAt); err != nil {
 			return nil, ErrListVendorsFailed
 		}
@@ -76,11 +76,12 @@ func (s *VendorService) CreateVendor(ctx context.Context, req models.CreateVendo
 	}
 
 	var id string
+	var vendorCode string
 	var createdAt, updatedAt time.Time
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO vendors (name, contact_person, phone, email, address, gstin, payment_terms)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, created_at, updated_at
+		RETURNING id, vendor_code, created_at, updated_at
 	`, name,
 		strings.TrimSpace(req.ContactPerson),
 		strings.TrimSpace(req.Phone),
@@ -88,7 +89,7 @@ func (s *VendorService) CreateVendor(ctx context.Context, req models.CreateVendo
 		strings.TrimSpace(req.Address),
 		strings.TrimSpace(req.GSTIN),
 		strings.TrimSpace(req.PaymentTerms),
-	).Scan(&id, &createdAt, &updatedAt)
+	).Scan(&id, &vendorCode, &createdAt, &updatedAt)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "idx_vendors_name_lower") {
@@ -99,6 +100,7 @@ func (s *VendorService) CreateVendor(ctx context.Context, req models.CreateVendo
 
 	return &models.VendorListRow{
 		ID:            id,
+		VendorCode:    strings.TrimSpace(vendorCode),
 		Name:          name,
 		ContactPerson: strings.TrimSpace(req.ContactPerson),
 		Phone:         strings.TrimSpace(req.Phone),
@@ -198,11 +200,11 @@ func (s *VendorService) GetVendor(ctx context.Context, vendorID string) (*models
 	var r models.VendorListRow
 	var createdAt, updatedAt time.Time
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, COALESCE(contact_person,''), COALESCE(phone,''), COALESCE(email,''),
+		SELECT id, vendor_code, name, COALESCE(contact_person,''), COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(address,''), COALESCE(gstin,''), COALESCE(payment_terms,''),
 		       is_active, created_at, updated_at
 		FROM vendors WHERE id = $1
-	`, strings.TrimSpace(vendorID)).Scan(&r.ID, &r.Name, &r.ContactPerson, &r.Phone, &r.Email,
+	`, strings.TrimSpace(vendorID)).Scan(&r.ID, &r.VendorCode, &r.Name, &r.ContactPerson, &r.Phone, &r.Email,
 		&r.Address, &r.GSTIN, &r.PaymentTerms, &r.IsActive, &createdAt, &updatedAt)
 
 	if err != nil {
