@@ -37,7 +37,7 @@ export function exportReportToPdf({
   fileName,
 }: ExportReportInput): void {
   const doc = new jsPDF({
-    orientation: columns.length > 8 ? "landscape" : "portrait",
+    orientation: columns.length > 7 ? "landscape" : "portrait",
     unit: "pt",
     format: "a4",
   });
@@ -55,15 +55,18 @@ export function exportReportToPdf({
 
   autoTable(doc, {
     startY: 104,
+    margin: { left: 40, right: 40, bottom: 40 },
     head: [columns.map((column) => column.label)],
     body: rows.map((row) =>
       columns.map((column) => toCellText(row[column.key])),
     ),
     theme: "grid",
+    tableWidth: "auto",
     styles: {
       fontSize: 9,
       cellPadding: 6,
       halign: "left",
+      overflow: "linebreak",
     },
     headStyles: {
       fillColor: [233, 236, 239],

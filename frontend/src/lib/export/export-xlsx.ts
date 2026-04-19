@@ -38,7 +38,7 @@ export async function exportReportToXlsx({
 }: ExportReportInput): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Report");
-  const columnCount = columns.length;
+  const columnCount = Math.max(columns.length, 1);
 
   worksheet.mergeCells(1, 1, 1, columnCount);
   const titleCell = worksheet.getCell(1, 1);
@@ -51,6 +51,8 @@ export async function exportReportToXlsx({
   subtitleCell.value = `${reportTitle} | ${dateRangeLabel}`;
   subtitleCell.font = { size: 12 };
   subtitleCell.alignment = { horizontal: "center", vertical: "middle" };
+
+  worksheet.getRow(3).height = 8;
 
   const headerRow = worksheet.getRow(4);
   headerRow.values = columns.map((column) => column.label);
@@ -67,7 +69,8 @@ export async function exportReportToXlsx({
 
   rows.forEach((row) => {
     const rowValues = columns.map((column) => toCellText(row[column.key]));
-    worksheet.addRow(rowValues);
+    const addedRow = worksheet.addRow(rowValues);
+    addedRow.alignment = { vertical: "middle" };
   });
 
   worksheet.columns.forEach((excelColumn, index) => {
