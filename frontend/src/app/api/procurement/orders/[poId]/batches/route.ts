@@ -16,6 +16,8 @@ type ProcurementBatchDTO = {
   batch_code: string;
   initial_qty: number;
   remaining_qty: number;
+  status?: string;
+  unit_cost?: number;
   transaction_id?: string;
   received_at?: string;
 };
@@ -31,6 +33,19 @@ function toNumber(value: unknown): number {
   }
 
   return 0;
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
 }
 
 function sanitizeBatches(payload: unknown): ProcurementBatchDTO[] {
@@ -51,6 +66,8 @@ function sanitizeBatches(payload: unknown): ProcurementBatchDTO[] {
       batch_code: row.batch_code as string,
       initial_qty: toNumber(row.initial_qty),
       remaining_qty: toNumber(row.remaining_qty),
+      status: typeof row.status === "string" ? row.status : undefined,
+      unit_cost: toOptionalNumber(row.unit_cost),
       transaction_id:
         typeof row.transaction_id === "string" ? row.transaction_id : undefined,
       received_at:
@@ -80,7 +97,7 @@ export async function GET(
   let backendResponse: Response;
   try {
     backendResponse = await fetchWithTimeout(
-      `${backendURL}/api/v1/procurement/orders/${encodeURIComponent(poId)}/batches`,
+      `${backendURL}/api/v1/procurement/${encodeURIComponent(poId)}/batches`,
       {
         method: "GET",
         headers: {
