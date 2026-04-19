@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { FileSpreadsheet, FileText } from "lucide-react";
+import { ApiClientError } from "@/lib/api/api-client";
 
 import { getReportByType } from "@/features/reports/api";
 import type {
@@ -58,6 +59,28 @@ type UseReportViewStateParams = {
   enabled?: boolean;
 };
 
+function getReportErrorMessage(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    if (error.statusCode === 400) {
+      return "Invalid report filters. Please verify the selected date range.";
+    }
+
+    if (error.statusCode === 409) {
+      return "Report request conflicts with current data state. Refresh and try again.";
+    }
+
+    if (error.statusCode >= 500) {
+      return "Server error while loading report data. Please try again shortly.";
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "Failed to load report. Please try again.";
+}
+
 function toInputDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -103,6 +126,18 @@ function cellText(value: ReportRow[string]): string | number {
   return value;
 }
 
+function getReportQueryKey(config: ReportConfig, filters: ReportFilters) {
+  if (config.key === "purchase") {
+    return reportKeys.purchase(filters);
+  }
+
+  if (config.key === "inventory") {
+    return reportKeys.inventory(filters);
+  }
+
+  return reportKeys.sales(filters);
+}
+
 export function useReportViewState(
   config: ReportConfig,
   params?: UseReportViewStateParams,
@@ -134,7 +169,7 @@ export function useReportViewState(
   );
 
   const reportQuery = useQuery({
-    queryKey: reportKeys.list(config.key, filters),
+    queryKey: getReportQueryKey(config, filters),
     queryFn: () => getReportByType(config.key, filters),
     enabled: isEnabled && hasValidDateRange,
     refetchOnWindowFocus: false,
@@ -281,7 +316,7 @@ export function ReportView({ config, state }: ReportViewProps) {
 
         {reportQuery.isError ? (
           <div className="rounded-lg border px-3 py-8 text-center text-sm text-destructive">
-            Failed to load report. Please try again.
+            {getReportErrorMessage(reportQuery.error)}
           </div>
         ) : null}
 

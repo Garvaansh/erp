@@ -93,7 +93,9 @@ function MiniBars({ points }: { points: InsightPoint[] }) {
         <div key={point.label} className="space-y-1">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="truncate pr-2">{point.label}</span>
-            <span className="font-mono text-foreground">{formatNumber(point.value)}</span>
+            <span className="font-mono text-foreground">
+              {formatNumber(point.value)}
+            </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
@@ -119,8 +121,12 @@ function SummaryCards({ summary }: { summary: ReportSummary }) {
       {entries.map(([key, value]) => (
         <Card key={key} size="sm" className="erp-card-static bg-card">
           <CardContent className="space-y-1">
-            <p className="text-xs text-muted-foreground">{formatSummaryLabel(key)}</p>
-            <p className="text-lg font-semibold text-foreground">{String(value)}</p>
+            <p className="text-xs text-muted-foreground">
+              {formatSummaryLabel(key)}
+            </p>
+            <p className="text-lg font-semibold text-foreground">
+              {String(value)}
+            </p>
           </CardContent>
         </Card>
       ))}
@@ -142,7 +148,15 @@ function InsightsSection({
   isError: boolean;
 }) {
   const timeline = useMemo(() => {
-    const valueKey = config.key === "inventory" ? "quantity" : "total_amount";
+    if (config.key === "inventory") {
+      return groupRows(
+        rows,
+        (row) => toText(row.name),
+        (row) => toNumber(row.total_qty),
+      ).sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    const valueKey = config.key === "purchase" ? "total_value" : "total_amount";
     return groupRows(
       rows,
       (row) => toText(row.date),
@@ -154,8 +168,8 @@ function InsightsSection({
     if (config.key === "inventory") {
       return groupRows(
         rows,
-        (row) => toText(row.warehouse),
-        (row) => toNumber(row.quantity),
+        (row) => toText(row.category),
+        (row) => toNumber(row.available_qty),
       )
         .sort((a, b) => b.value - a.value)
         .slice(0, 6);
@@ -164,8 +178,8 @@ function InsightsSection({
     if (config.key === "purchase") {
       return groupRows(
         rows,
-        (row) => toText(row.vendor),
-        (row) => toNumber(row.total_amount),
+        (row) => toText(row.vendor_name),
+        (row) => toNumber(row.total_value),
       )
         .sort((a, b) => b.value - a.value)
         .slice(0, 6);
@@ -187,14 +201,15 @@ function InsightsSection({
 
     if (config.key === "inventory") {
       const topSku = [...rows].sort(
-        (a, b) => toNumber(b.quantity) - toNumber(a.quantity),
+        (a, b) => toNumber(b.total_qty) - toNumber(a.total_qty),
       )[0];
-      const avgUnitCost =
-        rows.reduce((sum, row) => sum + toNumber(row.unit_cost), 0) / rows.length;
+      const avgAvailableQty =
+        rows.reduce((sum, row) => sum + toNumber(row.available_qty), 0) /
+        rows.length;
 
       return [
-        `Top moving SKU: ${toText(topSku?.sku)} (${formatNumber(toNumber(topSku?.quantity))}).`,
-        `Average unit cost in range: ${formatNumber(avgUnitCost)}.`,
+        `Top stock item: ${toText(topSku?.name)} (${formatNumber(toNumber(topSku?.total_qty))}).`,
+        `Average available quantity: ${formatNumber(avgAvailableQty)}.`,
       ];
     }
 
@@ -232,14 +247,20 @@ function InsightsSection({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm">
               <CalendarDays className="size-4" />
-              {config.key === "inventory" ? "Stock Movement Timeline" : "Revenue Timeline"}
+              {config.key === "inventory"
+                ? "Stock Movement Timeline"
+                : "Revenue Timeline"}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading timeline...</p>
+              <p className="text-sm text-muted-foreground">
+                Loading timeline...
+              </p>
             ) : isError ? (
-              <p className="text-sm text-destructive">Unable to build timeline.</p>
+              <p className="text-sm text-destructive">
+                Unable to build timeline.
+              </p>
             ) : (
               <MiniBars points={timeline} />
             )}
@@ -259,9 +280,13 @@ function InsightsSection({
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading distribution...</p>
+              <p className="text-sm text-muted-foreground">
+                Loading distribution...
+              </p>
             ) : isError ? (
-              <p className="text-sm text-destructive">Unable to build distribution.</p>
+              <p className="text-sm text-destructive">
+                Unable to build distribution.
+              </p>
             ) : (
               <MiniBars points={distribution} />
             )}
@@ -286,7 +311,13 @@ function InsightsSection({
   );
 }
 
-function ReportTabPanel({ config, active }: { config: ReportConfig; active: boolean }) {
+function ReportTabPanel({
+  config,
+  active,
+}: {
+  config: ReportConfig;
+  active: boolean;
+}) {
   const state = useReportViewState(config, { enabled: active });
 
   return (
@@ -304,16 +335,17 @@ function ReportTabPanel({ config, active }: { config: ReportConfig; active: bool
 }
 
 export function ReportsView() {
-  const [activeTab, setActiveTab] = useState<(typeof REPORT_TABS)[number]["key"]>(
-    "inventory",
-  );
+  const [activeTab, setActiveTab] =
+    useState<(typeof REPORT_TABS)[number]["key"]>("inventory");
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="erp-section-title mb-1">Business Intelligence</p>
-          <h1 className="text-2xl font-bold text-foreground">Reports & Analytics</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            Reports & Analytics
+          </h1>
         </div>
         <div className="hidden rounded-lg border bg-card px-3 py-1.5 text-xs text-muted-foreground sm:flex sm:items-center sm:gap-2">
           <ChartColumnBig className="size-4" />
@@ -341,15 +373,24 @@ export function ReportsView() {
         </TabsList>
 
         <TabsContent value="inventory">
-          <ReportTabPanel config={REPORTS.inventory} active={activeTab === "inventory"} />
+          <ReportTabPanel
+            config={REPORTS.inventory}
+            active={activeTab === "inventory"}
+          />
         </TabsContent>
 
         <TabsContent value="purchase">
-          <ReportTabPanel config={REPORTS.purchase} active={activeTab === "purchase"} />
+          <ReportTabPanel
+            config={REPORTS.purchase}
+            active={activeTab === "purchase"}
+          />
         </TabsContent>
 
         <TabsContent value="sales">
-          <ReportTabPanel config={REPORTS.sales} active={activeTab === "sales"} />
+          <ReportTabPanel
+            config={REPORTS.sales}
+            active={activeTab === "sales"}
+          />
         </TabsContent>
       </Tabs>
     </div>
