@@ -26,9 +26,11 @@ export function POTable({ orders }: POTableProps) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <PackageOpen className="size-10 text-[var(--erp-text-muted)] mb-3 opacity-40" />
-        <p className="text-sm text-[var(--erp-text-muted)]">No procurement orders yet.</p>
+        <p className="text-sm text-[var(--erp-text-muted)]">
+          No procurement orders yet.
+        </p>
         <Link
-          href="/procurement/create"
+          href="/procurement"
           className="mt-4 text-xs font-semibold text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] uppercase tracking-wider transition-colors"
         >
           Create your first order →
@@ -55,7 +57,11 @@ export function POTable({ orders }: POTableProps) {
         </thead>
         <tbody>
           {orders.map((order, i) => (
-            <tr key={order.id} className="erp-fade-in" style={{ animationDelay: `${i * 0.03}s` }}>
+            <tr
+              key={order.id}
+              className="erp-fade-in"
+              style={{ animationDelay: `${i * 0.03}s` }}
+            >
               <td>
                 <Link
                   href={`/procurement/${order.id}`}
@@ -65,14 +71,18 @@ export function POTable({ orders }: POTableProps) {
                 </Link>
               </td>
               <td>
-                <span className="text-sm text-[var(--erp-text-primary)]">{order.supplier_name}</span>
+                <span className="text-sm text-[var(--erp-text-primary)]">
+                  {order.supplier_name}
+                </span>
               </td>
               <td>
                 <span className="text-sm text-[var(--erp-text-secondary)]">
                   {order.item_name || "—"}
                 </span>
                 {order.item_sku && (
-                  <span className="block text-[10px] font-mono text-[var(--erp-text-muted)]">{order.item_sku}</span>
+                  <span className="block text-[10px] font-mono text-[var(--erp-text-muted)]">
+                    {order.item_sku}
+                  </span>
                 )}
               </td>
               <td className="text-right font-mono text-sm text-[var(--erp-text-primary)]">
@@ -89,7 +99,10 @@ export function POTable({ orders }: POTableProps) {
               </td>
               <td className="text-right text-xs text-[var(--erp-text-muted)]">
                 {order.created_at
-                  ? new Date(order.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
+                  ? new Date(order.created_at).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                    })
                   : "—"}
               </td>
               <td>
