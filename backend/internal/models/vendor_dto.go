@@ -26,6 +26,7 @@ type UpdateVendorRequest struct {
 // VendorListRow is the response row for vendor listing.
 type VendorListRow struct {
 	ID            string `json:"id"`
+	VendorCode    string `json:"vendor_code"`
 	Name          string `json:"name"`
 	ContactPerson string `json:"contact_person"`
 	Phone         string `json:"phone"`
@@ -49,12 +50,12 @@ type StockAdjustmentRequest struct {
 
 // LowStockAlertRow is a response row for items below minimum stock.
 type LowStockAlertRow struct {
-	ItemID       string  `json:"item_id"`
-	SKU          string  `json:"sku"`
-	Name         string  `json:"name"`
-	Category     string  `json:"category"`
-	CurrentQty   float64 `json:"current_qty"`
-	MinQty       float64 `json:"min_qty"`
-	MaxQty       float64 `json:"max_qty"`
-	DeficitQty   float64 `json:"deficit_qty"`
+	ItemID     string  `json:"item_id"`
+	SKU        string  `json:"sku"`
+	Name       string  `json:"name"`
+	Category   string  `json:"category"`
+	CurrentQty float64 `json:"current_qty"`
+	MinQty     float64 `json:"min_qty"`
+	MaxQty     float64 `json:"max_qty"`
+	DeficitQty float64 `json:"deficit_qty"`
 }

@@ -14,11 +14,13 @@ import (
 
 type procurementService interface {
 	CreatePurchaseOrder(ctx context.Context, req models.CreatePurchaseOrderRequest, createdBy string) (*services.CreatePurchaseOrderResult, error)
-	ListPurchaseOrders(ctx context.Context) ([]services.ProcurementOrderListRow, error)
-	GetPurchaseOrderDetails(ctx context.Context, poID string) (*services.ProcurementOrderListRow, error)
-	ListPurchaseOrderBatches(ctx context.Context, poID string) ([]services.ProcurementBatchRow, error)
-	ExecuteProcurementReceipt(ctx context.Context, poID string, actualWeightReceived string) (*services.ExecuteProcurementReceiptResult, error)
-	VoidProcurementReceipt(ctx context.Context, poID string, transactionID string, performedBy string) (*services.VoidProcurementReceiptResult, error)
+	ListProcurement(ctx context.Context, limit, offset int32) ([]services.ProcurementListRow, error)
+	ListProcurementBatches(ctx context.Context, poID string) ([]services.ProcurementBatchRow, error)
+	GetProcurementDetail(ctx context.Context, poID string) (*services.ProcurementDetail, error)
+	ReceiveGoods(ctx context.Context, poID string, qty float64, performedBy string) (*services.ReceiveGoodsResult, error)
+	ReverseReceipt(ctx context.Context, poID string, batchIDs []string, reason string, performedBy string) (*services.ReverseReceiptResult, error)
+	CloseOrder(ctx context.Context, poID string, reason string, performedBy string) (*services.CloseOrderResult, error)
+	UpdatePurchaseOrder(ctx context.Context, poID string, req models.UpdatePurchaseOrderRequest, performedBy string) (*services.UpdatePurchaseOrderResult, error)
 }
 
 type ProcurementHandler struct {
@@ -30,7 +32,7 @@ func NewProcurementHandler(service procurementService, validator *validator.Vali
 	return &ProcurementHandler{service: service, validator: validator}
 }
 
-func (h *ProcurementHandler) CreateOrder(c *fiber.Ctx) error {
+func (h *ProcurementHandler) CreatePurchaseOrder(c *fiber.Ctx) error {
 	var req models.CreatePurchaseOrderRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -57,33 +59,44 @@ func (h *ProcurementHandler) CreateOrder(c *fiber.Ctx) error {
 
 	result, err := h.service.CreatePurchaseOrder(c.Context(), req, userID)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrInvalidProcurementOrderPayload):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Failed to create purchase order",
-			})
-		}
+		return h.procurementError(c, err, "Failed to create purchase order")
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status": "success",
 		"data":   result,
 	})
 }
 
-func (h *ProcurementHandler) ListOrders(c *fiber.Ctx) error {
-	rows, err := h.service.ListPurchaseOrders(c.Context())
+func (h *ProcurementHandler) ListProcurement(c *fiber.Ctx) error {
+	limit := int32(100)
+	offset := int32(0)
+
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": "limit must be a positive integer",
+			})
+		}
+		limit = int32(parsed)
+	}
+
+	if raw := strings.TrimSpace(c.Query("offset")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": "offset must be a non-negative integer",
+			})
+		}
+		offset = int32(parsed)
+	}
+
+	rows, err := h.service.ListProcurement(c.Context(), limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Failed to fetch purchase orders",
-		})
+		return h.procurementError(c, err, "Failed to fetch procurement list")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -92,34 +105,18 @@ func (h *ProcurementHandler) ListOrders(c *fiber.Ctx) error {
 	})
 }
 
-func (h *ProcurementHandler) GetOrderDetails(c *fiber.Ctx) error {
-	poID := strings.TrimSpace(c.Params("poId"))
+func (h *ProcurementHandler) GetProcurementDetail(c *fiber.Ctx) error {
+	poID := strings.TrimSpace(c.Params("id"))
 	if err := h.validator.Var(poID, "required,uuid4"); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
-			"message": "poId must be a valid UUID",
+			"message": "id must be a valid UUID",
 		})
 	}
 
-	row, err := h.service.GetPurchaseOrderDetails(c.Context(), poID)
+	row, err := h.service.GetProcurementDetail(c.Context(), poID)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrPurchaseOrderNotFound):
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		case errors.Is(err, services.ErrInvalidProcurementOrderPayload):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Failed to fetch purchase order details",
-			})
-		}
+		return h.procurementError(c, err, "Failed to fetch procurement detail")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -128,29 +125,18 @@ func (h *ProcurementHandler) GetOrderDetails(c *fiber.Ctx) error {
 	})
 }
 
-func (h *ProcurementHandler) ListOrderBatches(c *fiber.Ctx) error {
-	poID := strings.TrimSpace(c.Params("poId"))
+func (h *ProcurementHandler) ListProcurementBatches(c *fiber.Ctx) error {
+	poID := strings.TrimSpace(c.Params("id"))
 	if err := h.validator.Var(poID, "required,uuid4"); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
-			"message": "poId must be a valid UUID",
+			"message": "id must be a valid UUID",
 		})
 	}
 
-	rows, err := h.service.ListPurchaseOrderBatches(c.Context(), poID)
+	rows, err := h.service.ListProcurementBatches(c.Context(), poID)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrInvalidProcurementOrderPayload):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Failed to fetch purchase order batches",
-			})
-		}
+		return h.procurementError(c, err, "Failed to fetch procurement batches")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -159,55 +145,16 @@ func (h *ProcurementHandler) ListOrderBatches(c *fiber.Ctx) error {
 	})
 }
 
-func (h *ProcurementHandler) ReceiveOrder(c *fiber.Ctx) error {
-	var req models.ReceiveProcurementRequest
-	if err := c.BodyParser(&req); err != nil {
+func (h *ProcurementHandler) UpdatePurchaseOrder(c *fiber.Ctx) error {
+	poID := strings.TrimSpace(c.Params("id"))
+	if err := h.validator.Var(poID, "required,uuid4"); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Invalid JSON payload",
+			"message": "id must be a valid UUID",
 		})
 	}
 
-	if err := h.validator.Struct(req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Validation failed",
-			"errors":  validationErrors(err),
-		})
-	}
-
-	result, err := h.service.ExecuteProcurementReceipt(
-		c.Context(),
-		req.POID,
-		strconv.FormatFloat(req.ActualWeightReceived, 'f', -1, 64),
-	)
-	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrInvalidProcurementReceiptPayload),
-			errors.Is(err, services.ErrInvalidReceivedWeight),
-			errors.Is(err, services.ErrPurchaseOrderNotFound),
-			errors.Is(err, services.ErrPurchaseOrderNotPending),
-			errors.Is(err, services.ErrReceivedQuantityExceedsOrdered):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Failed to receive purchase order",
-			})
-		}
-	}
-
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status": "success",
-		"data":   result,
-	})
-}
-
-func (h *ProcurementHandler) VoidReceipt(c *fiber.Ctx) error {
-	var req models.VoidProcurementReceiptRequest
+	var req models.UpdatePurchaseOrderRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
@@ -231,25 +178,194 @@ func (h *ProcurementHandler) VoidReceipt(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.service.VoidProcurementReceipt(c.Context(), req.POID, req.TransactionID, userID)
+	result, err := h.service.UpdatePurchaseOrder(c.Context(), poID, req, userID)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrInvalidProcurementReceiptPayload),
-			errors.Is(err, services.ErrProcurementReceiptNotFound):
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Failed to void purchase receipt",
-			})
-		}
+		return h.procurementError(c, err, "Failed to update purchase order")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status": "success",
 		"data":   result,
 	})
+}
+
+func (h *ProcurementHandler) ReceiveGoods(c *fiber.Ctx) error {
+	poID := strings.TrimSpace(c.Params("id"))
+	if err := h.validator.Var(poID, "required,uuid4"); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "id must be a valid UUID",
+		})
+	}
+
+	var req models.ReceiveGoodsRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Invalid JSON payload",
+		})
+	}
+
+	if err := h.validator.Struct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Validation failed",
+			"errors":  validationErrors(err),
+		})
+	}
+
+	userID, ok := c.Locals("userID").(string)
+	if !ok || strings.TrimSpace(userID) == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Unauthorized",
+		})
+	}
+
+	result, err := h.service.ReceiveGoods(c.Context(), poID, req.Qty, userID)
+	if err != nil {
+		return h.procurementError(c, err, "Failed to receive goods")
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status": "success",
+		"data":   result,
+	})
+}
+
+func (h *ProcurementHandler) ReverseReceipt(c *fiber.Ctx) error {
+	poID := strings.TrimSpace(c.Params("id"))
+	if err := h.validator.Var(poID, "required,uuid4"); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "id must be a valid UUID",
+		})
+	}
+
+	var req models.ReverseReceiptRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Invalid JSON payload",
+		})
+	}
+
+	if err := h.validator.Struct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Validation failed",
+			"errors":  validationErrors(err),
+		})
+	}
+
+	batchIDs := make([]string, 0, 1+len(req.BatchIDs))
+	if batchID := strings.TrimSpace(req.BatchID); batchID != "" {
+		batchIDs = append(batchIDs, batchID)
+	}
+	for _, batchID := range req.BatchIDs {
+		trimmed := strings.TrimSpace(batchID)
+		if trimmed == "" {
+			continue
+		}
+		batchIDs = append(batchIDs, trimmed)
+	}
+
+	if len(batchIDs) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Either batch_id or batch_ids is required",
+		})
+	}
+
+	userID, ok := c.Locals("userID").(string)
+	if !ok || strings.TrimSpace(userID) == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Unauthorized",
+		})
+	}
+
+	result, err := h.service.ReverseReceipt(c.Context(), poID, batchIDs, req.Reason, userID)
+	if err != nil {
+		return h.procurementError(c, err, "Failed to reverse receipt")
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status": "success",
+		"data":   result,
+	})
+}
+
+func (h *ProcurementHandler) CloseOrder(c *fiber.Ctx) error {
+	poID := strings.TrimSpace(c.Params("id"))
+	if err := h.validator.Var(poID, "required,uuid4"); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "id must be a valid UUID",
+		})
+	}
+
+	var req models.CloseProcurementOrderRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Invalid JSON payload",
+		})
+	}
+
+	if err := h.validator.Struct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Validation failed",
+			"errors":  validationErrors(err),
+		})
+	}
+
+	userID, ok := c.Locals("userID").(string)
+	if !ok || strings.TrimSpace(userID) == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Unauthorized",
+		})
+	}
+
+	result, err := h.service.CloseOrder(c.Context(), poID, req.Reason, userID)
+	if err != nil {
+		return h.procurementError(c, err, "Failed to close purchase order")
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status": "success",
+		"data":   result,
+	})
+}
+
+func (h *ProcurementHandler) procurementError(c *fiber.Ctx, err error, fallback string) error {
+	switch {
+	case errors.Is(err, services.ErrInvalidProcurementOrderPayload),
+		errors.Is(err, services.ErrInvalidProcurementReceiptPayload),
+		errors.Is(err, services.ErrInvalidReceivedWeight),
+		errors.Is(err, services.ErrPurchaseOrderNotFound),
+		errors.Is(err, services.ErrProcurementBatchNotFound),
+		errors.Is(err, services.ErrProcurementEditReasonRequired):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+
+	case errors.Is(err, services.ErrReceivedQuantityExceedsOrdered),
+		errors.Is(err, services.ErrPurchaseOrderStateConflict),
+		errors.Is(err, services.ErrProcurementBatchStateConflict),
+		errors.Is(err, services.ErrProcurementUpdateRestricted):
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+
+	default:
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": fallback,
+		})
+	}
 }
