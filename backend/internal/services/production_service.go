@@ -7,10 +7,10 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/erp/backend/internal/db"
 	"github.com/erp/backend/internal/models"
+	"github.com/erp/backend/internal/utils"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -170,7 +170,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 		BatchID:         sourceBatchID,
 		Direction:       db.TxDirectionOUT,
 		Quantity:        inputQty,
-		ReferenceType:   db.TxReferenceTypePRODUCTIONJOURNAL,
+		ReferenceType:   string(db.TxReferenceTypePRODUCTIONJOURNAL),
 		ReferenceID:     movementGroupID,
 		PerformedBy:     workerID,
 		Notes:           pgtype.Text{String: "Input consumption for daily log", Valid: true},
@@ -184,7 +184,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 	}
 
 	if input.FinishedQty > 0 {
-		finishedDailySequence, seqErr := nextWIPDailySequenceByType(ctx, tx, db.BatchTypeFINISHED)
+		finishedBatchCode, finishedDailySequence, seqErr := utils.GenerateBundleID(ctx, tx)
 		if seqErr != nil {
 			return nil, fmt.Errorf("generate production batch daily sequence: %w", seqErr)
 		}
@@ -196,7 +196,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 
 		finishedBatch, createErr := qtx.CreateDerivedBatch(ctx, db.CreateDerivedBatchParams{
 			ItemID:        outputItem.ID,
-			BatchCode:     generateProductionBatchCode(outputItem.Sku.String, time.Now().UTC(), finishedDailySequence),
+			BatchCode:     finishedBatchCode,
 			DailySequence: finishedDailySequence,
 			InitialQty:    finishedQty,
 			RemainingQty:  finishedQty,
@@ -216,7 +216,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 			BatchID:         finishedBatch.ID,
 			Direction:       db.TxDirectionIN,
 			Quantity:        finishedQty,
-			ReferenceType:   db.TxReferenceTypePRODUCTIONJOURNAL,
+			ReferenceType:   string(db.TxReferenceTypePRODUCTIONJOURNAL),
 			ReferenceID:     movementGroupID,
 			PerformedBy:     workerID,
 			Notes:           pgtype.Text{String: "Finished goods receipt from daily log", Valid: true},
@@ -240,7 +240,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 			BatchID:         pgtype.UUID{},
 			Direction:       db.TxDirectionIN,
 			Quantity:        scrapQty,
-			ReferenceType:   db.TxReferenceTypePRODUCTIONJOURNAL,
+			ReferenceType:   string(db.TxReferenceTypePRODUCTIONJOURNAL),
 			ReferenceID:     movementGroupID,
 			PerformedBy:     workerID,
 			Notes:           pgtype.Text{String: "Scrap receipt from daily log", Valid: true},
@@ -292,6 +292,7 @@ func (s *ProductionService) getOrCreateScrapItem(ctx context.Context, qtx *db.Qu
 		Specs: models.SteelSpecs{
 			Thickness:  1,
 			Width:      1,
+			Grade:      "SCRAP",
 			CoilWeight: 1,
 		},
 		SKU: "",
@@ -321,8 +322,4 @@ func numericToFloat64(value pgtype.Numeric) (float64, bool) {
 	}
 
 	return floatValue.Float64, true
-}
-
-func generateProductionBatchCode(sku string, createdAt time.Time, sequence int32) string {
-	return generateFinishedBundleBatchCode(sku, createdAt, sequence)
 }

@@ -9,10 +9,10 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/erp/backend/internal/db"
 	"github.com/erp/backend/internal/models"
+	"github.com/erp/backend/internal/utils"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -101,7 +101,7 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 	}()
 
 	qtx := db.New(tx)
-	item, err := qtx.GetItem(ctx, itemID)
+	_, err = qtx.GetItem(ctx, itemID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvalidItemID
@@ -109,11 +109,7 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 		return nil, fmt.Errorf("fetch item: %w", err)
 	}
 
-	if !item.Sku.Valid || strings.TrimSpace(item.Sku.String) == "" {
-		return nil, fmt.Errorf("validate item sku: %w", ErrReceiveStockFailed)
-	}
-
-	batchCode, dailySequence, err := nextDailyBatchCode(ctx, tx, itemID, item.Sku.String)
+	batchCode, dailySequence, err := utils.GenerateBatchID(ctx, tx)
 	if err != nil {
 		return nil, fmt.Errorf("generate batch code: %w", err)
 	}
@@ -139,7 +135,7 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 		BatchID:         batch.ID,
 		Direction:       db.TxDirectionIN,
 		Quantity:        quantity,
-		ReferenceType:   db.TxReferenceTypePURCHASERECEIPT,
+		ReferenceType:   string(db.TxReferenceTypePURCHASERECEIPT),
 		ReferenceID:     movementGroupID,
 		PerformedBy:     performedByID,
 		Notes:           pgtype.Text{String: "Stock receipt", Valid: true},
@@ -388,37 +384,4 @@ func decodeSpecs(raw []byte) any {
 	}
 
 	return out
-}
-
-func nextDailyBatchCode(ctx context.Context, tx pgx.Tx, _ pgtype.UUID, sku string) (string, int32, error) {
-	skuToken := sanitizeLotSKUToken(sku)
-	if skuToken == "" {
-		return "", 0, errors.New("missing sku")
-	}
-
-	nowUTC := time.Now().UTC()
-	todayToken := nowUTC.Format("20060102")
-	prefix := fmt.Sprintf("LOT-RAW-%s-%s", skuToken, todayToken)
-	lockKey := fmt.Sprintf("lot-seq:RAW:%s", todayToken)
-
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
-		return "", 0, err
-	}
-
-	dayStartUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
-	dayEndUTC := dayStartUTC.Add(24 * time.Hour)
-
-	var nextSequence int32
-	err := tx.QueryRow(ctx, `
-		SELECT COALESCE(MAX(daily_sequence), 0) + 1
-		FROM inventory_batches
-		WHERE type = 'RAW'::batch_type
-		  AND created_at >= $1
-		  AND created_at < $2
-	`, dayStartUTC, dayEndUTC).Scan(&nextSequence)
-	if err != nil {
-		return "", 0, err
-	}
-
-	return fmt.Sprintf("%s-%02d", prefix, nextSequence), nextSequence, nil
 }

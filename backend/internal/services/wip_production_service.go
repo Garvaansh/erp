@@ -11,6 +11,7 @@ import (
 
 	"github.com/erp/backend/internal/db"
 	"github.com/erp/backend/internal/models"
+	"github.com/erp/backend/internal/utils"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -673,7 +674,7 @@ func finalizeJournal(ctx context.Context, tx pgx.Tx, qtx *db.Queries, journal db
 		BatchID:         sourceBatch.ID,
 		Direction:       db.TxDirectionOUT,
 		Quantity:        journal.InputQty,
-		ReferenceType:   db.TxReferenceTypePRODUCTIONJOURNAL,
+		ReferenceType:   string(db.TxReferenceTypePRODUCTIONJOURNAL),
 		ReferenceID:     journal.ID,
 		PerformedBy:     performedBy,
 		Notes: pgtype.Text{
@@ -697,20 +698,17 @@ func finalizeJournal(ctx context.Context, tx pgx.Tx, qtx *db.Queries, journal db
 		return "", err
 	}
 
-	item, err := qtx.GetItem(ctx, sourceBatch.ItemID)
+	batchCode, dailySequence, err := nextStageBatchCode(ctx, tx, outputType)
 	if err != nil {
-		return "", fmt.Errorf("get output item: %w", err)
-	}
+		if errors.Is(err, ErrInvalidBatchType) {
+			return "", err
+		}
 
-	dailySequence, err := nextWIPDailySequenceByType(ctx, tx, outputType)
-	if err != nil {
 		return "", fmt.Errorf("generate derived batch sequence: %w", err)
 	}
 
-	nowUTC := time.Now().UTC()
-	batchCode, err := generateStageBatchCode(outputType, item.Sku.String, nowUTC, dailySequence)
-	if err != nil {
-		return "", err
+	if batchCode == "" || dailySequence <= 0 {
+		return "", ErrProcessWIPFailed
 	}
 
 	reservedZero, ok := numericFromScaled(0)
@@ -748,7 +746,7 @@ func finalizeJournal(ctx context.Context, tx pgx.Tx, qtx *db.Queries, journal db
 		BatchID:         derivedBatch.ID,
 		Direction:       db.TxDirectionIN,
 		Quantity:        journal.FinishedQty,
-		ReferenceType:   db.TxReferenceTypePRODUCTIONJOURNAL,
+		ReferenceType:   string(db.TxReferenceTypePRODUCTIONJOURNAL),
 		ReferenceID:     journal.ID,
 		PerformedBy:     performedBy,
 		Notes: pgtype.Text{
@@ -784,31 +782,15 @@ func applyBatchConsumption(remainingScaled, consumeScaled int64) (int64, bool, e
 	return nextRemaining, nextRemaining == 0, nil
 }
 
-func nextWIPDailySequenceByType(ctx context.Context, tx pgx.Tx, batchType db.BatchType) (int32, error) {
-	nowUTC := time.Now().UTC()
-	todayToken := nowUTC.Format("20060102")
-	lockKey := fmt.Sprintf("wip-seq:%s:%s", batchType, todayToken)
-
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
-		return 0, err
+func nextStageBatchCode(ctx context.Context, tx pgx.Tx, batchType db.BatchType) (string, int32, error) {
+	switch batchType {
+	case db.BatchTypeMOLDED:
+		return utils.GenerateWIPID(ctx, tx, "MLD")
+	case db.BatchTypeFINISHED:
+		return utils.GenerateBundleID(ctx, tx)
+	default:
+		return "", 0, ErrInvalidBatchType
 	}
-
-	dayStartUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
-	dayEndUTC := dayStartUTC.Add(24 * time.Hour)
-
-	var nextSequence int32
-	err := tx.QueryRow(ctx, `
-		SELECT COALESCE(MAX(daily_sequence), 0) + 1
-		FROM inventory_batches
-		WHERE type = $1
-		  AND created_at >= $2
-		  AND created_at < $3
-	`, batchType, dayStartUTC, dayEndUTC).Scan(&nextSequence)
-	if err != nil {
-		return 0, err
-	}
-
-	return nextSequence, nil
 }
 
 func evaluateMassBalance(inputQty, outputQty, scrapQty, shortlengthQty, processLossQty int64) (int64, int64, bool) {
@@ -975,55 +957,4 @@ func buildWIPJournalResult(journal db.ProductionJournal, outputBatchID string) *
 		Tolerance:        scaledToDecimalString(tolerance),
 		OutputBatchID:    outputBatchID,
 	}
-}
-
-func generateFinishedBundleBatchCode(sku string, createdAt time.Time, sequence int32) string {
-	return fmt.Sprintf(
-		"BNDL-%s-%s-%02d",
-		sanitizeBundleSKUToken(sku),
-		createdAt.UTC().Format("20060102"),
-		sequence,
-	)
-}
-
-func generateMoldedWIPBatchCode(sku string, createdAt time.Time, sequence int32) string {
-	return fmt.Sprintf(
-		"MWIP-%s-%s-%02d",
-		sanitizeBundleSKUToken(sku),
-		createdAt.UTC().Format("20060102"),
-		sequence,
-	)
-}
-
-func generateStageBatchCode(batchType db.BatchType, sku string, createdAt time.Time, sequence int32) (string, error) {
-	switch batchType {
-	case db.BatchTypeMOLDED:
-		return generateMoldedWIPBatchCode(sku, createdAt, sequence), nil
-	case db.BatchTypeFINISHED:
-		return generateFinishedBundleBatchCode(sku, createdAt, sequence), nil
-	default:
-		return "", ErrInvalidBatchType
-	}
-}
-
-func sanitizeBundleSKUToken(raw string) string {
-	sku := strings.ToUpper(strings.TrimSpace(raw))
-	if sku == "" {
-		return "NA"
-	}
-
-	var builder strings.Builder
-	builder.Grow(len(sku))
-	for _, r := range sku {
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '-' || r == 'X' {
-			builder.WriteRune(r)
-		}
-	}
-
-	cleaned := builder.String()
-	if cleaned == "" {
-		return "NA"
-	}
-
-	return cleaned
 }

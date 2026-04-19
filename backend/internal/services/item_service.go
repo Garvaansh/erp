@@ -65,14 +65,6 @@ func (s *ItemService) FindOrCreateItem(ctx context.Context, req models.CreateIte
 	}
 
 	trimmedSKU := strings.TrimSpace(req.SKU)
-	if strings.EqualFold(strings.TrimSpace(req.Category), string(db.ItemCategoryRAW)) {
-		generatedSKU := buildRawMaterialSKU(req.Specs.Thickness, req.Specs.Width)
-		if generatedSKU == "" {
-			return zero, ErrInvalidItemPayload
-		}
-		trimmedSKU = generatedSKU
-	}
-
 	sku := pgtype.Text{String: trimmedSKU, Valid: trimmedSKU != ""}
 
 	item, err := s.queries.CreateItem(ctx, db.CreateItemParams{
@@ -162,7 +154,7 @@ func (s *ItemService) GetSelectableItems(ctx context.Context) ([]SelectableItemO
 
 	items := make([]SelectableItemOption, 0, len(rows))
 	for _, row := range rows {
-		specsLabel := compactSpecsForLabel(row.Specs)
+		specsLabel := formatSpecsForLabel(row.Specs)
 		items = append(items, SelectableItemOption{
 			ItemID:   uuidString(row.ID),
 			Label:    fmt.Sprintf("%s (%s)", strings.TrimSpace(row.Name), specsLabel),
@@ -185,4 +177,31 @@ func compactSpecsForLabel(specs []byte) string {
 	}
 
 	return out.String()
+}
+
+func formatSpecsForLabel(specs []byte) string {
+	var parsed models.SteelSpecs
+	if err := json.Unmarshal(specs, &parsed); err != nil {
+		return compactSpecsForLabel(specs)
+	}
+
+	parts := make([]string, 0, 4)
+	if parsed.Thickness > 0 {
+		parts = append(parts, "THK "+formatDimensionToken(parsed.Thickness))
+	}
+	if parsed.Width > 0 {
+		parts = append(parts, "W "+formatDimensionToken(parsed.Width))
+	}
+	if strings.TrimSpace(parsed.Grade) != "" {
+		parts = append(parts, "GR "+strings.ToUpper(strings.TrimSpace(parsed.Grade)))
+	}
+	if parsed.Diameter > 0 {
+		parts = append(parts, "DIA "+formatDimensionToken(parsed.Diameter))
+	}
+
+	if len(parts) == 0 {
+		return compactSpecsForLabel(specs)
+	}
+
+	return strings.Join(parts, " • ")
 }

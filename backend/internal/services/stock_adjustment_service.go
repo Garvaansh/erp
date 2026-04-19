@@ -101,7 +101,7 @@ func (s *StockAdjustmentService) AdjustStock(ctx context.Context, req models.Sto
 		BatchID:         batchID,
 		Direction:       direction,
 		Quantity:        qty,
-		ReferenceType:   db.TxReferenceTypeADJUSTMENT,
+		ReferenceType:   string(db.TxReferenceTypeADJUSTMENT),
 		ReferenceID:     movementGroupID,
 		PerformedBy:     performedByID,
 		Notes:           pgtype.Text{String: strings.TrimSpace(req.Reason), Valid: true},
