@@ -77,6 +77,7 @@ func main() {
 	wipProductionService := services.NewWIPProductionService(dbpool)
 	procurementService := services.NewProcurementService(dbpool)
 	paymentService := services.NewPaymentService(dbpool)
+	financeService := services.NewFinanceService(dbpool)
 	userService := services.NewUserService(dbpool)
 	vendorService := services.NewVendorService(dbpool)
 	stockAdjustmentService := services.NewStockAdjustmentService(dbpool)
@@ -89,6 +90,7 @@ func main() {
 	wipProductionHandler := handlers.NewWIPProductionHandler(wipProductionService, requestValidator)
 	procurementHandler := handlers.NewProcurementHandler(procurementService, requestValidator)
 	paymentHandler := handlers.NewPaymentHandler(paymentService, requestValidator)
+	financeHandler := handlers.NewFinanceHandler(financeService)
 	userHandler := handlers.NewUserHandler(userService, requestValidator)
 	vendorHandler := handlers.NewVendorHandler(vendorService, requestValidator)
 	stockAdjustmentHandler := handlers.NewStockAdjustmentHandler(stockAdjustmentService, requestValidator)
@@ -184,6 +186,9 @@ func main() {
 	paymentsGroup := api.Group("/payments", middleware.RequireAuth)
 	paymentsGroup.Post("/", paymentHandler.CreatePayment)
 	paymentsGroup.Get("/", paymentHandler.ListPayments)
+
+	financeGroup := api.Group("/finance", middleware.RequireAuth)
+	financeGroup.Get("/payables", financeHandler.GetPayables)
 
 	dashboardGroup := api.Group("/dashboard", middleware.RequireAuth)
 	dashboardGroup.Get("", dashboardHandler.GetSummary)
