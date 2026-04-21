@@ -46,3 +46,23 @@ export type LogPaymentResponse = {
     payment_status?: PayablePOStatus;
   };
 };
+
+export type LedgerTypeFilter = "ALL" | "IN" | "OUT";
+
+export type LedgerFilter = {
+  type?: LedgerTypeFilter;
+  from_date?: string;
+  to_date?: string;
+};
+
+export type LedgerEntry = {
+  tx_id: string;
+  type: "IN" | "OUT";
+  amount: number;
+  date: string;
+  reference_type: string;
+  reference_id: string;
+  reference_number: string;
+  party_name: string;
+  note: string;
+};

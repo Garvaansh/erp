@@ -62,4 +62,6 @@ export const reportsKeys = {
 export const financeKeys = {
   all: ["finance"] as const,
   payables: () => [...financeKeys.all, "payables"] as const,
+  ledger: (from?: string, to?: string) =>
+    [...financeKeys.all, "ledger", from ?? "", to ?? ""] as const,
 };

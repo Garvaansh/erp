@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/common/states";
 import { useLogPayment } from "@/hooks/useLogPayment";
 import { usePayables } from "@/hooks/usePayables";
 import type { LogPaymentPayload, PayablePO } from "@/types/finance";
+import { LedgerTab } from "./ledger-tab";
 import { PayablesTab } from "./payables-tab";
 
 function PlaceholderTab({
@@ -208,12 +209,7 @@ export function FinancePageClient() {
         </TabsContent>
 
         <TabsContent value="ledger" className="pt-2">
-          {activeTab === "ledger" ? (
-            <PlaceholderTab
-              title="Ledger view is not available yet"
-              description="Journal drill-down, account movements, and audit-friendly ledger views will appear here."
-            />
-          ) : null}
+          {activeTab === "ledger" ? <LedgerTab /> : null}
         </TabsContent>
       </Tabs>
 

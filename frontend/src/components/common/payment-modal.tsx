@@ -40,7 +40,9 @@ function PaymentModalForm({
   isSubmitting,
 }: PaymentModalFormProps) {
   const [amount, setAmount] = useState(po.due > 0 ? po.due.toFixed(2) : "");
-  const [paymentDate, setPaymentDate] = useState("");
+  const [paymentDate, setPaymentDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
   const [note, setNote] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -149,16 +151,7 @@ export function PaymentModal({
           onSubmit={onSubmit}
           isSubmitting={isSubmitting}
         />
-      ) : (
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Log Payment</DialogTitle>
-            <DialogDescription>
-              Select a purchase order to log a payment.
-            </DialogDescription>
-          </DialogHeader>
-        </DialogContent>
-      )}
+      ) : null}
     </Dialog>
   );
 }
