@@ -1,33 +1,17 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
-import type { ReportColumn } from "@/lib/reports/report-config";
-import type { ReportRow } from "@/features/reports/types";
+import {
+  REPORT_EXPORT_STYLE,
+  estimateColumnWidth,
+  getColumnProfiles,
+  normalizeFileName,
+  toCellText,
+  toHeaderLabel,
+  type ExportReportInput,
+} from "@/lib/export/report-export-style";
 
-export type ExportReportInput = {
-  reportTitle: string;
-  dateRangeLabel: string;
-  columns: ReportColumn[];
-  rows: ReportRow[];
-  fileName?: string;
-};
-
-function normalizeFileName(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-function toCellText(
-  value: string | number | null | undefined,
-): string | number {
-  if (value === null || value === undefined || value === "") {
-    return "-";
-  }
-
-  return value;
-}
+export type { ExportReportInput } from "@/lib/export/report-export-style";
 
 export async function exportReportToXlsx({
   reportTitle,
@@ -37,63 +21,122 @@ export async function exportReportToXlsx({
   fileName,
 }: ExportReportInput): Promise<void> {
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("Report");
+  const worksheet = workbook.addWorksheet("Report", {
+    views: [
+      {
+        state: "frozen",
+        ySplit: REPORT_EXPORT_STYLE.spacing.excelFreezeRowCount,
+      },
+    ],
+  });
   const columnCount = Math.max(columns.length, 1);
+  const columnProfiles = getColumnProfiles(columns, rows);
 
-  worksheet.mergeCells(1, 1, 1, columnCount);
+  columns.forEach((column, index) => {
+    const excelColumn = worksheet.getColumn(index + 1);
+    const profile = columnProfiles[index];
+    excelColumn.width = estimateColumnWidth(column, rows, profile);
+    excelColumn.alignment = {
+      horizontal: profile?.isNumeric ? "right" : "left",
+      vertical: "middle",
+    };
+  });
+
+  const lastCol = worksheet.columns.length || columnCount;
+  workbook.creator = "Reva Technologies";
+
+  worksheet.mergeCells(1, 1, 1, lastCol);
   const titleCell = worksheet.getCell(1, 1);
   titleCell.value = "Reva Technologies";
-  titleCell.font = { size: 18, bold: true };
-  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  titleCell.font = {
+    name: REPORT_EXPORT_STYLE.fonts.primary,
+    size: REPORT_EXPORT_STYLE.typography.titleSize,
+    bold: true,
+    color: { argb: REPORT_EXPORT_STYLE.colors.textPrimaryArgb },
+  };
+  worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
+  worksheet.getRow(1).height = 24;
 
-  worksheet.mergeCells(2, 1, 2, columnCount);
+  worksheet.mergeCells(2, 1, 2, lastCol);
   const subtitleCell = worksheet.getCell(2, 1);
   subtitleCell.value = `${reportTitle} | ${dateRangeLabel}`;
-  subtitleCell.font = { size: 12 };
-  subtitleCell.alignment = { horizontal: "center", vertical: "middle" };
+  subtitleCell.font = {
+    name: REPORT_EXPORT_STYLE.fonts.primary,
+    size: REPORT_EXPORT_STYLE.typography.subheaderSize,
+    color: { argb: REPORT_EXPORT_STYLE.colors.textMutedArgb },
+  };
+  worksheet.getRow(2).alignment = { horizontal: "center", vertical: "middle" };
+  worksheet.getRow(2).height = 20;
 
-  worksheet.getRow(3).height = 8;
+  worksheet.getRow(3).height = REPORT_EXPORT_STYLE.spacing.sectionGap;
 
-  const headerRow = worksheet.getRow(4);
-  headerRow.values = columns.map((column) => column.label);
-  headerRow.font = { bold: true };
+  const headerRow = worksheet.getRow(
+    REPORT_EXPORT_STYLE.spacing.excelHeaderRowIndex,
+  );
+  headerRow.values = columns.map((column) => toHeaderLabel(column.label));
+  headerRow.height = REPORT_EXPORT_STYLE.spacing.excelHeaderRowHeight;
   headerRow.alignment = { vertical: "middle", horizontal: "left" };
 
   headerRow.eachCell((cell) => {
+    cell.font = {
+      name: REPORT_EXPORT_STYLE.fonts.primary,
+      size: REPORT_EXPORT_STYLE.typography.tableHeaderSize,
+      bold: true,
+      color: { argb: REPORT_EXPORT_STYLE.colors.textPrimaryArgb },
+    };
     cell.fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: { argb: "FFE9ECEF" },
+      fgColor: { argb: REPORT_EXPORT_STYLE.colors.headerFillArgb },
+    };
+    cell.border = {
+      bottom: {
+        style: "thin",
+        color: { argb: REPORT_EXPORT_STYLE.colors.separatorArgb },
+      },
+    };
+    cell.alignment = {
+      horizontal: "left",
+      vertical: "middle",
     };
   });
 
   rows.forEach((row) => {
     const rowValues = columns.map((column) => toCellText(row[column.key]));
     const addedRow = worksheet.addRow(rowValues);
-    addedRow.alignment = { vertical: "middle" };
+
+    columns.forEach((column, index) => {
+      const profile = columnProfiles[index];
+      const cell = addedRow.getCell(index + 1);
+      const rawValue = row[column.key];
+
+      cell.font = {
+        name: REPORT_EXPORT_STYLE.fonts.primary,
+        size: REPORT_EXPORT_STYLE.typography.tableBodySize,
+        bold: profile?.isNumeric ? true : undefined,
+        color: { argb: REPORT_EXPORT_STYLE.colors.textPrimaryArgb },
+      };
+      cell.alignment = {
+        horizontal: profile?.isNumeric ? "right" : "left",
+        vertical: "middle",
+        wrapText: true,
+      };
+      cell.border = {
+        bottom: {
+          style: "thin",
+          color: { argb: REPORT_EXPORT_STYLE.colors.separatorArgb },
+        },
+      };
+
+      if (profile?.isCurrency && typeof rawValue === "number") {
+        cell.numFmt = REPORT_EXPORT_STYLE.excel.currencyNumFmt;
+      }
+    });
   });
 
-  worksheet.columns.forEach((excelColumn, index) => {
-    const column = columns[index];
-    if (!column) {
-      excelColumn.width = 20;
-      return;
-    }
-
-    const values = rows.map((row) => row[column.key]);
-    const maxLength = Math.max(
-      column.label.length,
-      ...values.map((value) => String(toCellText(value)).length),
-    );
-
-    excelColumn.width = Math.min(Math.max(maxLength + 2, 12), 40);
-
-    const hasNumericValue = values.some((value) => typeof value === "number");
-    excelColumn.alignment = {
-      horizontal: hasNumericValue ? "right" : "left",
-      vertical: "middle",
-    };
-  });
+  if (columns.length === 0) {
+    worksheet.getColumn(1).width = 20;
+  }
 
   const outputFileName = fileName ?? normalizeFileName(reportTitle);
   const buffer = await workbook.xlsx.writeBuffer();
