@@ -65,6 +65,25 @@ func GenerateTransactionID(ctx context.Context, tx pgx.Tx) (string, error) {
 	return fmt.Sprintf("TX-%s-%03d", dayToken, seq), nil
 }
 
+// GeneratePaymentTransactionID generates a TX-YYMMDD-NNN identifier for a payment record.
+func GeneratePaymentTransactionID(ctx context.Context, tx pgx.Tx) (string, error) {
+	dayToken := time.Now().UTC().Format(dayLayout)
+	seq, err := nextDailySequenceByPattern(
+		ctx,
+		tx,
+		"finance:payment-tx",
+		"purchase_order_payments",
+		"transaction_id",
+		"TX-"+dayToken+"-%",
+		3,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("TX-%s-%03d", dayToken, seq), nil
+}
+
 // GenerateBatchID generates a raw-material batch ID and its per-day sequence value.
 func GenerateBatchID(ctx context.Context, tx pgx.Tx) (string, int32, error) {
 	return generateInventoryIDByPrefix(ctx, tx, "BAT")
