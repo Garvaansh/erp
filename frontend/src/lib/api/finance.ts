@@ -1,5 +1,7 @@
 import { apiClient } from "@/lib/api/api-client";
 import type {
+  LedgerEntry,
+  LedgerFilter,
   LogPaymentPayload,
   LogPaymentResponse,
   PayablePO,
@@ -118,4 +120,60 @@ export async function logPayment(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+function parseLedgerEntry(value: unknown): LedgerEntry | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const txType = readString(value.type);
+  if (txType !== "IN" && txType !== "OUT") {
+    return null;
+  }
+
+  return {
+    tx_id: readString(value.tx_id),
+    type: txType,
+    amount: readNumber(value.amount),
+    date: readString(value.date),
+    reference_type: readString(value.reference_type),
+    reference_id: readString(value.reference_id),
+    reference_number: readString(value.reference_number),
+    party_name: readString(value.party_name),
+    note: readString(value.note),
+  };
+}
+
+function parseLedgerResponse(payload: unknown): LedgerEntry[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload
+    .map((row) => parseLedgerEntry(row))
+    .filter((row): row is LedgerEntry => row !== null);
+}
+
+export async function getLedger(
+  filter?: LedgerFilter,
+): Promise<LedgerEntry[]> {
+  const query = new URLSearchParams();
+
+  if (filter?.from_date?.trim()) {
+    query.set("from_date", filter.from_date.trim());
+  }
+
+  if (filter?.to_date?.trim()) {
+    query.set("to_date", filter.to_date.trim());
+  }
+
+  const suffix = query.toString();
+  const path = suffix ? `/finance/ledger?${suffix}` : "/finance/ledger";
+
+  const data = await apiClient<unknown>(path, {
+    method: "GET",
+  });
+
+  return parseLedgerResponse(data);
 }
