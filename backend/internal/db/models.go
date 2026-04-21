@@ -570,7 +570,6 @@ type PurchaseOrder struct {
 	ReceivedQty      pgtype.Numeric      `json:"received_qty"`
 	VendorInvoiceRef pgtype.Text         `json:"vendor_invoice_ref"`
 	Notes            pgtype.Text         `json:"notes"`
-	PaymentStatus    string              `json:"payment_status"`
 }
 
 type PurchaseOrderLog struct {
@@ -583,13 +582,14 @@ type PurchaseOrderLog struct {
 }
 
 type PurchaseOrderPayment struct {
-	ID          pgtype.UUID        `json:"id"`
-	PoID        pgtype.UUID        `json:"po_id"`
-	Amount      pgtype.Numeric     `json:"amount"`
-	PaymentDate pgtype.Timestamptz `json:"payment_date"`
-	Note        pgtype.Text        `json:"note"`
-	CreatedBy   pgtype.UUID        `json:"created_by"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID            pgtype.UUID        `json:"id"`
+	PoID          pgtype.UUID        `json:"po_id"`
+	Amount        pgtype.Numeric     `json:"amount"`
+	PaymentDate   pgtype.Timestamptz `json:"payment_date"`
+	Note          pgtype.Text        `json:"note"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	TransactionID string             `json:"transaction_id"`
 }
 
 type Role struct {

@@ -162,7 +162,6 @@ INSERT INTO purchase_orders (
     received_qty,
     vendor_invoice_ref,
     notes,
-    payment_status,
     status,
     created_by
 ) VALUES (
@@ -177,10 +176,9 @@ INSERT INTO purchase_orders (
     $9,
     $10,
     $11,
-    $12,
-    $13
+    $12
 )
-RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes, payment_status
+RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes
 `
 
 type CreatePurchaseOrderParams struct {
@@ -194,7 +192,6 @@ type CreatePurchaseOrderParams struct {
 	ReceivedQty      pgtype.Numeric      `json:"received_qty"`
 	VendorInvoiceRef pgtype.Text         `json:"vendor_invoice_ref"`
 	Notes            pgtype.Text         `json:"notes"`
-	PaymentStatus    string              `json:"payment_status"`
 	Status           PurchaseOrderStatus `json:"status"`
 	CreatedBy        pgtype.UUID         `json:"created_by"`
 }
@@ -211,7 +208,6 @@ func (q *Queries) CreatePurchaseOrder(ctx context.Context, arg CreatePurchaseOrd
 		arg.ReceivedQty,
 		arg.VendorInvoiceRef,
 		arg.Notes,
-		arg.PaymentStatus,
 		arg.Status,
 		arg.CreatedBy,
 	)
@@ -232,7 +228,6 @@ func (q *Queries) CreatePurchaseOrder(ctx context.Context, arg CreatePurchaseOrd
 		&i.ReceivedQty,
 		&i.VendorInvoiceRef,
 		&i.Notes,
-		&i.PaymentStatus,
 	)
 	return i, err
 }
@@ -285,7 +280,6 @@ SELECT
     po.received_qty,
     po.unit_price,
     po.vendor_invoice_ref,
-    po.payment_status,
     po.notes,
     po.status,
     po.created_by,
@@ -334,7 +328,6 @@ type GetProcurementDetailRow struct {
 	ReceivedQty         pgtype.Numeric      `json:"received_qty"`
 	UnitPrice           pgtype.Numeric      `json:"unit_price"`
 	VendorInvoiceRef    pgtype.Text         `json:"vendor_invoice_ref"`
-	PaymentStatus       string              `json:"payment_status"`
 	Notes               pgtype.Text         `json:"notes"`
 	Status              PurchaseOrderStatus `json:"status"`
 	CreatedBy           pgtype.UUID         `json:"created_by"`
@@ -367,7 +360,6 @@ func (q *Queries) GetProcurementDetail(ctx context.Context, id pgtype.UUID) (Get
 		&i.ReceivedQty,
 		&i.UnitPrice,
 		&i.VendorInvoiceRef,
-		&i.PaymentStatus,
 		&i.Notes,
 		&i.Status,
 		&i.CreatedBy,
@@ -398,7 +390,6 @@ SELECT
     po.received_qty,
     po.unit_price,
     po.vendor_invoice_ref,
-    po.payment_status,
     po.status,
     po.created_at,
     po.updated_at,
@@ -446,7 +437,6 @@ type GetProcurementListRow struct {
 	ReceivedQty      pgtype.Numeric      `json:"received_qty"`
 	UnitPrice        pgtype.Numeric      `json:"unit_price"`
 	VendorInvoiceRef pgtype.Text         `json:"vendor_invoice_ref"`
-	PaymentStatus    string              `json:"payment_status"`
 	Status           PurchaseOrderStatus `json:"status"`
 	CreatedAt        pgtype.Timestamptz  `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz  `json:"updated_at"`
@@ -477,7 +467,6 @@ func (q *Queries) GetProcurementList(ctx context.Context, arg GetProcurementList
 			&i.ReceivedQty,
 			&i.UnitPrice,
 			&i.VendorInvoiceRef,
-			&i.PaymentStatus,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -495,7 +484,7 @@ func (q *Queries) GetProcurementList(ctx context.Context, arg GetProcurementList
 }
 
 const getPurchaseOrderByID = `-- name: GetPurchaseOrderByID :one
-SELECT id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes, payment_status
+SELECT id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes
 FROM purchase_orders
 WHERE id = $1
 LIMIT 1
@@ -520,13 +509,12 @@ func (q *Queries) GetPurchaseOrderByID(ctx context.Context, id pgtype.UUID) (Pur
 		&i.ReceivedQty,
 		&i.VendorInvoiceRef,
 		&i.Notes,
-		&i.PaymentStatus,
 	)
 	return i, err
 }
 
 const getPurchaseOrderByIDForUpdate = `-- name: GetPurchaseOrderByIDForUpdate :one
-SELECT id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes, payment_status
+SELECT id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes
 FROM purchase_orders
 WHERE id = $1
 FOR UPDATE
@@ -551,7 +539,6 @@ func (q *Queries) GetPurchaseOrderByIDForUpdate(ctx context.Context, id pgtype.U
 		&i.ReceivedQty,
 		&i.VendorInvoiceRef,
 		&i.Notes,
-		&i.PaymentStatus,
 	)
 	return i, err
 }
@@ -649,7 +636,7 @@ SET
     status = $8,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes, payment_status
+RETURNING id, po_number, vendor_name, item_id, ordered_qty, unit_price, status, created_by, created_at, updated_at, vendor_id, transaction_id, received_qty, vendor_invoice_ref, notes
 `
 
 type UpdatePurchaseOrderParams struct {
@@ -691,7 +678,6 @@ func (q *Queries) UpdatePurchaseOrder(ctx context.Context, arg UpdatePurchaseOrd
 		&i.ReceivedQty,
 		&i.VendorInvoiceRef,
 		&i.Notes,
-		&i.PaymentStatus,
 	)
 	return i, err
 }

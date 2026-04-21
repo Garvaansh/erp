@@ -10,7 +10,6 @@ INSERT INTO purchase_orders (
     received_qty,
     vendor_invoice_ref,
     notes,
-    payment_status,
     status,
     created_by
 ) VALUES (
@@ -25,8 +24,7 @@ INSERT INTO purchase_orders (
     $9,
     $10,
     $11,
-    $12,
-    $13
+    $12
 )
 RETURNING *;
 
@@ -150,7 +148,6 @@ SELECT
     po.received_qty,
     po.unit_price,
     po.vendor_invoice_ref,
-    po.payment_status,
     po.status,
     po.created_at,
     po.updated_at,
@@ -195,7 +192,6 @@ SELECT
     po.received_qty,
     po.unit_price,
     po.vendor_invoice_ref,
-    po.payment_status,
     po.notes,
     po.status,
     po.created_by,

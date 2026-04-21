@@ -11,6 +11,72 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getFinanceLedgerRows = `-- name: GetFinanceLedgerRows :many
+SELECT
+    p.transaction_id AS tx_id,
+    'OUT'::text AS tx_type,
+    p.amount,
+    p.payment_date AS tx_date,
+    'PO'::text AS reference_type,
+    po.id AS reference_id,
+    po.po_number AS reference_number,
+    COALESCE(v.name, '') AS party_name,
+    COALESCE(p.note, '') AS note
+FROM purchase_order_payments p
+JOIN purchase_orders po ON po.id = p.po_id
+LEFT JOIN vendors v ON v.id = po.vendor_id
+WHERE p.payment_date >= COALESCE($1::timestamptz, NOW() - INTERVAL '30 days')
+  AND p.payment_date <= COALESCE($2::timestamptz, NOW())
+ORDER BY p.payment_date DESC, p.created_at DESC
+`
+
+type GetFinanceLedgerRowsParams struct {
+	FromDate pgtype.Timestamptz `json:"from_date"`
+	ToDate   pgtype.Timestamptz `json:"to_date"`
+}
+
+type GetFinanceLedgerRowsRow struct {
+	TxID            string             `json:"tx_id"`
+	TxType          string             `json:"tx_type"`
+	Amount          pgtype.Numeric     `json:"amount"`
+	TxDate          pgtype.Timestamptz `json:"tx_date"`
+	ReferenceType   string             `json:"reference_type"`
+	ReferenceID     pgtype.UUID        `json:"reference_id"`
+	ReferenceNumber string             `json:"reference_number"`
+	PartyName       string             `json:"party_name"`
+	Note            string             `json:"note"`
+}
+
+func (q *Queries) GetFinanceLedgerRows(ctx context.Context, arg GetFinanceLedgerRowsParams) ([]GetFinanceLedgerRowsRow, error) {
+	rows, err := q.db.Query(ctx, getFinanceLedgerRows, arg.FromDate, arg.ToDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFinanceLedgerRowsRow
+	for rows.Next() {
+		var i GetFinanceLedgerRowsRow
+		if err := rows.Scan(
+			&i.TxID,
+			&i.TxType,
+			&i.Amount,
+			&i.TxDate,
+			&i.ReferenceType,
+			&i.ReferenceID,
+			&i.ReferenceNumber,
+			&i.PartyName,
+			&i.Note,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFinancePayablesRows = `-- name: GetFinancePayablesRows :many
 WITH payment_totals AS (
     SELECT

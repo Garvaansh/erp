@@ -125,3 +125,21 @@ ORDER BY
     vt.total_due DESC,
     up.total_due DESC,
     up.po_number ASC;
+
+-- name: GetFinanceLedgerRows :many
+SELECT
+    p.transaction_id AS tx_id,
+    'OUT'::text AS tx_type,
+    p.amount,
+    p.payment_date AS tx_date,
+    'PO'::text AS reference_type,
+    po.id AS reference_id,
+    po.po_number AS reference_number,
+    COALESCE(v.name, '') AS party_name,
+    COALESCE(p.note, '') AS note
+FROM purchase_order_payments p
+JOIN purchase_orders po ON po.id = p.po_id
+LEFT JOIN vendors v ON v.id = po.vendor_id
+WHERE p.payment_date >= COALESCE(sqlc.narg('from_date')::timestamptz, NOW() - INTERVAL '30 days')
+  AND p.payment_date <= COALESCE(sqlc.narg('to_date')::timestamptz, NOW())
+ORDER BY p.payment_date DESC, p.created_at DESC;
