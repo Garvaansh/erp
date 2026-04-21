@@ -25,8 +25,6 @@ const (
 	procurementActionReversed    = "REVERSED"
 	procurementActionForceClosed = "FORCE_CLOSED"
 	procurementActionUpdated     = "UPDATED"
-
-	procurementPaymentPending = "PENDING"
 )
 
 var (
@@ -269,7 +267,6 @@ func (s *ProcurementService) CreatePurchaseOrder(ctx context.Context, req models
 		ReceivedQty:      zeroNumeric(),
 		VendorInvoiceRef: textOrNull(req.VendorInvoiceRef),
 		Notes:            textOrNull(req.Notes),
-		PaymentStatus:    procurementPaymentPending,
 		Status:           db.PurchaseOrderStatusPENDING,
 		CreatedBy:        createdByID,
 	})

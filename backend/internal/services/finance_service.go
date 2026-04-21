@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/erp/backend/internal/db"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrGetPayablesFailed = errors.New("unable to load finance payables")
+var ErrGetLedgerFailed = errors.New("unable to load finance ledger")
+var ErrInvalidLedgerFilter = errors.New("invalid ledger filter")
 
 type FinanceService struct {
 	queries *db.Queries
@@ -134,4 +138,94 @@ func (s *FinanceService) GetPayables(ctx context.Context) ([]VendorPayables, err
 	}
 
 	return ordered, nil
+}
+
+// ---------------------------------------------------------------------------
+// Ledger
+// ---------------------------------------------------------------------------
+
+type LedgerFilter struct {
+	FromDate string
+	ToDate   string
+}
+
+type LedgerEntry struct {
+	TxID            string  `json:"tx_id"`
+	Type            string  `json:"type"`
+	Amount          float64 `json:"amount"`
+	Date            string  `json:"date"`
+	ReferenceType   string  `json:"reference_type"`
+	ReferenceID     string  `json:"reference_id"`
+	ReferenceNumber string  `json:"reference_number"`
+	PartyName       string  `json:"party_name"`
+	Note            string  `json:"note"`
+}
+
+func (s *FinanceService) GetLedger(ctx context.Context, filter LedgerFilter) ([]LedgerEntry, error) {
+	if s == nil || s.queries == nil {
+		return nil, ErrGetLedgerFailed
+	}
+
+	params, err := buildLedgerParams(filter)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.queries.GetFinanceLedgerRows(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("query ledger: %w", ErrGetLedgerFailed)
+	}
+
+	entries := make([]LedgerEntry, 0, len(rows))
+	for _, row := range rows {
+		amount, ok := numericToFloat64(row.Amount)
+		if !ok {
+			return nil, fmt.Errorf("decode amount: %w", ErrGetLedgerFailed)
+		}
+
+		entries = append(entries, LedgerEntry{
+			TxID:            row.TxID,
+			Type:            row.TxType,
+			Amount:          amount,
+			Date:            timestampValue(row.TxDate),
+			ReferenceType:   row.ReferenceType,
+			ReferenceID:     uuidString(row.ReferenceID),
+			ReferenceNumber: row.ReferenceNumber,
+			PartyName:       row.PartyName,
+			Note:            row.Note,
+		})
+	}
+
+	return entries, nil
+}
+
+func buildLedgerParams(filter LedgerFilter) (db.GetFinanceLedgerRowsParams, error) {
+	var params db.GetFinanceLedgerRowsParams
+
+	if filter.FromDate != "" {
+		t, err := parseFilterDate(filter.FromDate)
+		if err != nil {
+			return params, fmt.Errorf("from_date: %w", ErrInvalidLedgerFilter)
+		}
+		params.FromDate = t
+	}
+
+	if filter.ToDate != "" {
+		t, err := parseFilterDate(filter.ToDate)
+		if err != nil {
+			return params, fmt.Errorf("to_date: %w", ErrInvalidLedgerFilter)
+		}
+		params.ToDate = t
+	}
+
+	return params, nil
+}
+
+func parseFilterDate(value string) (pgtype.Timestamptz, error) {
+	t, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return pgtype.Timestamptz{}, err
+	}
+
+	return pgtype.Timestamptz{Time: t, Valid: true}, nil
 }

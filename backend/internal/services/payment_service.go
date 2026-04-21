@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/erp/backend/internal/models"
+	"github.com/erp/backend/internal/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,13 +28,14 @@ type PaymentService struct {
 }
 
 type PaymentRow struct {
-	ID          string  `json:"id"`
-	POID        string  `json:"po_id"`
-	Amount      float64 `json:"amount"`
-	PaymentDate string  `json:"payment_date"`
-	Note        string  `json:"note,omitempty"`
-	CreatedBy   string  `json:"created_by"`
-	CreatedAt   string  `json:"created_at"`
+	ID            string  `json:"id"`
+	TransactionID string  `json:"transaction_id"`
+	POID          string  `json:"po_id"`
+	Amount        float64 `json:"amount"`
+	PaymentDate   string  `json:"payment_date"`
+	Note          string  `json:"note,omitempty"`
+	CreatedBy     string  `json:"created_by"`
+	CreatedAt     string  `json:"created_at"`
 }
 
 type CreatePaymentResult struct {
@@ -99,6 +101,11 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req models.CreatePay
 		return nil, ErrPaymentPurchaseNotFound
 	}
 
+	txID, err := utils.GeneratePaymentTransactionID(ctx, tx)
+	if err != nil {
+		return nil, fmt.Errorf("generate transaction id: %w", err)
+	}
+
 	var paymentID pgtype.UUID
 	var paymentDateOut pgtype.Timestamptz
 	var noteOut pgtype.Text
@@ -106,12 +113,12 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req models.CreatePay
 
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO purchase_order_payments (
-			po_id, amount, payment_date, note, created_by
+			po_id, transaction_id, amount, payment_date, note, created_by
 		) VALUES (
-			$1, $2, $3, $4, $5
+			$1, $2, $3, $4, $5, $6
 		)
 		RETURNING id, payment_date, note, created_at
-	`, poID, amount, paymentDate, textOrNull(req.Note), createdByID).Scan(&paymentID, &paymentDateOut, &noteOut, &createdAt); err != nil {
+	`, poID, txID, amount, paymentDate, textOrNull(req.Note), createdByID).Scan(&paymentID, &paymentDateOut, &noteOut, &createdAt); err != nil {
 		return nil, fmt.Errorf("insert payment: %w", err)
 	}
 
@@ -136,13 +143,14 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req models.CreatePay
 
 	return &CreatePaymentResult{
 		Payment: PaymentRow{
-			ID:          uuidString(paymentID),
-			POID:        uuidString(poID),
-			Amount:      req.Amount,
-			PaymentDate: timestampValue(paymentDateOut),
-			Note:        textValue(noteOut),
-			CreatedBy:   uuidString(createdByID),
-			CreatedAt:   timestampValue(createdAt),
+			ID:            uuidString(paymentID),
+			TransactionID: txID,
+			POID:          uuidString(poID),
+			Amount:        req.Amount,
+			PaymentDate:   timestampValue(paymentDateOut),
+			Note:          textValue(noteOut),
+			CreatedBy:     uuidString(createdByID),
+			CreatedAt:     timestampValue(createdAt),
 		},
 		Summary: summary,
 	}, nil
@@ -157,6 +165,7 @@ func (s *PaymentService) ListPayments(ctx context.Context, filter models.Payment
 	query := `
 		SELECT
 			id,
+			transaction_id,
 			po_id,
 			amount,
 			payment_date,
@@ -184,6 +193,7 @@ func (s *PaymentService) ListPayments(ctx context.Context, filter models.Payment
 	items := make([]PaymentRow, 0)
 	for rows.Next() {
 		var id pgtype.UUID
+		var transactionID string
 		var rowPOID pgtype.UUID
 		var amountNumeric pgtype.Numeric
 		var paymentDate pgtype.Timestamptz
@@ -191,7 +201,7 @@ func (s *PaymentService) ListPayments(ctx context.Context, filter models.Payment
 		var createdBy pgtype.UUID
 		var createdAt pgtype.Timestamptz
 
-		if err := rows.Scan(&id, &rowPOID, &amountNumeric, &paymentDate, &note, &createdBy, &createdAt); err != nil {
+		if err := rows.Scan(&id, &transactionID, &rowPOID, &amountNumeric, &paymentDate, &note, &createdBy, &createdAt); err != nil {
 			return nil, ErrListPaymentsFailed
 		}
 
@@ -201,13 +211,14 @@ func (s *PaymentService) ListPayments(ctx context.Context, filter models.Payment
 		}
 
 		items = append(items, PaymentRow{
-			ID:          uuidString(id),
-			POID:        uuidString(rowPOID),
-			Amount:      amountValue,
-			PaymentDate: timestampValue(paymentDate),
-			Note:        textValue(note),
-			CreatedBy:   uuidString(createdBy),
-			CreatedAt:   timestampValue(createdAt),
+			ID:            uuidString(id),
+			TransactionID: transactionID,
+			POID:          uuidString(rowPOID),
+			Amount:        amountValue,
+			PaymentDate:   timestampValue(paymentDate),
+			Note:          textValue(note),
+			CreatedBy:     uuidString(createdBy),
+			CreatedAt:     timestampValue(createdAt),
 		})
 	}
 	if err := rows.Err(); err != nil {
