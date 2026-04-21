@@ -28,10 +28,34 @@ export async function POST(request: Request) {
     return apiError("Invalid JSON payload", 400);
   }
 
+  if (typeof body !== "object" || body === null) {
+    return apiError("Invalid JSON payload", 400);
+  }
+
+  const requestPayload = body as Record<string, unknown>;
+  const poId =
+    typeof requestPayload.po_id === "string" ? requestPayload.po_id.trim() : "";
+  const qtyValue =
+    typeof requestPayload.qty === "number"
+      ? requestPayload.qty
+      : typeof requestPayload.actual_weight_received === "number"
+        ? requestPayload.actual_weight_received
+        : typeof requestPayload.actual_weight === "number"
+          ? requestPayload.actual_weight
+          : Number.NaN;
+
+  if (!poId) {
+    return apiError("Invalid purchase order reference", 400);
+  }
+
+  if (!Number.isFinite(qtyValue) || qtyValue <= 0) {
+    return apiError("Invalid receipt quantity", 400);
+  }
+
   let backendResponse: Response;
   try {
     backendResponse = await fetchWithTimeout(
-      `${backendURL}/api/v1/procurement/receive`,
+      `${backendURL}/api/v1/procurement/${encodeURIComponent(poId)}/receive`,
       {
         method: "POST",
         headers: {
@@ -39,7 +63,7 @@ export async function POST(request: Request) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ qty: qtyValue }),
       },
     );
   } catch (error) {

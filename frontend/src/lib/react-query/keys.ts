@@ -58,3 +58,8 @@ export const reportsKeys = {
   production: (date: string, lot: string) =>
     [...reportsKeys.all, "production", date, lot] as const,
 };
+
+export const financeKeys = {
+  all: ["finance"] as const,
+  payables: () => [...financeKeys.all, "payables"] as const,
+};
