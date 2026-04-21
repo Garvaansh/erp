@@ -1,5 +1,5 @@
-import { FinanceOverviewCard } from "@/features/finance/components/finance-overview-card";
+import { FinancePageClient } from "@/features/finance/components/finance-page-client";
 
 export default function FinancePage() {
-  return <FinanceOverviewCard />;
+  return <FinancePageClient />;
 }
