@@ -29,6 +29,7 @@ type Querier interface {
 	GetBatch(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
 	GetBatchByID(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
 	GetBatchForUpdate(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
+	GetFinancePayablesRows(ctx context.Context) ([]GetFinancePayablesRowsRow, error)
 	GetInventoryAggregated(ctx context.Context) ([]GetInventoryAggregatedRow, error)
 	GetItem(ctx context.Context, id pgtype.UUID) (Item, error)
 	GetJournalByIDForUpdate(ctx context.Context, id pgtype.UUID) (ProductionJournal, error)
