@@ -389,7 +389,6 @@ function parseCreateResult(payload: unknown): CreatePurchaseOrderResult {
     po_number: asRequiredString(payload.po_number, "po_number"),
     transaction_id: asRequiredString(payload.transaction_id, "transaction_id"),
     status: asStatus(payload.status, "status"),
-    payment_status: asOptionalPaymentStatus(payload.payment_status),
   };
 }
 
@@ -408,7 +407,6 @@ function parseUpdateResult(payload: unknown): UpdatePurchaseOrderResult {
     received_qty: asRequiredNumber(payload.received_qty, "received_qty"),
     unit_price: asRequiredNumber(payload.unit_price, "unit_price"),
     vendor_invoice_ref: asOptionalString(payload.vendor_invoice_ref),
-    payment_status: asOptionalPaymentStatus(payload.payment_status),
     notes: asOptionalString(payload.notes),
     status: asStatus(payload.status, "status"),
   };

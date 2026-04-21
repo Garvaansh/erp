@@ -82,7 +82,6 @@ export type CreatePurchaseOrderPayload = {
   ordered_qty: number;
   unit_price: number;
   vendor_invoice_ref?: string;
-  payment_status?: ProcurementPaymentInputStatus;
   notes?: string;
 };
 
@@ -91,7 +90,6 @@ export type UpdatePurchaseOrderPayload = {
   ordered_qty?: number;
   unit_price?: number;
   vendor_invoice_ref?: string;
-  payment_status?: ProcurementPaymentInputStatus;
   notes?: string;
   edit_reason: string;
 };
@@ -115,7 +113,6 @@ export type CreatePurchaseOrderResult = {
   po_number: string;
   transaction_id: string;
   status: ProcurementStatus;
-  payment_status?: ProcurementPaymentStatus;
 };
 
 export type UpdatePurchaseOrderResult = {
@@ -125,7 +122,6 @@ export type UpdatePurchaseOrderResult = {
   received_qty: number;
   unit_price: number;
   vendor_invoice_ref?: string;
-  payment_status?: ProcurementPaymentStatus;
   notes?: string;
   status: ProcurementStatus;
 };

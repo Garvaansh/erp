@@ -49,7 +49,6 @@ import { getVendors } from "@/features/vendors/api";
 import type {
   InventoryBatch,
   ProcurementMaterialOption,
-  ProcurementPaymentInputStatus,
   ProcurementPaymentStatus,
   ProcurementStatus,
   PurchaseOrder,
@@ -253,8 +252,6 @@ export default function ProcurementPage() {
   const [createQty, setCreateQty] = useState("");
   const [createUnitPrice, setCreateUnitPrice] = useState("");
   const [createVendorInvoiceRef, setCreateVendorInvoiceRef] = useState("");
-  const [createPaymentStatus, setCreatePaymentStatus] =
-    useState<ProcurementPaymentInputStatus>("PENDING");
   const [createNotes, setCreateNotes] = useState("");
   const [createError, setCreateError] = useState("");
 
@@ -352,7 +349,6 @@ export default function ProcurementPage() {
     setCreateQty("");
     setCreateUnitPrice("");
     setCreateVendorInvoiceRef("");
-    setCreatePaymentStatus("PENDING");
     setCreateNotes("");
     setCreateError("");
     setSelectedMaterialId("");
@@ -466,7 +462,6 @@ export default function ProcurementPage() {
         ordered_qty: orderedQty,
         unit_price: unitPrice,
         vendor_invoice_ref: vendorInvoiceRef || undefined,
-        payment_status: createPaymentStatus,
         notes: notes || undefined,
       });
 
@@ -971,28 +966,6 @@ export default function ProcurementPage() {
                   }
                   placeholder="INV-2026-8891"
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Payment Status</Label>
-                <Select
-                  value={createPaymentStatus}
-                  onValueChange={(value) =>
-                    setCreatePaymentStatus(
-                      (value as ProcurementPaymentInputStatus | null) ??
-                        "PENDING",
-                    )
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select payment status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PENDING">Unpaid</SelectItem>
-                    <SelectItem value="PARTIAL">Partial Payment</SelectItem>
-                    <SelectItem value="COMPLETED">Paid in Full</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="space-y-1.5">

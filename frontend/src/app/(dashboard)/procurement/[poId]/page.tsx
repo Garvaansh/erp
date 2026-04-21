@@ -30,7 +30,6 @@ import { useProcurementDetail } from "@/features/procurement/queries";
 import type {
   InventoryBatch,
   ProcurementLog,
-  ProcurementPaymentInputStatus,
   ProcurementPaymentStatus,
   ProcurementStatus,
 } from "@/features/procurement/types";
@@ -118,21 +117,7 @@ function formatPaymentStatusLabel(
   }
 }
 
-function toPaymentInputStatus(
-  status: ProcurementPaymentStatus | undefined,
-): ProcurementPaymentInputStatus {
-  switch ((status ?? "UNPAID").toUpperCase()) {
-    case "COMPLETED":
-    case "PAID":
-      return "COMPLETED";
-    case "PARTIAL":
-      return "PARTIAL";
-    case "PENDING":
-    case "UNPAID":
-    default:
-      return "PENDING";
-  }
-}
+
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiClientError) {
@@ -236,8 +221,6 @@ export default function ProcurementDetailPage({
   const [editOpen, setEditOpen] = useState(false);
   const [editUnitPrice, setEditUnitPrice] = useState("");
   const [editVendorInvoiceRef, setEditVendorInvoiceRef] = useState("");
-  const [editPaymentStatus, setEditPaymentStatus] =
-    useState<ProcurementPaymentInputStatus>("PENDING");
   const [editNotes, setEditNotes] = useState("");
   const [editReason, setEditReason] = useState("");
   const [editError, setEditError] = useState("");
@@ -303,7 +286,6 @@ export default function ProcurementDetailPage({
   function openEditDialog() {
     setEditUnitPrice(String(po.unit_price));
     setEditVendorInvoiceRef(po.vendor_invoice_ref ?? "");
-    setEditPaymentStatus(toPaymentInputStatus(po.payment_status));
     setEditNotes(po.notes ?? "");
     setEditReason("");
     setEditError("");
@@ -349,7 +331,6 @@ export default function ProcurementDetailPage({
         payload: {
           unit_price: unitPrice,
           vendor_invoice_ref: editVendorInvoiceRef,
-          payment_status: editPaymentStatus,
           notes: editNotes,
           edit_reason: reason,
         },
@@ -652,15 +633,6 @@ export default function ProcurementDetailPage({
                     setEditVendorInvoiceRef(event.target.value)
                   }
                   disabled={updateMutation.isPending}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Payment Status</Label>
-                <Input
-                  value={formatPaymentStatusLabel(editPaymentStatus)}
-                  readOnly
-                  disabled
                 />
               </div>
 

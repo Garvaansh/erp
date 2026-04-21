@@ -8,7 +8,6 @@ type CreatePurchaseOrderRequest struct {
 	OrderedQty       float64 `json:"ordered_qty" validate:"required,gt=0"`
 	UnitPrice        float64 `json:"unit_price" validate:"required,gt=0"`
 	VendorInvoiceRef string  `json:"vendor_invoice_ref,omitempty"`
-	PaymentStatus    string  `json:"payment_status,omitempty"`
 	Notes            string  `json:"notes,omitempty"`
 }
 
@@ -35,7 +34,6 @@ type UpdatePurchaseOrderRequest struct {
 	OrderedQty       *float64 `json:"ordered_qty,omitempty" validate:"omitempty,gt=0"`
 	UnitPrice        *float64 `json:"unit_price,omitempty" validate:"omitempty,gt=0"`
 	VendorInvoiceRef *string  `json:"vendor_invoice_ref,omitempty"`
-	PaymentStatus    *string  `json:"payment_status,omitempty"`
 	Notes            *string  `json:"notes,omitempty"`
 	EditReason       string   `json:"edit_reason" validate:"required,min=3"`
 }
