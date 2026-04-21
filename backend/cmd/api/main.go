@@ -189,6 +189,7 @@ func main() {
 
 	financeGroup := api.Group("/finance", middleware.RequireAuth)
 	financeGroup.Get("/payables", financeHandler.GetPayables)
+	financeGroup.Get("/ledger", financeHandler.GetLedger)
 
 	dashboardGroup := api.Group("/dashboard", middleware.RequireAuth)
 	dashboardGroup.Get("", dashboardHandler.GetSummary)
