@@ -2,11 +2,10 @@ package models
 
 // SteelSpecs defines the strict JSONB structure accepted for steel item dimensions.
 type SteelSpecs struct {
-	Thickness  float64 `json:"thickness" validate:"required,gt=0"`
-	Width      float64 `json:"width" validate:"required,gt=0"`
-	Grade      string  `json:"grade" validate:"required,min=1,max=32"`
-	Diameter   float64 `json:"diameter,omitempty" validate:"omitempty,gt=0"`
-	CoilWeight float64 `json:"coil_weight" validate:"required,gt=0"`
+	Thickness float64 `json:"thickness" validate:"required,gt=0"`
+	Width     float64 `json:"width" validate:"required,gt=0"`
+	Grade     string  `json:"grade,omitempty" validate:"omitempty,max=32"`
+	Diameter  float64 `json:"diameter,omitempty" validate:"omitempty,gt=0"`
 }
 
 // CreateItemRequest is the validated API payload for item creation.
