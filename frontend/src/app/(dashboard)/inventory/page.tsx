@@ -66,7 +66,7 @@ function InventoryPageContent() {
   }
 
   const snapshot = snapshotQuery.data ?? emptySnapshot;
-  const isAdmin = user?.is_admin === true;
+  const isAdmin = user?.role_code === "ADMIN";
 
   return (
     <InventoryView
