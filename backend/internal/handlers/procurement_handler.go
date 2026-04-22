@@ -12,24 +12,28 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type procurementService interface {
+type procurementCommandService interface {
 	CreatePurchaseOrder(ctx context.Context, req models.CreatePurchaseOrderRequest, createdBy string) (*services.CreatePurchaseOrderResult, error)
-	ListProcurement(ctx context.Context, limit, offset int32) ([]services.ProcurementListRow, error)
-	ListProcurementBatches(ctx context.Context, poID string) ([]services.ProcurementBatchRow, error)
-	GetProcurementDetail(ctx context.Context, poID string) (*services.ProcurementDetail, error)
 	ReceiveGoods(ctx context.Context, poID string, qty float64, performedBy string) (*services.ReceiveGoodsResult, error)
 	ReverseReceipt(ctx context.Context, poID string, batchIDs []string, reason string, performedBy string) (*services.ReverseReceiptResult, error)
 	CloseOrder(ctx context.Context, poID string, reason string, performedBy string) (*services.CloseOrderResult, error)
 	UpdatePurchaseOrder(ctx context.Context, poID string, req models.UpdatePurchaseOrderRequest, performedBy string) (*services.UpdatePurchaseOrderResult, error)
 }
 
+type procurementQueryService interface {
+	ListProcurement(ctx context.Context, limit, offset int32) ([]services.ProcurementListRow, error)
+	ListProcurementBatches(ctx context.Context, poID string) ([]services.ProcurementBatchRow, error)
+	GetProcurementDetail(ctx context.Context, poID string) (*services.ProcurementDetail, error)
+}
+
 type ProcurementHandler struct {
-	service   procurementService
+	command   procurementCommandService
+	query     procurementQueryService
 	validator *validator.Validate
 }
 
-func NewProcurementHandler(service procurementService, validator *validator.Validate) *ProcurementHandler {
-	return &ProcurementHandler{service: service, validator: validator}
+func NewProcurementHandler(command procurementCommandService, query procurementQueryService, validator *validator.Validate) *ProcurementHandler {
+	return &ProcurementHandler{command: command, query: query, validator: validator}
 }
 
 func (h *ProcurementHandler) CreatePurchaseOrder(c *fiber.Ctx) error {
@@ -57,7 +61,7 @@ func (h *ProcurementHandler) CreatePurchaseOrder(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.service.CreatePurchaseOrder(c.Context(), req, userID)
+	result, err := h.command.CreatePurchaseOrder(c.Context(), req, userID)
 	if err != nil {
 		return h.procurementError(c, err, "Failed to create purchase order")
 	}
@@ -94,7 +98,7 @@ func (h *ProcurementHandler) ListProcurement(c *fiber.Ctx) error {
 		offset = int32(parsed)
 	}
 
-	rows, err := h.service.ListProcurement(c.Context(), limit, offset)
+	rows, err := h.query.ListProcurement(c.Context(), limit, offset)
 	if err != nil {
 		return h.procurementError(c, err, "Failed to fetch procurement list")
 	}
@@ -114,7 +118,7 @@ func (h *ProcurementHandler) GetProcurementDetail(c *fiber.Ctx) error {
 		})
 	}
 
-	row, err := h.service.GetProcurementDetail(c.Context(), poID)
+	row, err := h.query.GetProcurementDetail(c.Context(), poID)
 	if err != nil {
 		return h.procurementError(c, err, "Failed to fetch procurement detail")
 	}
@@ -134,7 +138,7 @@ func (h *ProcurementHandler) ListProcurementBatches(c *fiber.Ctx) error {
 		})
 	}
 
-	rows, err := h.service.ListProcurementBatches(c.Context(), poID)
+	rows, err := h.query.ListProcurementBatches(c.Context(), poID)
 	if err != nil {
 		return h.procurementError(c, err, "Failed to fetch procurement batches")
 	}
@@ -178,7 +182,7 @@ func (h *ProcurementHandler) UpdatePurchaseOrder(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.service.UpdatePurchaseOrder(c.Context(), poID, req, userID)
+	result, err := h.command.UpdatePurchaseOrder(c.Context(), poID, req, userID)
 	if err != nil {
 		return h.procurementError(c, err, "Failed to update purchase order")
 	}
@@ -222,7 +226,7 @@ func (h *ProcurementHandler) ReceiveGoods(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.service.ReceiveGoods(c.Context(), poID, req.Qty, userID)
+	result, err := h.command.ReceiveGoods(c.Context(), poID, req.Qty, userID)
 	if err != nil {
 		return h.procurementError(c, err, "Failed to receive goods")
 	}
@@ -285,7 +289,7 @@ func (h *ProcurementHandler) ReverseReceipt(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.service.ReverseReceipt(c.Context(), poID, batchIDs, req.Reason, userID)
+	result, err := h.command.ReverseReceipt(c.Context(), poID, batchIDs, req.Reason, userID)
 	if err != nil {
 		return h.procurementError(c, err, "Failed to reverse receipt")
 	}
@@ -329,7 +333,7 @@ func (h *ProcurementHandler) CloseOrder(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.service.CloseOrder(c.Context(), poID, req.Reason, userID)
+	result, err := h.command.CloseOrder(c.Context(), poID, req.Reason, userID)
 	if err != nil {
 		return h.procurementError(c, err, "Failed to close purchase order")
 	}
@@ -345,10 +349,15 @@ func (h *ProcurementHandler) procurementError(c *fiber.Ctx, err error, fallback 
 	case errors.Is(err, services.ErrInvalidProcurementOrderPayload),
 		errors.Is(err, services.ErrInvalidProcurementReceiptPayload),
 		errors.Is(err, services.ErrInvalidReceivedWeight),
-		errors.Is(err, services.ErrPurchaseOrderNotFound),
-		errors.Is(err, services.ErrProcurementBatchNotFound),
 		errors.Is(err, services.ErrProcurementEditReasonRequired):
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+
+	case errors.Is(err, services.ErrPurchaseOrderNotFound),
+		errors.Is(err, services.ErrProcurementBatchNotFound):
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"status":  "error",
 			"message": err.Error(),
 		})
