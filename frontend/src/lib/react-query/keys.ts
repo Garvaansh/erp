@@ -45,7 +45,9 @@ export const usersKeys = {
 
 export const vendorsKeys = {
   all: ["vendors"] as const,
-  list: () => [...vendorsKeys.all, "list"] as const,
+  list: (filter: "active" | "archived" | "all" = "active", search = "") =>
+    [...vendorsKeys.all, "list", filter, search] as const,
+  profile: (id: string) => [...vendorsKeys.all, "profile", id] as const,
 };
 
 export const reportsKeys = {

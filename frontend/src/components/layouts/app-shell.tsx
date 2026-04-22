@@ -6,7 +6,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   PackageSearch,
-  ClipboardList,
   Landmark,
   Truck,
   Settings,

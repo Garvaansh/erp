@@ -37,7 +37,7 @@ export function POCreateForm({ materials }: POCreateFormProps) {
 
   const { data: vendors = [] } = useQuery({
     queryKey: vendorsKeys.list(),
-    queryFn: getVendors,
+    queryFn: () => getVendors(),
     refetchOnWindowFocus: false,
   });
 

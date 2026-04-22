@@ -181,7 +181,12 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
 
   const [diameterByItemID, setDiameterByItemID] = useState<
     Record<string, string>
-  >({});
+  >(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+    return parseDiameterCache(window.localStorage.getItem(DIAMETER_CACHE_KEY));
+  });
 
   const outputRef = useRef<HTMLInputElement>(null);
   const scrapRef = useRef<HTMLInputElement>(null);
@@ -222,7 +227,7 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
   });
 
   const items: WIPSelectableItem[] = selectableItemsQuery.data ?? [];
-  const lots: WIPLotOption[] = lotsQuery.data ?? [];
+  const lots: WIPLotOption[] = useMemo(() => lotsQuery.data ?? [], [lotsQuery.data]);
   const entries: WIPActivityEntry[] = entriesQuery.data ?? [];
 
   const loadingItems = selectableItemsQuery.isFetching;
@@ -230,15 +235,6 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
   const loadingEntries = entriesQuery.isFetching;
   const submitting =
     submitMoldingMutation.isPending || submitPolishingMutation.isPending;
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    setDiameterByItemID(
-      parseDiameterCache(window.localStorage.getItem(DIAMETER_CACHE_KEY)),
-    );
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {

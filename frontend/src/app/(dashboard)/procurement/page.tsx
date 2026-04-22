@@ -234,7 +234,7 @@ export default function ProcurementPage() {
   const materialsQuery = useProcurementMaterialOptions();
   const vendorsQuery = useQuery({
     queryKey: vendorsKeys.list(),
-    queryFn: getVendors,
+    queryFn: () => getVendors(),
   });
 
   const createMutation = useCreatePurchaseOrder();

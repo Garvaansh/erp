@@ -144,9 +144,7 @@ export const getPurchaseReport = async (
   };
 };
 
-export const getSalesReport = async (
-  _filters: ReportFilters,
-): Promise<ReportResponse> => {
+export const getSalesReport = async (): Promise<ReportResponse> => {
   return {
     summary: {
       records: 0,

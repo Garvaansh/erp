@@ -53,7 +53,7 @@ export async function loginAction(
       ok: true,
       message: "Login successful.",
     };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
       message: "Authentication service unavailable.",

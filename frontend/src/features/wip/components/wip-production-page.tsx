@@ -260,7 +260,12 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
 
   const [diameterByItemID, setDiameterByItemID] = useState<
     Record<string, string>
-  >({});
+  >(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+    return parseDiameterCache(window.localStorage.getItem(DIAMETER_CACHE_KEY));
+  });
   const warnedEntryDateRef = useRef<Record<string, string>>({});
 
   const moldingItemsQuery = useQuery({
@@ -300,10 +305,22 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
     mutationFn: (journalID: string) => rejectPendingApproval(journalID),
   });
 
-  const moldingItems: WIPSelectableItem[] = moldingItemsQuery.data ?? [];
-  const polishingItems: WIPSelectableItem[] = polishingItemsQuery.data ?? [];
-  const moldingLots: WIPLotOption[] = moldingLotsQuery.data ?? [];
-  const polishingLots: WIPLotOption[] = polishingLotsQuery.data ?? [];
+  const moldingItems: WIPSelectableItem[] = useMemo(
+    () => moldingItemsQuery.data ?? [],
+    [moldingItemsQuery.data],
+  );
+  const polishingItems: WIPSelectableItem[] = useMemo(
+    () => polishingItemsQuery.data ?? [],
+    [polishingItemsQuery.data],
+  );
+  const moldingLots: WIPLotOption[] = useMemo(
+    () => moldingLotsQuery.data ?? [],
+    [moldingLotsQuery.data],
+  );
+  const polishingLots: WIPLotOption[] = useMemo(
+    () => polishingLotsQuery.data ?? [],
+    [polishingLotsQuery.data],
+  );
   const pendingRows: PendingWIPApproval[] = pendingQuery.data ?? [];
 
   const loadingMoldingItems = moldingItemsQuery.isFetching;
@@ -311,17 +328,6 @@ export function WIPProductionPage({ isAdmin }: WIPProductionPageProps) {
   const loadingMoldingLots = moldingLotsQuery.isFetching;
   const loadingPolishingLots = polishingLotsQuery.isFetching;
   const loadingPendingRows = pendingQuery.isFetching;
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const cached = parseDiameterCache(
-      window.localStorage.getItem(DIAMETER_CACHE_KEY),
-    );
-    setDiameterByItemID(cached);
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {

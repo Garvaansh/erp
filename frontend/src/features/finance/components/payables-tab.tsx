@@ -105,7 +105,7 @@ export function PayablesTab({
         </CardHeader>
       </Card>
 
-      <Accordion type="multiple" className="space-y-3">
+      <Accordion className="space-y-3">
         {vendors.map((vendor) => (
           <ExpandableRow
             key={vendor.vendor_id}
