@@ -1,42 +1,66 @@
 package models
 
-// CreateVendorRequest is the payload for POST /vendors.
-type CreateVendorRequest struct {
+// CreateVendorCommandRequest is the payload for POST /vendors.
+type CreateVendorCommandRequest struct {
 	Name          string `json:"name" validate:"required,min=2,max=255"`
+	Code          string `json:"code" validate:"required,min=3,max=20"`
 	ContactPerson string `json:"contact_person" validate:"max=255"`
 	Phone         string `json:"phone" validate:"max=50"`
 	Email         string `json:"email" validate:"max=255"`
-	Address       string `json:"address"`
 	GSTIN         string `json:"gstin" validate:"max=20"`
-	PaymentTerms  string `json:"payment_terms" validate:"max=100"`
+	Notes         string `json:"notes"`
 }
 
-// UpdateVendorRequest is the payload for PUT /vendors/:vendorId.
-type UpdateVendorRequest struct {
+// UpdateVendorCommandRequest is the payload for PATCH /vendors/:id.
+type UpdateVendorCommandRequest struct {
 	Name          *string `json:"name" validate:"omitempty,min=2,max=255"`
+	Code          *string `json:"code"`
 	ContactPerson *string `json:"contact_person" validate:"omitempty,max=255"`
 	Phone         *string `json:"phone" validate:"omitempty,max=50"`
 	Email         *string `json:"email" validate:"omitempty,max=255"`
-	Address       *string `json:"address"`
 	GSTIN         *string `json:"gstin" validate:"omitempty,max=20"`
-	PaymentTerms  *string `json:"payment_terms" validate:"omitempty,max=100"`
+	Notes         *string `json:"notes"`
 	IsActive      *bool   `json:"is_active"`
 }
 
-// VendorListRow is the response row for vendor listing.
-type VendorListRow struct {
+type VendorReadModel struct {
 	ID            string `json:"id"`
-	VendorCode    string `json:"vendor_code"`
 	Name          string `json:"name"`
+	Code          string `json:"code"`
 	ContactPerson string `json:"contact_person"`
 	Phone         string `json:"phone"`
 	Email         string `json:"email"`
-	Address       string `json:"address"`
 	GSTIN         string `json:"gstin"`
-	PaymentTerms  string `json:"payment_terms"`
 	IsActive      bool   `json:"is_active"`
+	Notes         string `json:"notes"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
+}
+
+type VendorProfileSummary struct {
+	TotalPurchased float64 `json:"total_purchased"`
+	TotalPaid      float64 `json:"total_paid"`
+	TotalDue       float64 `json:"total_due"`
+}
+
+type VendorProfilePO struct {
+	ID        string `json:"id"`
+	PONumber  string `json:"po_number"`
+	CreatedAt string `json:"created_at"`
+}
+
+type VendorProfilePayment struct {
+	TransactionID string  `json:"transaction_id"`
+	Amount        float64 `json:"amount"`
+	PaymentDate   string  `json:"payment_date"`
+	PONumber      string  `json:"po_number"`
+}
+
+type VendorProfileResponse struct {
+	Vendor         VendorReadModel        `json:"vendor"`
+	Summary        VendorProfileSummary   `json:"summary"`
+	RecentPOs      []VendorProfilePO      `json:"recent_pos"`
+	RecentPayments []VendorProfilePayment `json:"recent_payments"`
 }
 
 // StockAdjustmentRequest is the payload for POST /inventory/adjust.

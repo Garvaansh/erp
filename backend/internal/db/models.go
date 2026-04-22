@@ -624,4 +624,5 @@ type Vendor struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	VendorCode    string             `json:"vendor_code"`
+	Notes         pgtype.Text        `json:"notes"`
 }
