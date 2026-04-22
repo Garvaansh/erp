@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/erp/backend/internal/models"
@@ -28,6 +30,8 @@ func (h *ItemHandler) CreateItem(c *fiber.Ctx) error {
 			"message": "Invalid JSON payload",
 		})
 	}
+
+	normalizeCreateItemRequest(&req, c.Body())
 
 	if err := h.validator.Struct(req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -63,6 +67,130 @@ func (h *ItemHandler) CreateItem(c *fiber.Ctx) error {
 		"status": "success",
 		"item":   services.MapItemResponse(item),
 	})
+}
+
+func normalizeCreateItemRequest(req *models.CreateItemRequest, rawBody []byte) {
+	if req == nil || len(rawBody) == 0 {
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.Category = strings.ToUpper(strings.TrimSpace(req.Category))
+	req.BaseUnit = strings.ToUpper(strings.TrimSpace(req.BaseUnit))
+	req.Specs.Grade = strings.TrimSpace(req.Specs.Grade)
+
+	var payload map[string]any
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		return
+	}
+
+	legacyRawInput := hasAnyKey(payload, "thickness", "width", "item_type", "initial_weight", "coil_weight")
+	if legacyRawInput {
+		if req.Category == "" {
+			req.Category = "RAW"
+		}
+		if req.BaseUnit == "" {
+			req.BaseUnit = "WEIGHT"
+		}
+	}
+
+	var specsPayload map[string]any
+	if rawSpecs, ok := payload["specs"].(map[string]any); ok {
+		specsPayload = rawSpecs
+	}
+
+	if req.Specs.Thickness <= 0 {
+		if value, ok := numberFromMap(payload, "thickness"); ok {
+			req.Specs.Thickness = value
+		} else if value, ok := numberFromMap(specsPayload, "thickness"); ok {
+			req.Specs.Thickness = value
+		}
+	}
+
+	if req.Specs.Width <= 0 {
+		if value, ok := numberFromMap(payload, "width"); ok {
+			req.Specs.Width = value
+		} else if value, ok := numberFromMap(specsPayload, "width"); ok {
+			req.Specs.Width = value
+		}
+	}
+
+	if req.Specs.Diameter <= 0 {
+		if value, ok := numberFromMap(payload, "diameter"); ok {
+			req.Specs.Diameter = value
+		} else if value, ok := numberFromMap(specsPayload, "diameter"); ok {
+			req.Specs.Diameter = value
+		}
+	}
+
+	if req.Specs.Grade == "" {
+		if value, ok := stringFromMap(payload, "grade"); ok {
+			req.Specs.Grade = value
+		} else if value, ok := stringFromMap(specsPayload, "grade"); ok {
+			req.Specs.Grade = value
+		}
+	}
+}
+
+func hasAnyKey(values map[string]any, keys ...string) bool {
+	if len(values) == 0 {
+		return false
+	}
+
+	for _, key := range keys {
+		if _, ok := values[key]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+func numberFromMap(values map[string]any, key string) (float64, bool) {
+	if len(values) == 0 {
+		return 0, false
+	}
+
+	raw, exists := values[key]
+	if !exists || raw == nil {
+		return 0, false
+	}
+
+	switch typed := raw.(type) {
+	case float64:
+		return typed, true
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	default:
+		return 0, false
+	}
+}
+
+func stringFromMap(values map[string]any, key string) (string, bool) {
+	if len(values) == 0 {
+		return "", false
+	}
+
+	raw, exists := values[key]
+	if !exists || raw == nil {
+		return "", false
+	}
+
+	typed, ok := raw.(string)
+	if !ok {
+		return "", false
+	}
+
+	trimmed := strings.TrimSpace(typed)
+	if trimmed == "" {
+		return "", false
+	}
+
+	return trimmed, true
 }
 
 func (h *ItemHandler) ListItems(c *fiber.Ctx) error {

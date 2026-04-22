@@ -290,10 +290,9 @@ func (s *ProductionService) getOrCreateScrapItem(ctx context.Context, qtx *db.Qu
 		Category: string(db.ItemCategorySCRAP),
 		BaseUnit: string(db.BaseUnitTypeWEIGHT),
 		Specs: models.SteelSpecs{
-			Thickness:  1,
-			Width:      1,
-			Grade:      "SCRAP",
-			CoilWeight: 1,
+			Thickness: 1,
+			Width:     1,
+			Grade:     "SCRAP",
 		},
 		SKU: "",
 	})

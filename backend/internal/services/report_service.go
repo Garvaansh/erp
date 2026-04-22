@@ -438,7 +438,7 @@ type UserReportResult struct {
 	TotalUsers  int             `json:"total_users"`
 	ActiveUsers int             `json:"active_users"`
 	AdminCount  int             `json:"admin_count"`
-	WorkerCount int             `json:"worker_count"`
+	StaffCount  int             `json:"staff_count"`
 }
 
 func (s *ReportService) GetUsersReport(ctx context.Context) (*UserReportResult, error) {
@@ -459,7 +459,7 @@ func (s *ReportService) GetUsersReport(ctx context.Context) (*UserReportResult, 
 	defer rows.Close()
 
 	var users []UserReportRow
-	var activeCount, adminCount, workerCount int
+	var activeCount, adminCount, staffCount int
 
 	for rows.Next() {
 		var r UserReportRow
@@ -471,11 +471,11 @@ func (s *ReportService) GetUsersReport(ctx context.Context) (*UserReportResult, 
 		if r.IsActive {
 			activeCount++
 		}
-		if r.Role == "SUPER_ADMIN" || r.Role == "ADMIN" {
+		if r.Role == "ADMIN" {
 			adminCount++
 		}
-		if r.Role == "WORKER" {
-			workerCount++
+		if r.Role == "STAFF" {
+			staffCount++
 		}
 		users = append(users, r)
 	}
@@ -488,6 +488,6 @@ func (s *ReportService) GetUsersReport(ctx context.Context) (*UserReportResult, 
 		TotalUsers:  len(users),
 		ActiveUsers: activeCount,
 		AdminCount:  adminCount,
-		WorkerCount: workerCount,
+		StaffCount:  staffCount,
 	}, nil
 }
