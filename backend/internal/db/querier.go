@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	ApproveJournal(ctx context.Context, arg ApproveJournalParams) (ProductionJournal, error)
+	ChangeUserPasswordCommand(ctx context.Context, arg ChangeUserPasswordCommandParams) error
 	CreateBatch(ctx context.Context, arg CreateBatchParams) (InventoryBatch, error)
 	CreateDerivedBatch(ctx context.Context, arg CreateDerivedBatchParams) (InventoryBatch, error)
 	CreateInventoryBatch(ctx context.Context, arg CreateInventoryBatchParams) (InventoryBatch, error)
@@ -19,7 +20,7 @@ type Querier interface {
 	CreateItem(ctx context.Context, arg CreateItemParams) (Item, error)
 	CreateJournal(ctx context.Context, arg CreateJournalParams) (pgtype.UUID, error)
 	CreatePurchaseOrder(ctx context.Context, arg CreatePurchaseOrderParams) (PurchaseOrder, error)
-	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateUserCommand(ctx context.Context, arg CreateUserCommandParams) (CreateUserCommandRow, error)
 	CreateVendor(ctx context.Context, arg CreateVendorParams) (Vendor, error)
 	CreateWIPJournal(ctx context.Context, arg CreateWIPJournalParams) (ProductionJournal, error)
 	ExhaustBatchByID(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
@@ -47,7 +48,9 @@ type Querier interface {
 	GetTotalFinishedPipesWeight(ctx context.Context) (pgtype.Numeric, error)
 	GetTotalRawMaterialWeight(ctx context.Context) (pgtype.Numeric, error)
 	GetTransactionByMovementGroup(ctx context.Context, movementGroupID pgtype.UUID) (InventoryTransaction, error)
+	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
 	GetUserWithRoleByEmail(ctx context.Context, email string) (GetUserWithRoleByEmailRow, error)
+	GetUserWithRoleByID(ctx context.Context, id pgtype.UUID) (GetUserWithRoleByIDRow, error)
 	GetVendorByID(ctx context.Context, id pgtype.UUID) (Vendor, error)
 	GetVendorFinancialSummary(ctx context.Context, dollar_1 pgtype.UUID) (GetVendorFinancialSummaryRow, error)
 	GetVendorRecentPOs(ctx context.Context, vendorID pgtype.UUID) ([]GetVendorRecentPOsRow, error)
@@ -56,6 +59,7 @@ type Querier interface {
 	ListActiveItemsByCategory(ctx context.Context, arg ListActiveItemsByCategoryParams) ([]Item, error)
 	ListPendingApprovals(ctx context.Context, arg ListPendingApprovalsParams) ([]ListPendingApprovalsRow, error)
 	ListTransactionsByBatch(ctx context.Context, arg ListTransactionsByBatchParams) ([]InventoryTransaction, error)
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
 	ListVariantsByParent(ctx context.Context, arg ListVariantsByParentParams) ([]Item, error)
 	ListVendors(ctx context.Context, arg ListVendorsParams) ([]Vendor, error)
 	ListWIPActivityEntries(ctx context.Context, arg ListWIPActivityEntriesParams) ([]ListWIPActivityEntriesRow, error)
@@ -66,6 +70,7 @@ type Querier interface {
 	UpdateBatchQuantity(ctx context.Context, arg UpdateBatchQuantityParams) (InventoryBatch, error)
 	UpdateInventoryBatchStatus(ctx context.Context, arg UpdateInventoryBatchStatusParams) (InventoryBatch, error)
 	UpdatePurchaseOrder(ctx context.Context, arg UpdatePurchaseOrderParams) (PurchaseOrder, error)
+	UpdateUserCommand(ctx context.Context, arg UpdateUserCommandParams) (UpdateUserCommandRow, error)
 	UpdateVendorMutableFields(ctx context.Context, arg UpdateVendorMutableFieldsParams) (Vendor, error)
 }
 

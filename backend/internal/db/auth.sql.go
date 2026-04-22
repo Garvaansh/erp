@@ -11,41 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash, name, role_id)
-VALUES ($1, $2, $3, $4)
-RETURNING id, role_id, name, email, password_hash, is_active, created_at, updated_at, is_admin
-`
-
-type CreateUserParams struct {
-	Email        string      `json:"email"`
-	PasswordHash string      `json:"password_hash"`
-	Name         string      `json:"name"`
-	RoleID       pgtype.UUID `json:"role_id"`
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser,
-		arg.Email,
-		arg.PasswordHash,
-		arg.Name,
-		arg.RoleID,
-	)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.RoleID,
-		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
-		&i.IsActive,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.IsAdmin,
-	)
-	return i, err
-}
-
 const getRoleByCode = `-- name: GetRoleByCode :one
 SELECT id, code, name FROM roles WHERE code = $1 LIMIT 1
 `
@@ -69,9 +34,8 @@ SELECT
     u.email, 
     u.password_hash, 
     u.name, 
-    u.is_active, 
-    u.is_admin,
-    r.code as role_code 
+    u.is_active,
+    r.code as role_code
 FROM users u 
 JOIN roles r ON u.role_id = r.id 
 WHERE u.email = $1 LIMIT 1
@@ -83,7 +47,6 @@ type GetUserWithRoleByEmailRow struct {
 	PasswordHash string      `json:"password_hash"`
 	Name         string      `json:"name"`
 	IsActive     bool        `json:"is_active"`
-	IsAdmin      bool        `json:"is_admin"`
 	RoleCode     string      `json:"role_code"`
 }
 
@@ -96,7 +59,43 @@ func (q *Queries) GetUserWithRoleByEmail(ctx context.Context, email string) (Get
 		&i.PasswordHash,
 		&i.Name,
 		&i.IsActive,
-		&i.IsAdmin,
+		&i.RoleCode,
+	)
+	return i, err
+}
+
+const getUserWithRoleByID = `-- name: GetUserWithRoleByID :one
+SELECT
+    u.id,
+    u.email,
+    u.password_hash,
+    u.name,
+    u.is_active,
+    r.code as role_code
+FROM users u
+JOIN roles r ON u.role_id = r.id
+WHERE u.id = $1
+LIMIT 1
+`
+
+type GetUserWithRoleByIDRow struct {
+	ID           pgtype.UUID `json:"id"`
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	Name         string      `json:"name"`
+	IsActive     bool        `json:"is_active"`
+	RoleCode     string      `json:"role_code"`
+}
+
+func (q *Queries) GetUserWithRoleByID(ctx context.Context, id pgtype.UUID) (GetUserWithRoleByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUserWithRoleByID, id)
+	var i GetUserWithRoleByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
 		&i.RoleCode,
 	)
 	return i, err
