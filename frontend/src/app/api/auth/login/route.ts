@@ -17,7 +17,6 @@ type LoginBody = {
 };
 
 type BackendLoginResponse = {
-  token?: unknown;
   expires_in?: unknown;
   expires_at?: unknown;
   user?: unknown;
@@ -95,10 +94,7 @@ export async function POST(request: Request) {
     return apiError(backendMessage, status);
   }
 
-  const jwtToken =
-    responsePayload && typeof responsePayload.token === "string"
-      ? responsePayload.token
-      : "";
+  const jwtToken = backendResponse.headers.get("x-session-token") ?? "";
 
   const sessionMaxAge = responsePayload
     ? resolveSessionMaxAge(responsePayload)
@@ -120,10 +116,7 @@ export async function POST(request: Request) {
   });
 
   const rawData = unwrapBackendPayload(responsePayload);
-  const data =
-    isRecord(rawData) && "user" in rawData
-      ? { user: rawData.user }
-      : { user: responsePayload?.user ?? null };
+  const data = isRecord(rawData) && "user" in rawData ? { user: rawData.user } : { user: responsePayload?.user ?? null };
 
   return apiSuccess(
     readMessage(responsePayload, "Login successful"),

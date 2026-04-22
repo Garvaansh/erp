@@ -10,7 +10,7 @@ import {
   readMessage,
 } from "@/app/api/_shared/http";
 
-export async function GET() {
+export async function GET(request: Request) {
   const backendURL = getBackendBaseUrl();
   if (!backendURL) {
     return apiError("Users service unavailable", 500);
@@ -23,7 +23,14 @@ export async function GET() {
 
   let backendResponse: Response;
   try {
-    backendResponse = await fetchWithTimeout(`${backendURL}/api/v1/users/`, {
+    const { searchParams } = new URL(request.url);
+    const filter = searchParams.get("filter") ?? "";
+    const search = searchParams.get("search") ?? "";
+    const query = new URLSearchParams();
+    if (filter) query.set("filter", filter);
+    if (search) query.set("search", search);
+
+    backendResponse = await fetchWithTimeout(`${backendURL}/api/v1/users/?${query.toString()}`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -46,9 +53,7 @@ export async function GET() {
   }
 
   // Extract data from backend { status, data }
-  const data = isRecord(payload) && Array.isArray((payload as Record<string, unknown>).data)
-    ? (payload as Record<string, unknown>).data
-    : [];
+  const data = isRecord(payload) && Array.isArray((payload as Record<string, unknown>).data) ? (payload as Record<string, unknown>).data : [];
 
   return apiSuccess("Users loaded", data, 200);
 }

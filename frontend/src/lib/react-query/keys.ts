@@ -40,7 +40,9 @@ export const procurementKeys = {
 
 export const usersKeys = {
   all: ["users"] as const,
-  list: () => [...usersKeys.all, "list"] as const,
+  list: (filter: "active" | "archived" | "all" = "active", search = "") =>
+    [...usersKeys.all, "list", filter, search] as const,
+  detail: (id: string) => [...usersKeys.all, "detail", id] as const,
 };
 
 export const vendorsKeys = {

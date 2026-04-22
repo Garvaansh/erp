@@ -4,10 +4,9 @@ export type LoginCredentials = {
 };
 
 export type AuthUser = {
-  id?: string;
-  email?: string;
-  role?: string;
-  is_admin?: boolean;
+  id: string;
+  email: string;
+  role_code: string;
 };
 
 export type LoginActionState = {
