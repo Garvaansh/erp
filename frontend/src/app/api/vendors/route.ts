@@ -5,20 +5,23 @@ import {
   fetchWithTimeout,
   getBackendBaseUrl,
   getSessionToken,
-  isRecord,
   parseJson,
   readMessage,
+  unwrapBackendPayload,
 } from "@/app/api/_shared/http";
 
-export async function GET() {
+export async function GET(request: Request) {
   const backendURL = getBackendBaseUrl();
   if (!backendURL) return apiError("Vendor service unavailable", 500);
   const token = await getSessionToken();
   if (!token) return apiError("Unauthorized", 401);
 
+  const requestURL = new URL(request.url);
+  const search = requestURL.search || "";
+
   let res: Response;
   try {
-    res = await fetchWithTimeout(`${backendURL}/api/v1/vendors/`, {
+    res = await fetchWithTimeout(`${backendURL}/api/v1/vendors${search}`, {
       method: "GET",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
     });
@@ -30,8 +33,7 @@ export async function GET() {
 
   const payload = await parseJson(res);
   if (!res.ok) return apiError(readMessage(payload, "Failed to load vendors"), res.status);
-  const data = isRecord(payload) && Array.isArray((payload as Record<string, unknown>).data)
-    ? (payload as Record<string, unknown>).data : [];
+  const data = unwrapBackendPayload(payload);
   return apiSuccess("Vendors loaded", data, 200);
 }
 
@@ -60,6 +62,6 @@ export async function POST(request: Request) {
 
   const payload = await parseJson(res);
   if (!res.ok) return apiError(readMessage(payload, "Failed to create vendor"), res.status);
-  const data = isRecord(payload) ? (payload as Record<string, unknown>).data : null;
+  const data = unwrapBackendPayload(payload);
   return apiSuccess("Vendor created", data, 201);
 }

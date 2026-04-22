@@ -1,9 +1,9 @@
 import {
   apiError, apiSuccess, BackendTimeoutError, fetchWithTimeout,
-  getBackendBaseUrl, getSessionToken, parseJson, readMessage,
+  getBackendBaseUrl, getSessionToken, parseJson, readMessage, unwrapBackendPayload,
 } from "@/app/api/_shared/http";
 
-export async function PUT(request: Request, { params }: { params: Promise<{ vendorId: string }> }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ vendorId: string }> }) {
   const { vendorId } = await params;
   const backendURL = getBackendBaseUrl();
   if (!backendURL) return apiError("Vendor service unavailable", 500);
@@ -17,7 +17,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ vend
   let res: Response;
   try {
     res = await fetchWithTimeout(`${backendURL}/api/v1/vendors/${vendorId}`, {
-      method: "PUT",
+      method: "PATCH",
       headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
       body,
     });
@@ -29,5 +29,5 @@ export async function PUT(request: Request, { params }: { params: Promise<{ vend
 
   const payload = await parseJson(res);
   if (!res.ok) return apiError(readMessage(payload, "Failed to update vendor"), res.status);
-  return apiSuccess("Vendor updated", null, 200);
+  return apiSuccess("Vendor updated", unwrapBackendPayload(payload), 200);
 }
