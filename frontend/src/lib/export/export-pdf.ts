@@ -13,6 +13,14 @@ import {
 
 export type { ExportReportInput } from "@/lib/export/report-export-style";
 
+function asMutableRgb([r, g, b]: readonly [number, number, number]): [
+  number,
+  number,
+  number,
+] {
+  return [r, g, b];
+}
+
 export function exportReportToPdf({
   reportTitle,
   dateRangeLabel,
@@ -96,12 +104,12 @@ export function exportReportToPdf({
         bottom: 0.1,
         left: 0,
       },
-      lineColor: REPORT_EXPORT_STYLE.colors.separatorRgb,
-      textColor: REPORT_EXPORT_STYLE.colors.textPrimaryRgb,
+      lineColor: asMutableRgb(REPORT_EXPORT_STYLE.colors.separatorRgb),
+      textColor: asMutableRgb(REPORT_EXPORT_STYLE.colors.textPrimaryRgb),
     },
     headStyles: {
-      fillColor: REPORT_EXPORT_STYLE.colors.headerFillRgb,
-      textColor: REPORT_EXPORT_STYLE.colors.textPrimaryRgb,
+      fillColor: asMutableRgb(REPORT_EXPORT_STYLE.colors.headerFillRgb),
+      textColor: asMutableRgb(REPORT_EXPORT_STYLE.colors.textPrimaryRgb),
       fontSize: REPORT_EXPORT_STYLE.typography.tableHeaderSize,
       fontStyle: "bold",
       lineWidth: {
@@ -110,7 +118,7 @@ export function exportReportToPdf({
         bottom: 0.2,
         left: 0,
       },
-      lineColor: REPORT_EXPORT_STYLE.colors.separatorRgb,
+      lineColor: asMutableRgb(REPORT_EXPORT_STYLE.colors.separatorRgb),
     },
     didParseCell: (hook) => {
       const profile = columnProfiles[hook.column.index];

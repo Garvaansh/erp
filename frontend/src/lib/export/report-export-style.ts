@@ -52,7 +52,7 @@ export const REPORT_EXPORT_STYLE = {
   },
   excel: {
     minColumnWidth: 12,
-    maxColumnWidth: 44,
+    maxColumnWidth: 72,
     widthPaddingChars: 2,
     currencyNumFmt: "\u20B9#,##0.00",
   },

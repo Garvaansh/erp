@@ -29,6 +29,7 @@ export async function exportReportToXlsx({
       },
     ],
   });
+  worksheet.properties.defaultRowHeight = REPORT_EXPORT_STYLE.spacing.excelBodyRowHeight;
   const columnCount = Math.max(columns.length, 1);
   const columnProfiles = getColumnProfiles(columns, rows);
 
@@ -39,6 +40,8 @@ export async function exportReportToXlsx({
     excelColumn.alignment = {
       horizontal: profile?.isNumeric ? "right" : "left",
       vertical: "middle",
+      wrapText: false,
+      shrinkToFit: false,
     };
   });
 
@@ -98,6 +101,8 @@ export async function exportReportToXlsx({
     cell.alignment = {
       horizontal: "left",
       vertical: "middle",
+      wrapText: false,
+      shrinkToFit: false,
     };
   });
 
@@ -119,7 +124,8 @@ export async function exportReportToXlsx({
       cell.alignment = {
         horizontal: profile?.isNumeric ? "right" : "left",
         vertical: "middle",
-        wrapText: true,
+        wrapText: false,
+        shrinkToFit: false,
       };
       cell.border = {
         bottom: {
