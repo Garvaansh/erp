@@ -11,24 +11,38 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type userService interface {
-	ListUsers(ctx context.Context) ([]models.UserListRow, error)
+type userQueryService interface {
+	ListUsers(ctx context.Context, filter string, search string) ([]models.UserListRow, error)
+	GetUserByID(ctx context.Context, userID string, requesterID string, requesterRoleCode string) (*models.UserSafeProfile, error)
+}
+
+type userCommandService interface {
 	CreateUser(ctx context.Context, req models.CreateUserRequest) (*models.UserCreateResult, error)
 	UpdateUser(ctx context.Context, userID string, req models.UpdateUserRequest) error
+	ChangePassword(ctx context.Context, userID string, req models.ChangePasswordRequest) error
 }
 
 type UserHandler struct {
-	service   userService
+	query     userQueryService
+	command   userCommandService
 	validator *validator.Validate
 }
 
-func NewUserHandler(service userService, v *validator.Validate) *UserHandler {
-	return &UserHandler{service: service, validator: v}
+func NewUserHandler(query userQueryService, command userCommandService, v *validator.Validate) *UserHandler {
+	return &UserHandler{query: query, command: command, validator: v}
 }
 
 func (h *UserHandler) ListUsers(c *fiber.Ctx) error {
-	users, err := h.service.ListUsers(c.Context())
+	filter := strings.TrimSpace(c.Query("filter"))
+	search := strings.TrimSpace(c.Query("search"))
+	users, err := h.query.ListUsers(c.Context(), filter, search)
 	if err != nil {
+		if errors.Is(err, services.ErrInvalidUserFilter) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status":  "error",
 			"message": "Failed to fetch users",
@@ -58,7 +72,7 @@ func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.service.CreateUser(c.Context(), req)
+	result, err := h.command.CreateUser(c.Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrUserAlreadyExists):
@@ -102,7 +116,7 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	err := h.service.UpdateUser(c.Context(), userID, req)
+	err := h.command.UpdateUser(c.Context(), userID, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrUserNotFoundByID):
@@ -127,4 +141,65 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 		"status":  "success",
 		"message": "User updated successfully",
 	})
+}
+
+func (h *UserHandler) GetUserByID(c *fiber.Ctx) error {
+	userID := strings.TrimSpace(c.Params("userId"))
+	if err := h.validator.Var(userID, "required,uuid4"); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "userId must be a valid UUID",
+		})
+	}
+
+	requesterID, _ := c.Locals("userID").(string)
+	requesterRoleCode, _ := c.Locals("roleCode").(string)
+	user, err := h.query.GetUserByID(c.Context(), userID, requesterID, requesterRoleCode)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrForbidden):
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"status": "error", "message": "Forbidden"})
+		case errors.Is(err, services.ErrUserNotFoundByID):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "User not found"})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to fetch user"})
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "success", "data": user})
+}
+
+func (h *UserHandler) ChangePassword(c *fiber.Ctx) error {
+	userID := strings.TrimSpace(c.Params("userId"))
+	if err := h.validator.Var(userID, "required,uuid4"); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "userId must be a valid UUID",
+		})
+	}
+
+	var req models.ChangePasswordRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid JSON payload"})
+	}
+	if err := h.validator.Struct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Validation failed",
+			"errors":  validationErrors(err),
+		})
+	}
+
+	if err := h.command.ChangePassword(c.Context(), userID, req); err != nil {
+		switch {
+		case errors.Is(err, services.ErrUserNotFoundByID):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "User not found"})
+		case errors.Is(err, services.ErrInvalidUserPayload):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid password payload"})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to change password"})
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "success", "message": "Password updated successfully"})
 }
