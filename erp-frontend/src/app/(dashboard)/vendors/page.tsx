@@ -1,3 +1,4 @@
+```
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -19,6 +20,7 @@ import {
     FileSpreadsheet,
 } from "lucide-react";
 import { ExcelUpload } from "@/components/ExcelUpload";
+import { getInitials } from "@/utils/string-utils";
 
 interface Vendor {
     id: string;
@@ -163,7 +165,7 @@ export default function VendorsPage() {
             fetchVendors();
         } catch (err) {
             console.error(err);
-            alert(editingVendor ? "Failed to update vendor" : "Failed to create vendor");
+            alert(editingVendor? "Failed to update vendor" : "Failed to create vendor");
         } finally {
             setSaving(false);
         }
@@ -187,15 +189,6 @@ export default function VendorsPage() {
         } finally {
             setDeleting(false);
         }
-    };
-
-    const getInitials = (name: string) => {
-        return name
-            .split(" ")
-            .map((w) => w[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2);
     };
 
     return (
@@ -253,18 +246,18 @@ export default function VendorsPage() {
                         { header: "PAN", required: false, sample: "AABCT1234L" },
                     ]}
                     mapRow={(row) => {
-                        const name = String(row["Name"] ?? row["name"] ?? "").trim();
+                        const name = String(row["Name"]?? row["name"]?? "").trim();
                         if (!name) return null;
-                        const str = (v: unknown) => (v != null && String(v).trim() !== "" ? String(v).trim() : null);
+                        const str = (v: unknown) => (v!= null && String(v).trim()!== ""? String(v).trim() : null);
                         return {
                             name,
-                            contact_person: str(row["Contact Person"] ?? row["contact_person"]),
-                            email: str(row["Email"] ?? row["email"]),
-                            phone: str(row["Phone"] ?? row["phone"]),
-                            address: str(row["Address"] ?? row["address"]),
-                            status_notes: str(row["Status Notes"] ?? row["status_notes"]),
-                            gstin: str(row["GSTIN"] ?? row["gstin"]),
-                            pan: str(row["PAN"] ?? row["pan"]),
+                            contact_person: str(row["Contact Person"]?? row["contact_person"]),
+                            email: str(row["Email"]?? row["email"]),
+                            phone: str(row["Phone"]?? row["phone"]),
+                            address: str(row["Address"]?? row["address"]),
+                            status_notes: str(row["Status Notes"]?? row["status_notes"]),
+                            gstin: str(row["GSTIN"]?? row["gstin"]),
+                            pan: str(row["PAN"]?? row["pan"]),
                         };
                     }}
                     onSuccess={() => fetchVendors()}
@@ -345,7 +338,7 @@ export default function VendorsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5 text-foreground">
-                            {loading ? (
+                            {loading? (
                                 <tr>
                                     <td colSpan={9} className="px-6 py-12 text-center text-muted-foreground">
                                         <div className="flex items-center justify-center gap-2">
@@ -354,7 +347,7 @@ export default function VendorsPage() {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : filteredVendors.length === 0 ? (
+                            ) : filteredVendors.length === 0? (
                                 <tr>
                                     <td colSpan={9} className="px-6 py-16 text-center">
                                         <div className="flex flex-col items-center gap-3">
@@ -363,7 +356,7 @@ export default function VendorsPage() {
                                             </div>
                                             <p className="text-muted-foreground">
                                                 {searchTerm
-                                                    ? "No vendors match your search."
+                                                   ? "No vendors match your search."
                                                     : "No vendors yet. Add your first supplier."}
                                             </p>
                                             {!searchTerm && (
@@ -395,7 +388,7 @@ export default function VendorsPage() {
 
                                         {/* Contact Person */}
                                         <td className="px-6 py-4">
-                                            {v.contact_person ? (
+                                            {v.contact_person? (
                                                 <div className="flex items-center gap-1.5">
                                                     <User className="w-3.5 h-3.5 text-muted-foreground" />
                                                     {v.contact_person}
@@ -407,7 +400,7 @@ export default function VendorsPage() {
 
                                         {/* Email */}
                                         <td className="px-6 py-4">
-                                            {v.email ? (
+                                            {v.email? (
                                                 <a
                                                     href={`mailto:${v.email}`}
                                                     className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 transition-colors"
@@ -418,305 +411,4 @@ export default function VendorsPage() {
                                             ) : (
                                                 <span className="text-muted-foreground">—</span>
                                             )}
-                                        </td>
-
-                                        {/* Phone */}
-                                        <td className="px-6 py-4">
-                                            {v.phone ? (
-                                                <div className="flex items-center gap-1.5">
-                                                    <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                                                    {v.phone}
-                                                </div>
-                                            ) : (
-                                                <span className="text-muted-foreground">—</span>
-                                            )}
-                                        </td>
-
-                                        {/* Address */}
-                                        <td className="px-6 py-4 max-w-[200px]">
-                                            {v.address ? (
-                                                <div className="flex items-start gap-1.5 truncate" title={v.address}>
-                                                    <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                                                    <span className="truncate">{v.address}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-muted-foreground">—</span>
-                                            )}
-                                        </td>
-
-                                        {/* GSTIN */}
-                                        <td className="px-6 py-4">
-                                            {v.gstin ? (
-                                                <span className="font-mono text-xs bg-black/50 rounded px-2">{v.gstin}</span>
-                                            ) : (
-                                                <span className="text-muted-foreground">—</span>
-                                            )}
-                                        </td>
-
-                                        {/* Status / Notes (Reva: RATES given, don't sell, etc.) */}
-                                        <td className="px-6 py-4 max-w-[140px]">
-                                            {v.status_notes ? (
-                                                <span className="text-amber-400/90 text-xs truncate block" title={v.status_notes}>{v.status_notes}</span>
-                                            ) : (
-                                                <span className="text-muted-foreground">—</span>
-                                            )}
-                                        </td>
-
-                                        {/* Date */}
-                                        <td className="px-6 py-4 text-muted-foreground text-xs">
-                                            {new Date(v.created_at).toLocaleDateString("en-IN", {
-                                                day: "2-digit",
-                                                month: "short",
-                                                year: "numeric",
-                                            })}
-                                        </td>
-
-                                        {/* Actions */}
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="relative inline-block" data-vendor-menu>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setOpenMenuId(openMenuId === v.id ? null : v.id);
-                                                    }}
-                                                    className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted"
-                                                >
-                                                    <MoreVertical className="w-4 h-4" />
-                                                </button>
-                                                {openMenuId === v.id && (
-                                                    <div className="absolute right-0 top-full mt-1 w-40 bg-[#1a1a1d] border border-border rounded-xl shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                                                        <button
-                                                            onClick={() => openEditModal(v)}
-                                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
-                                                        >
-                                                            <Pencil className="w-3.5 h-3.5" />
-                                                            Edit
-                                                        </button>
-                                                        <button
-                                                            onClick={() => confirmDelete(v)}
-                                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
-                                                        >
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                            Delete
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* Create / Edit Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/30">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                                    <Users className="w-4 h-4 text-emerald-400" />
-                                </div>
-                                <h3 className="text-lg font-medium text-foreground">
-                                    {editingVendor ? "Edit Vendor" : "New Vendor"}
-                                </h3>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setShowModal(false);
-                                    setEditingVendor(null);
-                                }}
-                                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Form */}
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                            {/* Vendor Name */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <Building2 className="w-3.5 h-3.5" /> Vendor / Company Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={form.name}
-                                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm text-foreground placeholder:text-muted-foreground"
-                                    placeholder="e.g. Reva Polymers Pvt Ltd"
-                                />
-                            </div>
-
-                            {/* Contact Person */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <User className="w-3.5 h-3.5" /> Contact Person
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.contact_person}
-                                    onChange={(e) =>
-                                        setForm({ ...form, contact_person: e.target.value })
-                                    }
-                                    className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm text-foreground placeholder:text-muted-foreground"
-                                    placeholder="e.g. Rajesh Kumar"
-                                />
-                            </div>
-
-                            {/* Email + Phone side by side */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                        <Mail className="w-3.5 h-3.5" /> Email
-                                    </label>
-                                    <input
-                                        type="email"
-                                        value={form.email}
-                                        onChange={(e) => setForm({ ...form, email: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm text-foreground placeholder:text-muted-foreground"
-                                        placeholder="vendor@example.com"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                        <Phone className="w-3.5 h-3.5" /> Phone
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={form.phone}
-                                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm text-foreground placeholder:text-muted-foreground"
-                                        placeholder="+91 9876543210"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Address */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <MapPin className="w-3.5 h-3.5" /> Address
-                                </label>
-                                <textarea
-                                    rows={2}
-                                    value={form.address}
-                                    onChange={(e) => setForm({ ...form, address: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm text-foreground placeholder:text-muted-foreground resize-none"
-                                    placeholder="123 Industrial Area, Jaipur, Rajasthan"
-                                />
-                            </div>
-
-                            {/* GSTIN + PAN (India) */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground">GSTIN</label>
-                                    <input
-                                        type="text"
-                                        value={form.gstin}
-                                        onChange={(e) => setForm({ ...form, gstin: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm font-mono text-foreground placeholder:text-muted-foreground"
-                                        placeholder="e.g. 23AABCT1234L1ZM"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground">PAN</label>
-                                    <input
-                                        type="text"
-                                        value={form.pan}
-                                        onChange={(e) => setForm({ ...form, pan: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm font-mono text-foreground placeholder:text-muted-foreground"
-                                        placeholder="e.g. AABCT1234L"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Status / Notes (Reva: RATES given, don't sell, CALL NOT PICK) */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <AlertTriangle className="w-3.5 h-3.5" /> Status / Notes
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.status_notes}
-                                    onChange={(e) => setForm({ ...form, status_notes: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm text-foreground placeholder:text-muted-foreground"
-                                    placeholder="e.g. RATES given, don't sell, CALL NOT PICK"
-                                />
-                            </div>
-
-                            {/* Actions */}
-                            <div className="pt-4 flex justify-end gap-3 border-t border-border">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowModal(false);
-                                        setEditingVendor(null);
-                                    }}
-                                    className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted/50"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={saving}
-                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl shadow-lg transition-colors flex items-center gap-2"
-                                >
-                                    {saving && (
-                                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    )}
-                                    {editingVendor ? "Update Vendor" : "Save Vendor"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Delete Confirmation Modal */}
-            {deleteTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="p-6 text-center">
-                            <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
-                                <AlertTriangle className="w-7 h-7 text-red-400" />
-                            </div>
-                            <h3 className="text-lg font-semibold text-foreground mb-2">
-                                Delete Vendor?
-                            </h3>
-                            <p className="text-sm text-muted-foreground mb-6">
-                                Are you sure you want to delete{" "}
-                                <span className="text-foreground font-medium">{deleteTarget.name}</span>?
-                                This cannot be undone. Vendors with existing purchase orders cannot be
-                                deleted.
-                            </p>
-
-                            <div className="flex gap-3 justify-center">
-                                <button
-                                    onClick={() => setDeleteTarget(null)}
-                                    className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted/50"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleDelete}
-                                    disabled={deleting}
-                                    className="px-5 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl shadow-lg transition-colors flex items-center gap-2"
-                                >
-                                    {deleting && (
-                                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    )}
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}
+                                        
