@@ -1,3 +1,4 @@
+```
 /**
  * Feature flag keys stored in tenant_settings.feature_flags (JSON).
  * If a key is missing or true, the feature is ON. If false, the feature is OFF for that tenant.
@@ -35,8 +36,8 @@ export type FeatureFlagsMap = Partial<Record<FeatureKey, boolean>>;
 
 /** Feature is enabled if not explicitly set to false (missing = enabled for backward compatibility). */
 export function isFeatureEnabled(flags: FeatureFlagsMap | null | undefined, key: FeatureKey): boolean {
-    if (!flags || typeof flags !== "object") return true;
-    return flags[key] !== false;
+    if (!flags || typeof flags!== "object") return true;
+    return flags[key]!== false;
 }
 
 /** Pathname to feature key (for route guard). Dashboard and settings are always allowed. */
@@ -134,3 +135,4 @@ export const FEATURE_GROUPS: { title: string; keys: FeatureKey[] }[] = [
     { title: "Finance", keys: [FEATURE_KEYS.finance] },
     { title: "Administration", keys: [FEATURE_KEYS.audit_logs, FEATURE_KEYS.settings] },
 ];
+```
