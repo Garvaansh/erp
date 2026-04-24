@@ -1,3 +1,4 @@
+```
 import axios from "axios";
 
 // Backend API (Go server). Use 3001 so it doesn't conflict with Next.js dev server on 3000.
@@ -13,7 +14,7 @@ const api = axios.create({
 const MOCK_DATA_KEY = "mock_data";
 
 api.interceptors.request.use((config) => {
-    if (typeof window !== "undefined") {
+    if (typeof window!== "undefined") {
         const token = localStorage.getItem("token");
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -28,3 +29,4 @@ api.interceptors.request.use((config) => {
 
 export default api;
 export { MOCK_DATA_KEY };
+```
