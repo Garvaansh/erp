@@ -19,7 +19,3 @@ Makefile
 .env
 .env.local
 .env.prod
-
-# Tooling
-.air.toml
-

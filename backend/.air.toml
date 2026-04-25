@@ -1,0 +1,21 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # The exact command to compile your Go code
+  cmd = "go build -o tmp/main.exe cmd/api/main.go"
+  
+  # The binary Air will execute after a successful build
+  bin = "tmp/main.exe"
+  
+  # Watch these file extensions for changes
+  include_ext = ["go", "env"]
+  
+  # Ignore these directories to save CPU and prevent infinite reload loops
+  exclude_dir = ["tmp", "vendor", "node_modules", "frontend"]
+  
+  # Wait 1 second after file changes before building (debouncing)
+  delay = 1000 
+  
+  # Don't try to run the binary if the build fails
+  stop_on_error = true
