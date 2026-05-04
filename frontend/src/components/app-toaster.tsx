@@ -9,7 +9,7 @@ export function AppToaster() {
       position="top-right"
       toastOptions={{
         classNames: {
-          toast: "border border-slate-200 bg-white text-slate-900",
+          toast: "border border-border bg-background text-foreground",
         },
       }}
     />

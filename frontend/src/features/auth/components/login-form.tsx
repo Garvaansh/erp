@@ -3,21 +3,12 @@
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Zap,
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ArrowRight,
-  Shield,
-  Wifi,
-  Server,
-} from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Sun, Moon } from "lucide-react";
 import { ApiClientError } from "@/lib/api/api-client";
 import { getCurrentUser, login } from "@/lib/api/auth";
 import { authKeys } from "@/lib/react-query/keys";
 import { useAuthStore } from "@/stores/auth.store";
+import { useTheme } from "@/components/theme-provider";
 
 function readLoginErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError && error.message.trim()) {
@@ -87,100 +78,89 @@ export function LoginForm() {
     loginMutation.mutate({ email, password });
   }
 
+  const { theme, toggleTheme } = useTheme();
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--erp-bg-deep)] erp-grid-pattern relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[var(--erp-accent)] opacity-[0.03] rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cyan-500 opacity-[0.02] rounded-full blur-3xl" />
-      </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background relative">
+      {/* Theme toggle */}
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="absolute top-5 right-5 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+      </button>
 
       {/* Logo */}
-      <div className="relative z-10 flex flex-col items-center mb-8 erp-fade-in">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--erp-accent)] to-cyan-600 shadow-lg shadow-cyan-500/25 mb-4">
-          <Zap className="size-7 text-white" />
+      <div className="flex flex-col items-center mb-8">
+        <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-violet-500 text-white mb-4 shadow-lg shadow-primary/20">
+          <span className="text-lg font-bold">R</span>
         </div>
-        <h1 className="text-xl font-bold tracking-[0.2em] uppercase text-[var(--erp-text-primary)]">
+        <h1 className="text-lg font-semibold text-foreground">
           Reva ERP
         </h1>
-        <p className="text-[10px] font-medium tracking-[0.3em] uppercase text-[var(--erp-text-muted)] mt-1">
-          v2.4.0 Command Center
+        <p className="text-[13px] text-muted-foreground mt-1">
+          Sign in to your workspace
         </p>
       </div>
 
       {/* Login Card */}
-      <div
-        className="relative z-10 w-full max-w-sm mx-4 erp-fade-in"
-        style={{ animationDelay: "0.1s" }}
-      >
-        <div className="erp-card-static p-6 backdrop-blur-sm">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-[var(--erp-text-primary)]">
-              System Access
-            </h2>
-            <p className="text-sm text-[var(--erp-text-muted)] mt-1">
-              Authenticate to manage industrial assets.
-            </p>
-          </div>
-
+      <div className="w-full max-w-sm mx-4">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
-            <div className="flex items-center gap-3 rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 focus-within:border-[var(--erp-accent)] transition-colors">
-              <Mail className="size-4 text-[var(--erp-text-muted)] shrink-0" />
+            <div className="space-y-2">
+              <label
+                htmlFor="email"
+                className="text-[13px] font-medium text-foreground"
+              >
+                Email
+              </label>
               <input
                 id="email"
                 name="email"
                 type="email"
                 required
-                placeholder="Corporate Email"
-                className="flex-1 bg-transparent text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none"
+                placeholder="you@company.com"
+                className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 transition-colors"
               />
             </div>
 
             {/* Password */}
-            <div className="flex items-center gap-3 rounded-lg border border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] px-3 py-2.5 focus-within:border-[var(--erp-accent)] transition-colors">
-              <Lock className="size-4 text-[var(--erp-text-muted)] shrink-0" />
-              <input
-                id="password"
-                name="password"
-                type={showPassword ? "text" : "password"}
-                required
-                placeholder="Security Key"
-                className="flex-1 bg-transparent text-sm text-[var(--erp-text-primary)] placeholder:text-[var(--erp-text-muted)] outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-[var(--erp-text-muted)] hover:text-[var(--erp-text-secondary)] transition-colors"
+            <div className="space-y-2">
+              <label
+                htmlFor="password"
+                className="text-[13px] font-medium text-foreground"
               >
-                {showPassword ? (
-                  <EyeOff className="size-4" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </button>
-            </div>
-
-            {/* Options row */}
-            <div className="flex items-center justify-between text-xs">
-              <label className="flex items-center gap-2 text-[var(--erp-text-muted)] cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="rounded border-[var(--erp-border-default)] bg-[var(--erp-bg-surface)] accent-[var(--erp-accent)]"
-                />
-                Keep session active
+                Password
               </label>
-              <button
-                type="button"
-                className="text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] font-medium uppercase tracking-wider text-[10px] transition-colors"
-              >
-                Forgot Key?
-              </button>
+              <div className="flex items-center rounded-lg border border-border bg-transparent px-3 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 transition-colors">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  placeholder="Enter your password"
+                  className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-muted-foreground hover:text-foreground transition-colors ml-2"
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Error */}
             {errorMessage ? (
-              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
                 {errorMessage}
               </div>
             ) : null}
@@ -189,46 +169,18 @@ export function LoginForm() {
             <button
               type="submit"
               disabled={loginMutation.isPending}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[var(--erp-accent)] to-cyan-500 px-4 py-3 text-sm font-bold uppercase tracking-wider text-white hover:from-[var(--erp-accent-bright)] hover:to-cyan-400 disabled:opacity-50 transition-all duration-200 shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30"
+              className="w-full flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {loginMutation.isPending ? (
-                <span className="animate-pulse">Authenticating...</span>
+                <span>Signing in...</span>
               ) : (
                 <>
-                  Access Command Center
+                  Sign In
                   <ArrowRight className="size-4" />
                 </>
               )}
             </button>
           </form>
-
-          <p className="text-center text-[10px] text-[var(--erp-text-muted)] mt-5">
-            By continuing you agree to Reva&apos;s industrial usage protocols.
-          </p>
-        </div>
-      </div>
-
-      {/* Footer status */}
-      <div
-        className="relative z-10 flex items-center gap-6 mt-8 erp-fade-in"
-        style={{ animationDelay: "0.2s" }}
-      >
-        <div className="flex items-center gap-1.5 text-[10px] text-[var(--erp-text-muted)]">
-          <Wifi className="size-3 text-[var(--erp-success)]" />
-          <span className="uppercase tracking-wider font-medium">Latency</span>
-          <span className="text-[var(--erp-text-secondary)]">9ms</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-[var(--erp-text-muted)]">
-          <Shield className="size-3 text-[var(--erp-accent)]" />
-          <span className="uppercase tracking-wider font-medium">Security</span>
-          <span className="text-[var(--erp-text-secondary)]">AES-256</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-[var(--erp-text-muted)]">
-          <Server className="size-3 text-[var(--erp-success)]" />
-          <span className="uppercase tracking-wider font-medium">
-            Encrypted
-          </span>
-          <span className="text-[var(--erp-text-secondary)]">✓</span>
         </div>
       </div>
     </div>

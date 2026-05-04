@@ -91,19 +91,17 @@ export function PayablesTab({
 
   return (
     <div className="space-y-4" data-testid="payables-tab-panel">
-      <Card>
-        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="rounded-[24px] border border-border p-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <CardTitle>Outstanding Payables</CardTitle>
-            <CardDescription>
+            <p className="text-sm font-medium text-foreground">Outstanding Payables</p>
+            <p className="text-sm text-muted-foreground mt-1">
               Review vendors with open balances and log payments against unpaid purchase orders.
-            </CardDescription>
+            </p>
           </div>
           <div className="text-sm text-muted-foreground">
             {vendors.length} vendors • {totalUnpaidPOs} unpaid POs
           </div>
-        </CardHeader>
-      </Card>
+        </div>
 
       <Accordion className="space-y-3">
         {vendors.map((vendor) => (

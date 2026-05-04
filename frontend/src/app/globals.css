@@ -4,14 +4,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── Reva ERP — Dark Industrial Design System ── */
+/* ── Reva ERP — Vibrant Indigo Design System ──────────────────────────── */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-inter);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,117 +50,178 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* ── Dark Industrial Palette (default & only theme) ── */
+/* ── Vibrant Indigo Palette ── */
 :root {
-  /* Core surfaces */
-  --background: #060b14;
-  --foreground: #e2e8f0;
+  /* ─ Brand & Accent ─ */
+  --color-primary: #6366f1;
+  --color-on-primary: #ffffff;
+  --color-accent-amber: #f59e0b;
+  --color-accent-teal: #14b8a6;
+  --color-accent-rose: #f43f5e;
+  --color-accent-sky: #0ea5e9;
 
-  /* Cards & panels */
-  --card: #0c1322;
-  --card-foreground: #e2e8f0;
+  /* ─ Surfaces ─ */
+  --color-canvas: #f8fafc;
+  --color-inverse-canvas: #1e1b4b;
+  --color-surface-soft: #f1f5f9;
+  --color-hairline: #e2e8f0;
+  --color-hairline-soft: #f1f5f9;
 
-  /* Popovers & dropdowns */
-  --popover: #0f1729;
-  --popover-foreground: #e2e8f0;
+  /* ─ Pastel Color Blocks (vivid) ─ */
+  --color-block-lime: #d9f99d;
+  --color-block-lilac: #ddd6fe;
+  --color-block-cream: #fef3c7;
+  --color-block-mint: #a7f3d0;
+  --color-block-pink: #fbcfe8;
+  --color-block-coral: #fed7aa;
+  --color-block-navy: #1e1b4b;
 
-  /* Primary = Cyan accent */
-  --primary: #06b6d4;
-  --primary-foreground: #020617;
+  /* ─ Text ─ */
+  --color-ink: #0f172a;
+  --color-inverse-ink: #f8fafc;
 
-  /* Secondary = Muted slate */
-  --secondary: #1e293b;
-  --secondary-foreground: #cbd5e1;
+  /* ─ Semantic ─ */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-info: #6366f1;
 
-  /* Muted text & surfaces */
-  --muted: #131c2e;
+  /* ─ Spacing tokens ─ */
+  --spacing-hair: 1px;
+  --spacing-xxs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --spacing-section: 96px;
+
+  /* ─ Border radius tokens ─ */
+  --rounded-xs: 2px;
+  --rounded-sm: 6px;
+  --rounded-md: 8px;
+  --rounded-lg: 24px;
+  --rounded-xl: 32px;
+  --rounded-pill: 50px;
+  --rounded-full: 9999px;
+
+  /* ── ShadCN variable mapping ── */
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f1f5f9;
+  --secondary-foreground: #334155;
+
+  --muted: #f1f5f9;
   --muted-foreground: #64748b;
 
-  /* Accent = Soft panel highlight */
-  --accent: #0f1d32;
-  --accent-foreground: #e2e8f0;
+  --accent: #eef2ff;
+  --accent-foreground: #4338ca;
 
-  /* Destructive */
   --destructive: #ef4444;
 
-  /* Borders & inputs */
-  --border: rgba(148, 163, 184, 0.12);
-  --input: rgba(148, 163, 184, 0.15);
-  --ring: #06b6d4;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #6366f1;
 
-  /* Charts */
-  --chart-1: #06b6d4;
-  --chart-2: #0891b2;
-  --chart-3: #0e7490;
-  --chart-4: #155e75;
-  --chart-5: #164e63;
+  --chart-1: #6366f1;
+  --chart-2: #14b8a6;
+  --chart-3: #f59e0b;
+  --chart-4: #f43f5e;
+  --chart-5: #0ea5e9;
 
-  /* Radius */
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 
   /* Sidebar */
-  --sidebar: #080e1a;
-  --sidebar-foreground: #94a3b8;
-  --sidebar-primary: #06b6d4;
-  --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: #0f1d32;
-  --sidebar-accent-foreground: #e2e8f0;
-  --sidebar-border: rgba(148, 163, 184, 0.08);
-  --sidebar-ring: #06b6d4;
-
-  /* ── Reva ERP Custom Tokens ── */
-  --erp-bg-deep: #040810;
-  --erp-bg-surface: #0a1120;
-  --erp-bg-elevated: #0f1729;
-  --erp-accent: #06b6d4;
-  --erp-accent-bright: #22d3ee;
-  --erp-accent-glow: rgba(6, 182, 212, 0.15);
-  --erp-accent-glow-strong: rgba(6, 182, 212, 0.3);
-  --erp-success: #10b981;
-  --erp-warning: #f59e0b;
-  --erp-critical: #ef4444;
-  --erp-info: #3b82f6;
-  --erp-text-primary: #f1f5f9;
-  --erp-text-secondary: #94a3b8;
-  --erp-text-muted: #475569;
-  --erp-border-subtle: rgba(148, 163, 184, 0.08);
-  --erp-border-default: rgba(148, 163, 184, 0.12);
-  --erp-border-accent: rgba(6, 182, 212, 0.3);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #64748b;
+  --sidebar-primary: #6366f1;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef2ff;
+  --sidebar-accent-foreground: #4338ca;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #6366f1;
 }
 
-/* ── Also map .dark to the same values (for shadcn compat) ── */
+/* ── Dark Theme ── */
 .dark {
-  --background: #060b14;
-  --foreground: #e2e8f0;
-  --card: #0c1322;
-  --card-foreground: #e2e8f0;
-  --popover: #0f1729;
-  --popover-foreground: #e2e8f0;
-  --primary: #06b6d4;
-  --primary-foreground: #020617;
-  --secondary: #1e293b;
-  --secondary-foreground: #cbd5e1;
-  --muted: #131c2e;
-  --muted-foreground: #64748b;
-  --accent: #0f1d32;
-  --accent-foreground: #e2e8f0;
-  --destructive: #ef4444;
-  --border: rgba(148, 163, 184, 0.12);
-  --input: rgba(148, 163, 184, 0.15);
-  --ring: #06b6d4;
-  --chart-1: #06b6d4;
-  --chart-2: #0891b2;
-  --chart-3: #0e7490;
-  --chart-4: #155e75;
-  --chart-5: #164e63;
-  --sidebar: #080e1a;
+  /* ─ Surfaces ─ */
+  --color-canvas: #0c0a1d;
+  --color-inverse-canvas: #f8fafc;
+  --color-surface-soft: #16132d;
+  --color-hairline: #2e2a4a;
+  --color-hairline-soft: #1e1a38;
+
+  /* ─ Pastel Color Blocks (deep tones) ─ */
+  --color-block-lime: #1a2e0d;
+  --color-block-lilac: #251e40;
+  --color-block-cream: #332b14;
+  --color-block-mint: #0d2e1e;
+  --color-block-pink: #33182a;
+  --color-block-coral: #331f12;
+  --color-block-navy: #0e0c24;
+
+  /* ─ Text ─ */
+  --color-ink: #f1f5f9;
+  --color-inverse-ink: #0f172a;
+
+  /* ─ Semantic ─ */
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-info: #818cf8;
+
+  /* ── ShadCN variable mapping ── */
+  --background: #0c0a1d;
+  --foreground: #f1f5f9;
+
+  --card: #16132d;
+  --card-foreground: #f1f5f9;
+
+  --popover: #16132d;
+  --popover-foreground: #f1f5f9;
+
+  --primary: #818cf8;
+  --primary-foreground: #0c0a1d;
+
+  --secondary: #1e1a38;
+  --secondary-foreground: #e2e8f0;
+
+  --muted: #1e1a38;
+  --muted-foreground: #94a3b8;
+
+  --accent: #1e1a38;
+  --accent-foreground: #a5b4fc;
+
+  --destructive: #f87171;
+
+  --border: #2e2a4a;
+  --input: #2e2a4a;
+  --ring: #818cf8;
+
+  --chart-1: #818cf8;
+  --chart-2: #2dd4bf;
+  --chart-3: #fbbf24;
+  --chart-4: #fb7185;
+  --chart-5: #38bdf8;
+
+  /* Sidebar */
+  --sidebar: #110e28;
   --sidebar-foreground: #94a3b8;
-  --sidebar-primary: #06b6d4;
-  --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: #0f1d32;
-  --sidebar-accent-foreground: #e2e8f0;
-  --sidebar-border: rgba(148, 163, 184, 0.08);
-  --sidebar-ring: #06b6d4;
+  --sidebar-primary: #818cf8;
+  --sidebar-primary-foreground: #0c0a1d;
+  --sidebar-accent: #1e1a38;
+  --sidebar-accent-foreground: #a5b4fc;
+  --sidebar-border: #2e2a4a;
+  --sidebar-ring: #818cf8;
 }
 
 @layer base {
@@ -175,204 +236,141 @@
   }
 }
 
-/* ── Animations ── */
-@keyframes erp-fade-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+/* ── Typography Utility Classes ── */
+
+.text-display-xl {
+  font-size: 86px;
+  font-weight: 340;
+  line-height: 1.00;
+  letter-spacing: -1.72px;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-@keyframes erp-slide-in-right {
-  from { opacity: 0; transform: translateX(16px); }
-  to { opacity: 1; transform: translateX(0); }
+.text-display-lg {
+  font-size: 64px;
+  font-weight: 340;
+  line-height: 1.10;
+  letter-spacing: -0.96px;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-@keyframes erp-pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--erp-accent-glow); }
-  50% { box-shadow: 0 0 12px 2px var(--erp-accent-glow); }
+.text-headline {
+  font-size: 26px;
+  font-weight: 540;
+  line-height: 1.35;
+  letter-spacing: -0.26px;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-@keyframes erp-border-glow {
-  0%, 100% { border-color: var(--erp-border-subtle); }
-  50% { border-color: var(--erp-border-accent); }
+.text-subhead {
+  font-size: 26px;
+  font-weight: 340;
+  line-height: 1.35;
+  letter-spacing: -0.26px;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-@keyframes erp-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-@keyframes erp-count-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Utility Classes ── */
-.erp-fade-in {
-  animation: erp-fade-in 0.4s ease-out both;
-}
-
-.erp-slide-in {
-  animation: erp-slide-in-right 0.3s ease-out both;
-}
-
-.erp-card {
-  background: var(--card);
-  border: 1px solid var(--erp-border-default);
-  border-radius: var(--radius);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.erp-card:hover {
-  border-color: var(--erp-border-accent);
-  box-shadow: 0 0 20px -4px var(--erp-accent-glow);
-}
-
-.erp-card-static {
-  background: var(--card);
-  border: 1px solid var(--erp-border-default);
-  border-radius: var(--radius);
-}
-
-.erp-glow-border {
-  animation: erp-border-glow 3s ease-in-out infinite;
-}
-
-.erp-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-.erp-status-dot--success { background: var(--erp-success); box-shadow: 0 0 6px var(--erp-success); }
-.erp-status-dot--warning { background: var(--erp-warning); box-shadow: 0 0 6px var(--erp-warning); }
-.erp-status-dot--critical { background: var(--erp-critical); box-shadow: 0 0 6px var(--erp-critical); }
-.erp-status-dot--info { background: var(--erp-info); box-shadow: 0 0 6px var(--erp-info); }
-.erp-status-dot--neutral { background: var(--erp-text-muted); }
-
-.erp-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 10px;
-  border-radius: 9999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.erp-badge--success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-.erp-badge--warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-.erp-badge--critical { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-.erp-badge--info { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
-.erp-badge--accent { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
-.erp-badge--neutral { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
-
-.erp-kpi-value {
-  font-size: 2.5rem;
+.text-card-title {
+  font-size: 24px;
   font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  color: var(--erp-text-primary);
-  font-variant-numeric: tabular-nums;
-  animation: erp-count-up 0.6s ease-out both;
+  line-height: 1.45;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-.erp-kpi-label {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--erp-text-muted);
+.text-body-lg {
+  font-size: 20px;
+  font-weight: 330;
+  line-height: 1.40;
+  letter-spacing: -0.14px;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-.erp-section-title {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--erp-accent);
+.figma-body {
+  font-size: 18px;
+  font-weight: 320;
+  line-height: 1.45;
+  letter-spacing: -0.26px;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-.erp-grid-pattern {
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
+.text-body-sm {
+  font-size: 16px;
+  font-weight: 330;
+  line-height: 1.45;
+  letter-spacing: -0.14px;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-/* Table styling */
-.erp-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+.text-link {
+  font-size: 20px;
+  font-weight: 480;
+  line-height: 1.40;
+  letter-spacing: -0.10px;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-.erp-table th {
-  font-size: 0.65rem;
-  font-weight: 600;
+.text-button {
+  font-size: 20px;
+  font-weight: 480;
+  line-height: 1.40;
+  letter-spacing: -0.10px;
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+.text-eyebrow {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.30;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--erp-text-muted);
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--erp-border-default);
-  background: var(--erp-bg-surface);
 }
 
-.erp-table td {
-  padding: 12px 16px;
-  font-size: 0.85rem;
-  color: var(--erp-text-secondary);
-  border-bottom: 1px solid var(--erp-border-subtle);
-  transition: background-color 0.15s ease;
+.text-caption {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.00;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.erp-table tr:hover td {
-  background: var(--erp-accent-glow);
+/* ── Color Block Section Utility ── */
+
+.color-block {
+  border-radius: var(--rounded-lg);
+  padding: var(--spacing-xxl);
+  width: 100%;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--erp-text-muted);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--erp-text-secondary);
+.color-block-lime { background: var(--color-block-lime); }
+.color-block-lilac { background: var(--color-block-lilac); }
+.color-block-cream { background: var(--color-block-cream); }
+.color-block-mint { background: var(--color-block-mint); }
+.color-block-pink { background: var(--color-block-pink); }
+.color-block-coral { background: var(--color-block-coral); }
+.color-block-navy {
+  background: var(--color-block-navy);
+  color: var(--color-inverse-ink);
 }
 
-/* Bar chart CSS-only component */
-.erp-bar {
-  background: linear-gradient(180deg, var(--erp-accent) 0%, var(--erp-accent-bright) 100%);
-  border-radius: 3px 3px 0 0;
-  transition: height 0.6s ease-out;
-  min-width: 24px;
-}
-
-.erp-bar--muted {
-  background: linear-gradient(180deg, #1e293b 0%, #334155 100%);
-}
-
-/* Progress bar */
-.erp-progress {
-  height: 6px;
-  background: var(--erp-bg-surface);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.erp-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--erp-accent) 0%, var(--erp-accent-bright) 100%);
-  border-radius: 3px;
-  transition: width 0.8s ease-out;
+/* ── Responsive Typography ── */
+@media (max-width: 768px) {
+  .text-display-xl {
+    font-size: 42px;
+    letter-spacing: -0.8px;
+  }
+  .text-display-lg {
+    font-size: 32px;
+    letter-spacing: -0.5px;
+  }
+  .text-headline {
+    font-size: 22px;
+  }
+  .text-subhead {
+    font-size: 20px;
+  }
+  .color-block {
+    border-radius: 0;
+  }
 }

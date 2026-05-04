@@ -143,19 +143,14 @@ export function InventoryView({
   }, [finishedRows, searchQuery]);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="erp-section-title">Inventory</p>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Item Master
-          </h1>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-foreground">Inventory</h1>
       </div>
 
       {serviceAlert ? (
-        <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700">
-          <AlertTriangle className="size-4" />
+        <div className="flex items-center gap-2 rounded-lg border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-2.5 text-[13px] text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="size-3.5 shrink-0" />
           <span>{serviceAlert}</span>
         </div>
       ) : null}
@@ -170,63 +165,54 @@ export function InventoryView({
           <TabsTrigger value="finished">Finished Goods</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="raw" className="space-y-4 pt-2">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-1 flex-wrap items-center gap-2">
-              <div className="relative min-w-72 flex-1 max-w-xl">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <TabsContent value="raw" className="pt-3">
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search SKU, description, or specification"
-                  className="pl-9"
+                  placeholder="Search SKU, description…"
+                  className="pl-9 h-8 text-[13px]"
                 />
               </div>
-              <Button variant="outline" disabled>
-                <Filter className="mr-2 size-4" />
-                Filters
-              </Button>
+              <div className="flex-1" />
+              <AddRawMaterialDialog />
             </div>
-            <AddRawMaterialDialog />
+            <InventoryTable
+              rows={filteredRawRows}
+              emptyText="No raw material rows found."
+              showType={false}
+              onRowClick={setSelectedRow}
+            />
           </div>
-
-          <InventoryTable
-            rows={filteredRawRows}
-            emptyText="No raw material rows found."
-            showType={false}
-            onRowClick={setSelectedRow}
-          />
         </TabsContent>
 
         <TabsContent value="wip" className="space-y-4 pt-2">
           <WIPActivityTab isAdmin={isAdmin} />
         </TabsContent>
 
-        <TabsContent value="finished" className="space-y-4 pt-2">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-1 flex-wrap items-center gap-2">
-              <div className="relative min-w-72 flex-1 max-w-xl">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <TabsContent value="finished" className="pt-3">
+          <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search finished/semi-finished output"
-                  className="pl-9"
+                  placeholder="Search finished output…"
+                  className="pl-9 h-8 text-[13px]"
                 />
               </div>
-              <Button variant="outline" disabled>
-                <Filter className="mr-2 size-4" />
-                Filters
-              </Button>
             </div>
+            <InventoryTable
+              rows={filteredFinishedRows}
+              emptyText="No finished goods rows found."
+              showType={true}
+              onRowClick={setSelectedRow}
+            />
           </div>
-
-          <InventoryTable
-            rows={filteredFinishedRows}
-            emptyText="No finished goods rows found."
-            showType={true}
-            onRowClick={setSelectedRow}
-          />
         </TabsContent>
       </Tabs>
 
@@ -272,11 +258,8 @@ function InventoryTable({
   onRowClick,
 }: InventoryTableProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Current State</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <>
+      <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -343,8 +326,8 @@ function InventoryTable({
             ) : null}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
+      </div>
+    </>
   );
 }
 

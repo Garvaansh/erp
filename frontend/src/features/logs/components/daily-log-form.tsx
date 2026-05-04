@@ -65,15 +65,14 @@ export function DailyLogForm() {
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Add Daily Log</CardTitle>
-          <CardDescription>
-            Submit production output against a source batch.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+    <div className="space-y-6">
+      <div>
+        <p className="text-eyebrow text-muted-foreground mb-2">Production</p>
+        <h1 className="text-headline text-foreground">Add Daily Log</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Submit production output against a source batch.
+        </p>
+      </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <Card>

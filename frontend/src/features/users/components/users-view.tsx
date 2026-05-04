@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, UserPlus, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useUsers } from "@/features/users/queries";
 import {
@@ -19,8 +20,10 @@ function roleLabel(role: UserRole): string {
   return "Staff";
 }
 
-function statusLabel(isActive: boolean): string {
-  return isActive ? "Active" : "Archived";
+function roleBadgeColor(role: UserRole): string {
+  if (role === "ADMIN") return "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400";
+  if (role === "MANAGER") return "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400";
+  return "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400";
 }
 
 export function UsersView() {
@@ -72,108 +75,156 @@ export function UsersView() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">User Management</h1>
-        <button className="rounded border px-3 py-1.5 text-sm" onClick={() => setCreating(true)} type="button">
+    <div className="space-y-6">
+      {/* Header with inline stats */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-semibold text-foreground">Users</h1>
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded-md tabular-nums">
+              {users.length} total
+            </span>
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 px-2 py-1 bg-emerald-100 dark:bg-emerald-500/15 rounded-md tabular-nums">
+              {totals.active} active
+            </span>
+            <span className="text-xs text-violet-600 dark:text-violet-400 px-2 py-1 bg-violet-100 dark:bg-violet-500/15 rounded-md tabular-nums">
+              {totals.admins} admins
+            </span>
+          </div>
+        </div>
+        <Button size="sm" onClick={() => setCreating(true)}>
+          <UserPlus className="size-3.5" />
           Create User
-        </button>
+        </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded border p-3 text-sm">Total: {users.length}</div>
-        <div className="rounded border p-3 text-sm">Active: {totals.active}</div>
-        <div className="rounded border p-3 text-sm">Admins: {totals.admins}</div>
-      </div>
-
-      <div className="flex gap-2">
-        <select value={filter} onChange={(e) => setFilter(e.target.value as UserFilter)} className="rounded border px-2 py-1.5 text-sm">
-          <option value="active">Active</option>
-          <option value="archived">Archived</option>
-          <option value="all">All</option>
-        </select>
-        <input
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search by name/email/role"
-          className="w-full rounded border px-3 py-1.5 text-sm"
-        />
-      </div>
-
-      {usersQuery.isLoading ? (
-        <div className="flex items-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" />Loading users...</div>
-      ) : usersQuery.error ? (
-        <p className="text-sm text-red-500">Failed to load users.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left">
-              <th className="py-2">Email</th>
-              <th className="py-2">Role</th>
-              <th className="py-2">Status</th>
-              <th className="py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-b">
-                <td className="py-2">{user.email}</td>
-                <td className="py-2">{roleLabel(user.role_code)}</td>
-                <td className="py-2">{statusLabel(user.is_active)}</td>
-                <td className="py-2 text-right">
-                  <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setEditingUser(user)}>
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Create User Form */}
+      {creating && (
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm space-y-4">
+          <h3 className="text-sm font-semibold text-foreground">New User</h3>
+          <form onSubmit={onCreateSubmit} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <input name="email" type="email" required className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" placeholder="user@company.com" />
+              <input name="password" type="password" required minLength={8} className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" placeholder="Password (min 8)" />
+              <select name="role_code" defaultValue="STAFF" className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20">
+                {ROLES.map((role) => <option value={role} key={role}>{roleLabel(role)}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" loading={createUserMutation.isPending}>Save</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setCreating(false)}>Cancel</Button>
+            </div>
+          </form>
+        </div>
       )}
 
-      {creating ? (
-        <form onSubmit={onCreateSubmit} className="space-y-2 rounded border p-3">
-          <p className="text-sm font-medium">Create User</p>
-          <input name="email" type="email" required className="w-full rounded border px-2 py-1.5 text-sm" placeholder="user@company.com" />
-          <input name="password" type="password" required minLength={8} className="w-full rounded border px-2 py-1.5 text-sm" placeholder="Password (min 8 chars)" />
-          <select name="role_code" defaultValue="STAFF" className="w-full rounded border px-2 py-1.5 text-sm">
-            {ROLES.map((role) => <option value={role} key={role}>{roleLabel(role)}</option>)}
-          </select>
-          <div className="flex gap-2">
-            <button type="submit" className="rounded border px-3 py-1.5 text-sm" disabled={createUserMutation.isPending}>Save</button>
-            <button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={() => setCreating(false)}>Cancel</button>
-          </div>
-        </form>
-      ) : null}
+      {/* Edit User Form */}
+      {editingUser && (
+        <div className="rounded-xl border border-primary/20 bg-card p-5 shadow-sm space-y-4">
+          <h3 className="text-sm font-semibold text-foreground">
+            Edit: <span className="text-muted-foreground font-normal">{editingUser.email}</span>
+          </h3>
+          <form onSubmit={onEditSubmit} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <select name="role_code" defaultValue={editingUser.role_code} className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20">
+                {ROLES.map((role) => <option value={role} key={role}>{roleLabel(role)}</option>)}
+              </select>
+              <label className="inline-flex items-center gap-2 text-sm text-foreground px-3 py-2">
+                <input name="is_active" type="checkbox" defaultChecked={editingUser.is_active} className="accent-primary" />
+                Active
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" loading={updateUserMutation.isPending}>Update</Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                loading={resetPasswordMutation.isPending}
+                onClick={() => {
+                  const nextPassword = window.prompt("Enter new password (min 8 chars)");
+                  if (!nextPassword || nextPassword.trim().length < 8) return;
+                  resetPasswordMutation.mutate({ userId: editingUser.id, payload: { password: nextPassword } });
+                }}
+              >
+                Reset Password
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingUser(null)}>Close</Button>
+            </div>
+          </form>
+        </div>
+      )}
 
-      {editingUser ? (
-        <form onSubmit={onEditSubmit} className="space-y-2 rounded border p-3">
-          <p className="text-sm font-medium">Edit User: {editingUser.email}</p>
-          <select name="role_code" defaultValue={editingUser.role_code} className="w-full rounded border px-2 py-1.5 text-sm">
-            {ROLES.map((role) => <option value={role} key={role}>{roleLabel(role)}</option>)}
-          </select>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input name="is_active" type="checkbox" defaultChecked={editingUser.is_active} />
-            Active
-          </label>
-          <div className="flex gap-2">
-            <button type="submit" className="rounded border px-3 py-1.5 text-sm" disabled={updateUserMutation.isPending}>Update</button>
-            <button
-              type="button"
-              className="rounded border px-3 py-1.5 text-sm"
-              disabled={resetPasswordMutation.isPending}
-              onClick={() => {
-                const nextPassword = window.prompt("Enter new password (min 8 chars)");
-                if (!nextPassword || nextPassword.trim().length < 8) return;
-                resetPasswordMutation.mutate({ userId: editingUser.id, payload: { password: nextPassword } });
-              }}
-            >
-              Reset Password
-            </button>
-            <button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={() => setEditingUser(null)}>Close</button>
+      {/* Table card */}
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search users…"
+              className="w-full rounded-lg border border-border pl-9 pr-3 py-1.5 text-sm bg-background text-foreground placeholder:text-muted-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+            />
           </div>
-        </form>
-      ) : null}
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as UserFilter)}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm bg-background text-foreground outline-none focus:border-ring"
+          >
+            <option value="active">Active</option>
+            <option value="archived">Archived</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+
+        {/* Table */}
+        {usersQuery.isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-12 justify-center">
+            <Loader2 className="size-4 animate-spin" />
+            Loading users…
+          </div>
+        ) : usersQuery.error ? (
+          <p className="text-sm text-destructive py-12 text-center">Failed to load users.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="py-2.5 px-4 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Email</th>
+                <th className="py-2.5 px-4 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Role</th>
+                <th className="py-2.5 px-4 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                <th className="py-2.5 px-4 text-right text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="py-2.5 px-4 text-[13px] text-foreground">{user.email}</td>
+                  <td className="py-2.5 px-4">
+                    <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md ${roleBadgeColor(user.role_code)}`}>
+                      {roleLabel(user.role_code)}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span className="inline-flex items-center gap-1.5 text-[13px]">
+                      <span className={`size-1.5 rounded-full ${user.is_active ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+                      <span className={user.is_active ? "text-foreground" : "text-muted-foreground"}>
+                        {user.is_active ? "Active" : "Archived"}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 text-right">
+                    <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>
+                      Edit
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

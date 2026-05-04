@@ -81,7 +81,7 @@ const LEDGER_COLUMNS = [
 function TypeBadge({ type }: { type: "IN" | "OUT" }) {
   if (type === "OUT") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600">
         <ArrowUpCircle className="size-3" />
         OUT
       </span>
@@ -89,7 +89,7 @@ function TypeBadge({ type }: { type: "IN" | "OUT" }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
+    <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600">
       <ArrowDownCircle className="size-3" />
       IN
     </span>
@@ -150,10 +150,9 @@ export function LedgerTab() {
   };
 
   return (
-    <Card>
-      <CardHeader className="gap-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <CardTitle>Transaction Ledger</CardTitle>
+    <div className="rounded-[24px] border border-border overflow-hidden">
+      <div className="px-6 py-4 border-b border-border flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <p className="text-sm font-medium text-foreground">Transaction Ledger</p>
 
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -231,23 +230,22 @@ export function LedgerTab() {
             </Button>
           </div>
         </div>
-      </CardHeader>
 
-      <CardContent className="space-y-4">
+      <div className="p-6 space-y-4">
         {!hasValidRange ? (
-          <div className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+          <div className="rounded-[8px] border px-3 py-2 text-sm text-muted-foreground">
             Please provide a valid custom date range.
           </div>
         ) : null}
 
         {ledgerQuery.isLoading ? (
-          <div className="rounded-lg border px-3 py-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-[8px] border px-3 py-8 text-center text-sm text-muted-foreground">
             Loading ledger entries…
           </div>
         ) : null}
 
         {ledgerQuery.isError ? (
-          <div className="rounded-lg border px-3 py-8 text-center text-sm text-destructive">
+          <div className="rounded-[8px] border px-3 py-8 text-center text-sm text-destructive">
             Unable to load ledger data. Please try again.
           </div>
         ) : null}
@@ -255,7 +253,7 @@ export function LedgerTab() {
         {!ledgerQuery.isLoading &&
         !ledgerQuery.isError &&
         filteredEntries.length === 0 ? (
-          <div className="rounded-lg border px-3 py-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-[8px] border px-3 py-8 text-center text-sm text-muted-foreground">
             No ledger entries for the selected filters.
           </div>
         ) : null}
@@ -265,8 +263,8 @@ export function LedgerTab() {
         filteredEntries.length > 0 ? (
           <LedgerTable entries={filteredEntries} />
         ) : null}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

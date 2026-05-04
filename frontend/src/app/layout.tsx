@@ -1,23 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { AppToaster } from "@/components/app-toaster";
+import { ThemeProvider } from "@/components/theme-provider";
 import { ReactQueryProvider } from "@/lib/react-query/provider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "Reva ERP — Command Center",
+  title: "Reva ERP",
   description:
-    "Industrial-grade ERP system for precision manufacturing operations.",
+    "Enterprise resource planning for precision manufacturing operations.",
 };
 
 export default function RootLayout({
@@ -28,13 +29,36 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        {/* Inline script to prevent flash of wrong theme */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('reva-erp-theme');
+                  if (!theme) {
+                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                  }
+                  if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full bg-background text-foreground">
-        <ReactQueryProvider>
-          {children}
-          <AppToaster />
-        </ReactQueryProvider>
+        <ThemeProvider>
+          <ReactQueryProvider>
+            {children}
+            <AppToaster />
+          </ReactQueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -15,7 +15,6 @@ import {
   ReportView,
   useReportViewState,
 } from "@/components/reports/report-view";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ReportRow, ReportSummary } from "@/features/reports/types";
 import { REPORTS, type ReportConfig } from "@/lib/reports/report-config";
@@ -99,7 +98,7 @@ function MiniBars({ points }: { points: InsightPoint[] }) {
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-linear-to-r from-primary to-cyan-500"
+              className="h-full rounded-full bg-primary"
               style={{ width: `${Math.max((point.value / max) * 100, 2)}%` }}
             />
           </div>
@@ -119,16 +118,14 @@ function SummaryCards({ summary }: { summary: ReportSummary }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {entries.map(([key, value]) => (
-        <Card key={key} size="sm" className="erp-card-static bg-card">
-          <CardContent className="space-y-1">
-            <p className="text-xs text-muted-foreground">
-              {formatSummaryLabel(key)}
-            </p>
-            <p className="text-lg font-semibold text-foreground">
-              {String(value)}
-            </p>
-          </CardContent>
-        </Card>
+        <div key={key} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            {formatSummaryLabel(key)}
+          </p>
+          <p className="text-lg font-semibold text-foreground mt-1 tabular-nums">
+            {String(value)}
+          </p>
+        </div>
       ))}
     </div>
   );
@@ -243,70 +240,60 @@ function InsightsSection({
       <SummaryCards summary={summary} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="erp-card-static bg-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <CalendarDays className="size-4" />
-              {config.key === "inventory"
-                ? "Stock Movement Timeline"
-                : "Revenue Timeline"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">
-                Loading timeline...
-              </p>
-            ) : isError ? (
-              <p className="text-sm text-destructive">
-                Unable to build timeline.
-              </p>
-            ) : (
-              <MiniBars points={timeline} />
-            )}
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground mb-4">
+            <CalendarDays className="size-3.5" />
+            {config.key === "inventory"
+              ? "Stock Movement Timeline"
+              : "Revenue Timeline"}
+          </div>
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">
+              Loading timeline...
+            </p>
+          ) : isError ? (
+            <p className="text-sm text-destructive">
+              Unable to build timeline.
+            </p>
+          ) : (
+            <MiniBars points={timeline} />
+          )}
+        </div>
 
-        <Card className="erp-card-static bg-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <TrendingUp className="size-4" />
-              {config.key === "inventory"
-                ? "Warehouse Distribution"
-                : config.key === "purchase"
-                  ? "Vendor Spend Distribution"
-                  : "Channel Distribution"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">
-                Loading distribution...
-              </p>
-            ) : isError ? (
-              <p className="text-sm text-destructive">
-                Unable to build distribution.
-              </p>
-            ) : (
-              <MiniBars points={distribution} />
-            )}
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-4">
+            <TrendingUp className="size-4" />
+            {config.key === "inventory"
+              ? "Warehouse Distribution"
+              : config.key === "purchase"
+                ? "Vendor Spend Distribution"
+                : "Channel Distribution"}
+          </div>
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">
+              Loading distribution...
+            </p>
+          ) : isError ? (
+            <p className="text-sm text-destructive">
+              Unable to build distribution.
+            </p>
+          ) : (
+            <MiniBars points={distribution} />
+          )}
+        </div>
       </div>
 
-      <Card className="erp-card-static bg-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Lightbulb className="size-4" />
-            Insights
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
+      <div className="rounded-[24px] border border-border p-6">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-3">
+          <Lightbulb className="size-4" />
+          Insights
+        </div>
+        <div className="space-y-2 text-sm text-muted-foreground">
           {highlights.map((line, index) => (
             <p key={`${config.key}-insight-${index}`}>{line}</p>
           ))}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -340,18 +327,7 @@ export function ReportsView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="erp-section-title mb-1">Business Intelligence</p>
-          <h1 className="text-2xl font-bold text-foreground">
-            Reports & Analytics
-          </h1>
-        </div>
-        <div className="hidden rounded-lg border bg-card px-3 py-1.5 text-xs text-muted-foreground sm:flex sm:items-center sm:gap-2">
-          <ChartColumnBig className="size-4" />
-          Modular Reports Engine
-        </div>
-      </div>
+      <h1 className="text-lg font-semibold text-foreground">Reports</h1>
 
       <Tabs
         value={activeTab}
@@ -362,7 +338,7 @@ export function ReportsView() {
       >
         <TabsList
           variant="line"
-          className="w-full justify-start rounded-lg border bg-card p-1"
+          className="w-full justify-start"
         >
           {REPORT_TABS.map((tab) => (
             <TabsTrigger key={tab.key} value={tab.key} className="gap-2 px-4">

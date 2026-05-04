@@ -11,14 +11,14 @@ export default function GlobalError({
 }) {
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-2xl flex-col items-center justify-center px-6 py-12 text-center">
-      <div className="mb-4 flex size-16 items-center justify-center rounded-2xl border border-red-500/25 bg-red-500/10">
-        <AlertTriangle className="size-8 text-red-400" />
+      <div className="mb-4 flex size-16 items-center justify-center rounded-[24px] border border-destructive/25 bg-destructive/5">
+        <AlertTriangle className="size-8 text-destructive" />
       </div>
 
-      <h2 className="mb-2 text-lg font-bold text-(--erp-text-primary)">
+      <h2 className="mb-2 text-lg font-semibold text-foreground">
         Something went wrong
       </h2>
-      <p className="mb-6 text-sm text-(--erp-text-muted)">
+      <p className="mb-6 text-sm text-muted-foreground">
         {error.message ||
           "An unexpected error occurred while loading this page."}
       </p>
@@ -26,7 +26,7 @@ export default function GlobalError({
       <button
         type="button"
         onClick={reset}
-        className="rounded-lg bg-(--erp-accent) px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-(--erp-accent-bright) transition-colors"
+        className="rounded-[50px] bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
       >
         Retry
       </button>

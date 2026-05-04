@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { BookOpenTextIcon, LandmarkIcon, ReceiptTextIcon, WalletIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PaymentModal } from "@/components/common/payment-modal";
 import { MoneyDisplay } from "@/components/common/money-display";
@@ -66,18 +65,17 @@ export function FinancePageClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <p className="erp-section-title mb-1">Finance Workspace</p>
-          <h1 className="text-2xl font-bold text-(--erp-text-primary)">
-            Finance
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Track liabilities, payment activity, and upcoming accounting workflows from one place.
+          <h1 className="text-lg font-semibold text-foreground">Finance</h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            Liabilities, payments, and accounting workflows.
           </p>
         </div>
         <Button
           variant="outline"
+          size="sm"
           onClick={() => void payablesQuery.refetch()}
           loading={payablesQuery.isRefetching}
         >
@@ -85,6 +83,33 @@ export function FinancePageClient() {
         </Button>
       </div>
 
+      {/* Stat strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Vendors</p>
+          <p className="text-xl font-semibold text-foreground tabular-nums mt-1">{overview.vendors}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Purchased</p>
+          <p className="text-xl font-semibold text-foreground tabular-nums mt-1">
+            <MoneyDisplay amount={overview.totalPurchased} />
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Paid</p>
+          <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums mt-1">
+            <MoneyDisplay amount={overview.totalPaid} />
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Due</p>
+          <p className="text-xl font-semibold text-rose-600 dark:text-rose-400 tabular-nums mt-1">
+            <MoneyDisplay amount={overview.totalDue} />
+          </p>
+        </div>
+      </div>
+
+      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList variant="line" className="w-full justify-start">
           <TabsTrigger value="overview">
@@ -105,89 +130,46 @@ export function FinancePageClient() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4 pt-2">
+        <TabsContent value="overview" className="pt-4">
           {activeTab === "overview" ? (
-            <>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">
-                      Vendors With Due
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-2xl font-semibold">
-                    {overview.vendors}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">
-                      Total Purchased
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-2xl font-semibold">
-                    <MoneyDisplay amount={overview.totalPurchased} />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">
-                      Total Paid
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-2xl font-semibold">
-                    <MoneyDisplay amount={overview.totalPaid} />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">
-                      Total Due
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-2xl font-semibold text-destructive">
-                    <MoneyDisplay amount={overview.totalDue} />
-                  </CardContent>
-                </Card>
+            <div className="rounded-xl border border-border bg-card shadow-sm">
+              <div className="px-5 py-4 border-b border-border">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Highest Outstanding Vendors
+                </h3>
               </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Highest Outstanding Vendors</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {payablesQuery.data.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No open vendor balances to summarize yet.
-                    </p>
-                  ) : (
-                    payablesQuery.data.slice(0, 5).map((vendor) => (
-                      <div
-                        key={vendor.vendor_id}
-                        className="flex items-center justify-between gap-4 rounded-lg border border-border px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <div className="font-medium text-foreground">
-                            {vendor.vendor_name}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {vendor.vendor_code || "Vendor code unavailable"}
-                          </div>
-                        </div>
-                        <MoneyDisplay
-                          amount={vendor.total_due}
-                          className="font-semibold text-destructive"
-                        />
+              <div className="divide-y divide-border">
+                {payablesQuery.data.length === 0 ? (
+                  <p className="px-5 py-8 text-sm text-muted-foreground text-center">
+                    No open vendor balances to summarize yet.
+                  </p>
+                ) : (
+                  payablesQuery.data.slice(0, 5).map((vendor) => (
+                    <div
+                      key={vendor.vendor_id}
+                      className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-foreground">
+                          {vendor.vendor_name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {vendor.vendor_code || "—"}
+                        </p>
                       </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            </>
+                      <MoneyDisplay
+                        amount={vendor.total_due}
+                        className="text-sm font-semibold text-rose-600 dark:text-rose-400 tabular-nums"
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           ) : null}
         </TabsContent>
 
-        <TabsContent value="payables" className="pt-2">
+        <TabsContent value="payables" className="pt-4">
           {activeTab === "payables" ? (
             <PayablesTab
               vendors={payablesQuery.data}
@@ -199,7 +181,7 @@ export function FinancePageClient() {
           ) : null}
         </TabsContent>
 
-        <TabsContent value="receivables" className="pt-2">
+        <TabsContent value="receivables" className="pt-4">
           {activeTab === "receivables" ? (
             <PlaceholderTab
               title="Receivables are coming next"
@@ -208,7 +190,7 @@ export function FinancePageClient() {
           ) : null}
         </TabsContent>
 
-        <TabsContent value="ledger" className="pt-2">
+        <TabsContent value="ledger" className="pt-4">
           {activeTab === "ledger" ? <LedgerTab /> : null}
         </TabsContent>
       </Tabs>

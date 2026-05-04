@@ -761,34 +761,34 @@ export default function ProcurementPage() {
     activeTab === "pending" ? filteredPending.length : filteredRecent.length;
 
   return (
-    <div className="space-y-4">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Procurement Control Panel</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage purchase orders, receiving, reversals, and closures from one
-            table-first workflow.
+          <h1 className="text-lg font-semibold text-foreground">Procurement</h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            Purchase orders, receiving, and closures.
           </p>
         </div>
-        <Button onClick={openCreateDialog} disabled={createMutation.isPending}>
+        <Button size="sm" onClick={openCreateDialog} disabled={createMutation.isPending}>
           + New PO
         </Button>
       </header>
 
-      <section className="rounded-xl border bg-background p-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+      <section className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
           <Input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search by PO number, vendor, item, or transaction"
+            placeholder="Search PO, vendor, or item…"
             aria-label="Search purchase orders"
+            className="max-w-sm h-8 text-[13px]"
           />
           <Select
             value={statusFilter}
             onValueChange={(value) => setStatusFilter(value as StatusFilter)}
           >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Filter by status" />
+            <SelectTrigger className="w-[160px] h-8 text-[13px]">
+              <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All Statuses</SelectItem>
@@ -798,9 +798,10 @@ export default function ProcurementPage() {
               <SelectItem value="CLOSED">CLOSED</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex items-center justify-end text-sm text-muted-foreground">
-            Showing {activeCount} orders
-          </div>
+          <div className="flex-1" />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {activeCount} orders
+          </span>
         </div>
 
         {listQuery.isLoading ? (

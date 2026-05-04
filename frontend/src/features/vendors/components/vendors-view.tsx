@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Building2, CheckCircle2, Loader2, Plus, Search, Archive } from "lucide-react";
+import { Building2, Loader2, Plus, Search } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useVendors, type VendorFilter } from "@/features/vendors/queries";
 import { VendorCreateDialog } from "./vendor-create-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -25,104 +24,76 @@ export function VendorsView() {
     debouncedSearch,
   );
 
-  const countLabel = useMemo(
-    () => `${vendors.length} vendor${vendors.length === 1 ? "" : "s"}`,
-    [vendors.length],
-  );
   const activeCount = useMemo(
     () => vendors.filter((vendor) => vendor.is_active).length,
     [vendors],
   );
-  const archivedCount = Math.max(vendors.length - activeCount, 0);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Vendor Management</h1>
-          <p className="text-sm text-muted-foreground">
-            CQRS-backed vendor directory
-          </p>
+    <div className="space-y-6">
+      {/* Header with inline stats */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-semibold text-foreground">Vendors</h1>
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded-md tabular-nums">
+              {vendors.length} total
+            </span>
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 px-2 py-1 bg-emerald-100 dark:bg-emerald-500/15 rounded-md tabular-nums">
+              {activeCount} active
+            </span>
+          </div>
+          {isFetching && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
         </div>
-        <Button type="button" onClick={() => setShowCreate(true)}>
-          <Plus className="size-4" />
+        <Button size="sm" onClick={() => setShowCreate(true)}>
+          <Plus className="size-3.5" />
           Add Vendor
         </Button>
       </div>
 
       <VendorCreateDialog open={showCreate} onOpenChange={setShowCreate} />
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Visible Vendors</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <Building2 className="size-4 text-primary" />
-            <p className="text-2xl font-semibold">{vendors.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <CheckCircle2 className="size-4 text-emerald-500" />
-            <p className="text-2xl font-semibold">{activeCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Archived</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <Archive className="size-4 text-amber-500" />
-            <p className="text-2xl font-semibold">{archivedCount}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Vendor Directory</CardTitle>
-        </CardHeader>
-        <CardContent>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {FILTERS.map((option) => (
-            <Button
-              key={option}
-              variant={filter === option ? "default" : "outline"}
-              type="button"
-              onClick={() => setFilter(option)}
-              className="capitalize"
-            >
-              {option}
-            </Button>
-          ))}
-          <div className="ml-auto flex items-center gap-2">
-            <Search className="size-4 text-muted-foreground" />
+      {/* Table card */}
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <Input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search by name or code"
-              className="w-64"
+              placeholder="Search name or code…"
+              className="pl-9 h-8 text-[13px]"
             />
           </div>
+          <div className="flex items-center gap-1">
+            {FILTERS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setFilter(option)}
+                className={`px-2.5 py-1 text-xs rounded-md capitalize transition-colors ${
+                  filter === option
+                    ? "bg-primary text-primary-foreground font-medium"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-          <span>{countLabel}</span>
-          {isFetching ? <span>Refreshing...</span> : null}
-        </div>
-
+        {/* Table */}
         {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="size-5 animate-spin text-cyan-600" />
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-12 justify-center">
+            <Loader2 className="size-4 animate-spin" />
+            Loading vendors…
           </div>
         ) : isError ? (
-          <p className="py-6 text-sm text-red-400">Failed to load vendors.</p>
+          <p className="text-sm text-destructive py-12 text-center">Failed to load vendors.</p>
         ) : vendors.length === 0 ? (
-          <p className="py-6 text-sm text-muted-foreground">No vendors found.</p>
+          <p className="py-12 text-sm text-muted-foreground text-center">No vendors found.</p>
         ) : (
           <Table>
             <TableHeader>
@@ -134,33 +105,32 @@ export function VendorsView() {
               </TableRow>
             </TableHeader>
             <TableBody>
-                {vendors.map((vendor) => (
-                  <TableRow key={vendor.id}>
-                    <TableCell>
-                      <Link
-                        href={`/vendors/${vendor.id}`}
-                        className="inline-flex items-center gap-2 hover:text-cyan-400"
-                      >
-                        <Building2 className="size-4" />
-                        {vendor.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="font-mono">{vendor.code}</TableCell>
-                    <TableCell>
-                      <Badge variant={vendor.is_active ? "default" : "secondary"}>
-                        {vendor.is_active ? "Active" : "Archived"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {vendor.phone || "-"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+              {vendors.map((vendor) => (
+                <TableRow key={vendor.id} className="hover:bg-muted/30 transition-colors">
+                  <TableCell>
+                    <Link
+                      href={`/vendors/${vendor.id}`}
+                      className="inline-flex items-center gap-2 text-[13px] font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      <Building2 className="size-3.5 text-muted-foreground" />
+                      {vendor.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{vendor.code}</TableCell>
+                  <TableCell>
+                    <Badge variant={vendor.is_active ? "default" : "secondary"}>
+                      {vendor.is_active ? "Active" : "Archived"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-[13px] text-muted-foreground">
+                    {vendor.phone || "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         )}
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }
