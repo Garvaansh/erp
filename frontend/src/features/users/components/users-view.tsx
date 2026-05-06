@@ -50,6 +50,7 @@ export function UsersView() {
     const formData = new FormData(event.currentTarget);
     createUserMutation.mutate(
       {
+        name: String(formData.get("name") ?? "").trim(),
         email: String(formData.get("email") ?? "").trim(),
         password: String(formData.get("password") ?? ""),
         role_code: String(formData.get("role_code") ?? "STAFF") as UserRole,
@@ -66,6 +67,7 @@ export function UsersView() {
       {
         userId: editingUser.id,
         payload: {
+          name: String(formData.get("name") ?? "").trim() || undefined,
           role_code: String(formData.get("role_code") ?? editingUser.role_code) as UserRole,
           is_active: formData.get("is_active") === "on",
         },
@@ -103,7 +105,8 @@ export function UsersView() {
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm space-y-4">
           <h3 className="text-sm font-semibold text-foreground">New User</h3>
           <form onSubmit={onCreateSubmit} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <input name="name" type="text" className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" placeholder="Full Name" />
               <input name="email" type="email" required className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" placeholder="user@company.com" />
               <input name="password" type="password" required minLength={8} className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" placeholder="Password (min 8)" />
               <select name="role_code" defaultValue="STAFF" className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20">
@@ -125,7 +128,8 @@ export function UsersView() {
             Edit: <span className="text-muted-foreground font-normal">{editingUser.email}</span>
           </h3>
           <form onSubmit={onEditSubmit} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <input name="name" type="text" defaultValue={editingUser.name} className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" placeholder="Full Name" />
               <select name="role_code" defaultValue={editingUser.role_code} className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-background text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20">
                 {ROLES.map((role) => <option value={role} key={role}>{roleLabel(role)}</option>)}
               </select>
@@ -191,6 +195,7 @@ export function UsersView() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
+                <th className="py-2.5 px-4 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Name</th>
                 <th className="py-2.5 px-4 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Email</th>
                 <th className="py-2.5 px-4 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Role</th>
                 <th className="py-2.5 px-4 text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Status</th>
@@ -200,7 +205,8 @@ export function UsersView() {
             <tbody>
               {users.map((user) => (
                 <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                  <td className="py-2.5 px-4 text-[13px] text-foreground">{user.email}</td>
+                  <td className="py-2.5 px-4 text-[13px] text-foreground font-medium">{user.name}</td>
+                  <td className="py-2.5 px-4 text-[13px] text-muted-foreground">{user.email}</td>
                   <td className="py-2.5 px-4">
                     <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md ${roleBadgeColor(user.role_code)}`}>
                       {roleLabel(user.role_code)}

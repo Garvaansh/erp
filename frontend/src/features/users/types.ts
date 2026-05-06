@@ -13,12 +13,14 @@ export type UserListItem = {
 };
 
 export type CreateUserPayload = {
+  name: string;
   email: string;
   password: string;
   role_code: UserRole;
 };
 
 export type UpdateUserPayload = {
+  name?: string;
   role_code?: UserRole;
   is_active?: boolean;
 };

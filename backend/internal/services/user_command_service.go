@@ -45,6 +45,7 @@ func normalizeUserEmail(value string) string {
 func mapCreatedUser(row db.CreateUserCommandRow, roleCode string) *models.UserCreateResult {
 	return &models.UserCreateResult{
 		ID:       uuidString(row.ID),
+		Name:     row.Name,
 		Email:    row.Email,
 		RoleCode: roleCode,
 		IsActive: row.IsActive,
@@ -67,6 +68,10 @@ func (s *UserCommandService) CreateUser(ctx context.Context, req models.CreateUs
 	email := normalizeUserEmail(req.Email)
 	roleCode := normalizeRoleCode(req.RoleCode)
 	password := strings.TrimSpace(req.Password)
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = email
+	}
 	if email == "" || roleCode == "" || len(password) < 8 {
 		return nil, ErrInvalidUserPayload
 	}
@@ -85,7 +90,7 @@ func (s *UserCommandService) CreateUser(ctx context.Context, req models.CreateUs
 	}
 
 	row, err := s.queries.CreateUserCommand(ctx, db.CreateUserCommandParams{
-		Name:         strings.TrimSpace(email),
+		Name:         name,
 		Email:        email,
 		PasswordHash: string(hashedPassword),
 		RoleID:       role.ID,
@@ -109,6 +114,9 @@ func (s *UserCommandService) UpdateUser(ctx context.Context, userID string, req 
 	}
 
 	params := db.UpdateUserCommandParams{ID: id}
+	if trimmedName := strings.TrimSpace(req.Name); trimmedName != "" {
+		params.Name = pgtype.Text{String: trimmedName, Valid: true}
+	}
 	if req.RoleCode != "" {
 		roleCode := normalizeRoleCode(req.RoleCode)
 		role, err := s.queries.GetRoleByCode(ctx, roleCode)

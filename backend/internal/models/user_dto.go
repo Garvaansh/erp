@@ -2,6 +2,7 @@ package models
 
 // CreateUserRequest is the payload for creating a new user.
 type CreateUserRequest struct {
+	Name     string `json:"name"`
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required,min=8,max=128"`
 	RoleCode string `json:"role_code" validate:"required,oneof=ADMIN MANAGER STAFF"`
@@ -9,6 +10,7 @@ type CreateUserRequest struct {
 
 // UpdateUserRequest is the payload for updating an existing user.
 type UpdateUserRequest struct {
+	Name     string `json:"name,omitempty"`
 	RoleCode string `json:"role_code,omitempty" validate:"omitempty,oneof=ADMIN MANAGER STAFF"`
 	IsActive *bool  `json:"is_active,omitempty"`
 }
@@ -32,6 +34,7 @@ type UserListRow struct {
 // UserCreateResult is the result returned after creating a user.
 type UserCreateResult struct {
 	ID       string `json:"id"`
+	Name     string `json:"name"`
 	Email    string `json:"email"`
 	RoleCode string `json:"role_code"`
 	IsActive bool   `json:"is_active"`

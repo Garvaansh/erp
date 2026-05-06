@@ -194,14 +194,16 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 const updateUserCommand = `-- name: UpdateUserCommand :one
 UPDATE users
 SET
-    role_id = COALESCE($1::uuid, role_id),
-    is_active = COALESCE($2::boolean, is_active),
+    name = COALESCE($1::varchar, name),
+    role_id = COALESCE($2::uuid, role_id),
+    is_active = COALESCE($3::boolean, is_active),
     updated_at = NOW()
-WHERE id = $3::uuid
+WHERE id = $4::uuid
 RETURNING id, name, email, is_active, created_at, updated_at
 `
 
 type UpdateUserCommandParams struct {
+	Name     pgtype.Text `json:"name"`
 	RoleID   pgtype.UUID `json:"role_id"`
 	IsActive pgtype.Bool `json:"is_active"`
 	ID       pgtype.UUID `json:"id"`
@@ -217,7 +219,12 @@ type UpdateUserCommandRow struct {
 }
 
 func (q *Queries) UpdateUserCommand(ctx context.Context, arg UpdateUserCommandParams) (UpdateUserCommandRow, error) {
-	row := q.db.QueryRow(ctx, updateUserCommand, arg.RoleID, arg.IsActive, arg.ID)
+	row := q.db.QueryRow(ctx, updateUserCommand,
+		arg.Name,
+		arg.RoleID,
+		arg.IsActive,
+		arg.ID,
+	)
 	var i UpdateUserCommandRow
 	err := row.Scan(
 		&i.ID,

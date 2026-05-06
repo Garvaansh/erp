@@ -53,6 +53,7 @@ RETURNING id, name, email, is_active, created_at, updated_at;
 -- name: UpdateUserCommand :one
 UPDATE users
 SET
+    name = COALESCE(sqlc.narg('name')::varchar, name),
     role_id = COALESCE(sqlc.narg('role_id')::uuid, role_id),
     is_active = COALESCE(sqlc.narg('is_active')::boolean, is_active),
     updated_at = NOW()
