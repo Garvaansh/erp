@@ -135,7 +135,7 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 		BatchID:         batch.ID,
 		Direction:       db.TxDirectionIN,
 		Quantity:        quantity,
-		ReferenceType:   string(db.TxReferenceTypePURCHASERECEIPT),
+		ReferenceType:   string(db.TxReferenceTypePURCHASEORDER),
 		ReferenceID:     movementGroupID,
 		PerformedBy:     performedByID,
 		Notes:           pgtype.Text{String: "Stock receipt", Valid: true},

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	procurementReferenceType = "PROCUREMENT"
+	procurementReferenceType = "PURCHASE_ORDER"
 
 	procurementActionReceived    = "RECEIVED"
 	procurementActionReversed    = "REVERSED"
