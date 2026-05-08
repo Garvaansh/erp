@@ -276,6 +276,7 @@ SELECT
     po.item_id,
     i.name AS item_name,
     i.sku,
+    i.specs AS item_specs,
     po.ordered_qty,
     po.received_qty,
     po.unit_price,
@@ -324,6 +325,7 @@ type GetProcurementDetailRow struct {
 	ItemID              pgtype.UUID         `json:"item_id"`
 	ItemName            string              `json:"item_name"`
 	Sku                 pgtype.Text         `json:"sku"`
+	ItemSpecs           []byte              `json:"item_specs"`
 	OrderedQty          pgtype.Numeric      `json:"ordered_qty"`
 	ReceivedQty         pgtype.Numeric      `json:"received_qty"`
 	UnitPrice           pgtype.Numeric      `json:"unit_price"`
@@ -356,6 +358,7 @@ func (q *Queries) GetProcurementDetail(ctx context.Context, id pgtype.UUID) (Get
 		&i.ItemID,
 		&i.ItemName,
 		&i.Sku,
+		&i.ItemSpecs,
 		&i.OrderedQty,
 		&i.ReceivedQty,
 		&i.UnitPrice,
@@ -386,6 +389,7 @@ SELECT
     po.item_id,
     i.name AS item_name,
     i.sku,
+    i.specs AS item_specs,
     po.ordered_qty,
     po.received_qty,
     po.unit_price,
@@ -433,6 +437,7 @@ type GetProcurementListRow struct {
 	ItemID           pgtype.UUID         `json:"item_id"`
 	ItemName         string              `json:"item_name"`
 	Sku              pgtype.Text         `json:"sku"`
+	ItemSpecs        []byte              `json:"item_specs"`
 	OrderedQty       pgtype.Numeric      `json:"ordered_qty"`
 	ReceivedQty      pgtype.Numeric      `json:"received_qty"`
 	UnitPrice        pgtype.Numeric      `json:"unit_price"`
@@ -463,6 +468,7 @@ func (q *Queries) GetProcurementList(ctx context.Context, arg GetProcurementList
 			&i.ItemID,
 			&i.ItemName,
 			&i.Sku,
+			&i.ItemSpecs,
 			&i.OrderedQty,
 			&i.ReceivedQty,
 			&i.UnitPrice,

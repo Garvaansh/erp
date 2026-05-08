@@ -15,9 +15,12 @@ import (
 	"github.com/erp/backend/internal/utils"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const maxBatchCodeInsertAttempts = 5
 
 var (
 	ErrInvalidInventoryPayload = errors.New("invalid inventory payload")
@@ -27,6 +30,16 @@ var (
 	ErrReceiveStockFailed      = errors.New("unable to receive stock")
 	ErrGetActiveBatchesFailed  = errors.New("unable to get active batches")
 	ErrGetInventoryViewFailed  = errors.New("unable to get inventory view")
+	ErrUpdateBatchStatusFailed = errors.New("unable to update batch status")
+	ErrBatchNotFound           = errors.New("batch not found")
+	ErrInvalidBatchStatus      = errors.New("invalid batch status transition")
+	ErrInvalidBatchFlow        = errors.New("batch does not belong to raw inventory flow")
+	ErrGetRawMaterialsFailed   = errors.New("unable to get raw materials")
+	ErrGetBatchesByItemFailed  = errors.New("unable to get batches for item")
+	ErrRawMaterialNotFound     = errors.New("raw material not found")
+	ErrFIFOBatchUnavailable    = errors.New("no active fifo batch available")
+	ErrFIFOAllocationRequired  = errors.New("batch allocation must follow fifo order")
+	ErrInsufficientBatchQty    = errors.New("insufficient batch quantity")
 )
 
 type InventoryService struct {
@@ -60,6 +73,50 @@ type InventoryViewRow struct {
 	TotalQty     float64 `json:"total_qty"`
 	AvailableQty float64 `json:"available_qty"`
 	ReservedQty  float64 `json:"reserved_qty"`
+}
+
+type RawMaterialMasterRow struct {
+	ItemID            string  `json:"item_id"`
+	SKU               string  `json:"sku"`
+	Name              string  `json:"name"`
+	Specification     string  `json:"specification"`
+	Specs             any     `json:"specs"`
+	AvailableQty      float64 `json:"available_qty"`
+	ReservedQty       float64 `json:"reserved_qty"`
+	Threshold         float64 `json:"threshold"`
+	PendingDeliveries float64 `json:"pending_deliveries"`
+	Status            string  `json:"status"`
+}
+
+type RawMaterialSummary struct {
+	ItemID            string  `json:"item_id"`
+	SKU               string  `json:"sku"`
+	Name              string  `json:"name"`
+	Specification     string  `json:"specification"`
+	Specs             any     `json:"specs"`
+	AvailableQty      float64 `json:"available_qty"`
+	ReservedQty       float64 `json:"reserved_qty"`
+	HoldQty           float64 `json:"hold_qty"`
+	PendingDeliveries float64 `json:"pending_deliveries"`
+	Threshold         float64 `json:"threshold"`
+}
+
+type RawMaterialBatchRow struct {
+	BatchID      string  `json:"batch_id"`
+	BatchCode    string  `json:"batch_code"`
+	VendorName   string  `json:"vendor_name,omitempty"`
+	PONumber     string  `json:"po_number,omitempty"`
+	ParentPOID   string  `json:"parent_po_id,omitempty"`
+	ReceivedAt   string  `json:"received_at"`
+	InitialQty   float64 `json:"initial_qty"`
+	RemainingQty float64 `json:"remaining_qty"`
+	ReservedQty  float64 `json:"reserved_qty"`
+	AvailableQty float64 `json:"available_qty"`
+	Status       string  `json:"status"`
+}
+
+type nextActiveBatchQuerier interface {
+	GetNextActiveBatch(ctx context.Context, itemID pgtype.UUID) (db.GetNextActiveBatchRow, error)
 }
 
 func NewInventoryService(pool *pgxpool.Pool, itemService *ItemService) *InventoryService {
@@ -101,29 +158,16 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 	}()
 
 	qtx := db.New(tx)
-	_, err = qtx.GetItem(ctx, itemID)
-	if err != nil {
+	if _, err := qtx.GetItem(ctx, itemID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvalidItemID
 		}
 		return nil, fmt.Errorf("fetch item: %w", err)
 	}
 
-	batchCode, dailySequence, err := utils.GenerateBatchID(ctx, tx)
+	batch, err := createBatchWithRetry(ctx, tx, qtx, itemID, quantity)
 	if err != nil {
-		return nil, fmt.Errorf("generate batch code: %w", err)
-	}
-
-	batch, err := qtx.CreateBatch(ctx, db.CreateBatchParams{
-		ItemID:        itemID,
-		BatchCode:     batchCode,
-		DailySequence: dailySequence,
-		InitialQty:    quantity,
-		RemainingQty:  quantity,
-		Status:        db.BatchStatusNEW,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create batch: %w", err)
+		return nil, err
 	}
 
 	movementGroup := uuid.New()
@@ -156,6 +200,64 @@ func (s *InventoryService) ReceiveStock(ctx context.Context, req models.ReceiveS
 	}, nil
 }
 
+func (s *InventoryService) UpdateBatchStatus(ctx context.Context, batchID string, req models.UpdateBatchStatusRequest, performedBy string) error {
+	if s == nil || s.pool == nil {
+		return ErrUpdateBatchStatusFailed
+	}
+
+	parsedBatchID, ok := parseUUID(batchID)
+	if !ok {
+		return ErrBatchNotFound
+	}
+
+	targetStatus := db.BatchStatus(strings.ToUpper(strings.TrimSpace(req.Status)))
+	if targetStatus != db.BatchStatusHOLD && targetStatus != db.BatchStatusACTIVE {
+		return ErrInvalidBatchStatus
+	}
+
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	qtx := db.New(tx)
+	batch, err := qtx.GetBatchForUpdate(ctx, parsedBatchID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrBatchNotFound
+		}
+		return fmt.Errorf("get batch for update: %w", err)
+	}
+
+	if err := validateBatchStatusUpdate(batch, targetStatus); err != nil {
+		return err
+	}
+	if batch.Status == targetStatus {
+		return nil
+	}
+
+	if _, err := qtx.SetBatchStatus(ctx, db.SetBatchStatusParams{
+		ID:     parsedBatchID,
+		Status: targetStatus,
+	}); err != nil {
+		return fmt.Errorf("set batch status: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	committed = true
+
+	return nil
+}
+
 func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID string, batchType string) ([]ActiveBatchOption, error) {
 	if s == nil || s.pool == nil {
 		return nil, ErrGetActiveBatchesFailed
@@ -172,7 +274,6 @@ func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID st
 	}
 
 	queries := db.New(s.pool)
-
 	batches := make([]ActiveBatchOption, 0)
 
 	appendRow := func(id pgtype.UUID, batchCode string, sku string, initialQtyNumeric pgtype.Numeric, remainingQtyNumeric pgtype.Numeric, status db.BatchStatus, createdAt pgtype.Timestamptz) error {
@@ -211,17 +312,15 @@ func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID st
 			return nil, ErrBatchQueryFilterMissing
 		}
 
-		typedRows, err := queries.GetActiveBatchesByType(ctx, parsedBatchType)
+		rows, err := queries.GetActiveBatchesByType(ctx, parsedBatchType)
 		if err != nil {
 			return nil, ErrGetActiveBatchesFailed
 		}
-
-		for _, row := range typedRows {
+		for _, row := range rows {
 			if err := appendRow(row.ID, row.BatchCode, row.Sku, row.InitialQty, row.RemainingQty, row.Status, row.CreatedAt); err != nil {
 				return nil, err
 			}
 		}
-
 		return batches, nil
 	}
 
@@ -231,20 +330,18 @@ func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID st
 	}
 
 	if hasBatchType {
-		typedRows, err := queries.GetActiveBatchesByItemAndType(ctx, db.GetActiveBatchesByItemAndTypeParams{
+		rows, err := queries.GetActiveBatchesByItemAndType(ctx, db.GetActiveBatchesByItemAndTypeParams{
 			ItemID: parsedItemID,
 			Type:   parsedBatchType,
 		})
 		if err != nil {
 			return nil, ErrGetActiveBatchesFailed
 		}
-
-		for _, row := range typedRows {
+		for _, row := range rows {
 			if err := appendRow(row.ID, row.BatchCode, row.Sku, row.InitialQty, row.RemainingQty, row.Status, row.CreatedAt); err != nil {
 				return nil, err
 			}
 		}
-
 		return batches, nil
 	}
 
@@ -252,7 +349,6 @@ func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID st
 	if err != nil {
 		return nil, ErrGetActiveBatchesFailed
 	}
-
 	for _, row := range rows {
 		if err := appendRow(row.ID, row.BatchCode, row.Sku, row.InitialQty, row.RemainingQty, row.Status, row.CreatedAt); err != nil {
 			return nil, err
@@ -262,17 +358,36 @@ func (s *InventoryService) GetActiveBatchesByItem(ctx context.Context, itemID st
 	return batches, nil
 }
 
-func parseBatchTypeFilter(raw string) (db.BatchType, bool) {
-	switch strings.ToUpper(strings.TrimSpace(raw)) {
-	case "RAW":
-		return db.BatchTypeRAW, true
-	case "MWIP", "MOLDED":
-		return db.BatchTypeMOLDED, true
-	case "BNDL", "FINISHED":
-		return db.BatchTypeFINISHED, true
-	default:
-		return "", false
+func (s *InventoryService) GetNextActiveBatch(ctx context.Context, itemID string, requiredQty float64) (*ActiveBatchOption, error) {
+	if s == nil || s.pool == nil {
+		return nil, ErrGetActiveBatchesFailed
 	}
+
+	parsedItemID, ok := parseUUID(itemID)
+	if !ok {
+		return nil, ErrInvalidItemID
+	}
+
+	row, availableQty, err := getNextActiveBatchRecord(ctx, db.New(s.pool), parsedItemID, requiredQty)
+	if err != nil {
+		return nil, err
+	}
+
+	initialQty, ok := numericToFloat64(row.InitialQty)
+	if !ok {
+		return nil, ErrGetActiveBatchesFailed
+	}
+
+	return &ActiveBatchOption{
+		ID:              uuidString(row.ID),
+		BatchID:         uuidString(row.ID),
+		BatchCode:       row.BatchCode,
+		RemainingQty:    availableQty,
+		ArrivalDate:     timestampValue(row.CreatedAt),
+		InitialWeight:   initialQty,
+		RemainingWeight: availableQty,
+		Status:          string(row.Status),
+	}, nil
 }
 
 func (s *InventoryService) GetInventoryView(ctx context.Context) (map[string][]InventoryViewRow, error) {
@@ -280,8 +395,7 @@ func (s *InventoryService) GetInventoryView(ctx context.Context) (map[string][]I
 		return nil, ErrGetInventoryViewFailed
 	}
 
-	queries := db.New(s.pool)
-	rows, err := queries.GetInventoryAggregated(ctx)
+	rows, err := db.New(s.pool).GetInventoryAggregated(ctx)
 	if err != nil {
 		return nil, ErrGetInventoryViewFailed
 	}
@@ -329,6 +443,254 @@ func (s *InventoryService) GetInventoryView(ctx context.Context) (map[string][]I
 	return out, nil
 }
 
+func (s *InventoryService) GetRawMaterialMaster(ctx context.Context) ([]RawMaterialMasterRow, error) {
+	if s == nil || s.pool == nil {
+		return nil, ErrGetRawMaterialsFailed
+	}
+
+	rows, err := db.New(s.pool).GetRawMaterialMaster(ctx)
+	if err != nil {
+		return nil, ErrGetRawMaterialsFailed
+	}
+
+	out := make([]RawMaterialMasterRow, 0, len(rows))
+	for _, row := range rows {
+		availableQty, _ := numericToFloat64(row.AvailableQty)
+		reservedQty, _ := numericToFloat64(row.ReservedQty)
+		pendingDeliveries, _ := numericToFloat64(row.PendingDeliveries)
+		threshold, _ := numericToFloat64(row.LowStockThreshold)
+
+		out = append(out, RawMaterialMasterRow{
+			ItemID:            uuidString(row.ItemID),
+			SKU:               row.Sku,
+			Name:              row.Name,
+			Specification:     utils.FormatSpecification(row.Specs),
+			Specs:             decodeSpecs(row.Specs),
+			AvailableQty:      availableQty,
+			ReservedQty:       reservedQty,
+			Threshold:         threshold,
+			PendingDeliveries: pendingDeliveries,
+			Status:            computeRawMaterialStatus(availableQty, threshold),
+		})
+	}
+
+	return out, nil
+}
+
+func (s *InventoryService) GetRawMaterialSummary(ctx context.Context, itemID string) (*RawMaterialSummary, error) {
+	if s == nil || s.pool == nil {
+		return nil, ErrGetRawMaterialsFailed
+	}
+
+	parsedItemID, ok := parseUUID(itemID)
+	if !ok {
+		return nil, ErrInvalidItemID
+	}
+
+	row, err := db.New(s.pool).GetRawMaterialSummary(ctx, parsedItemID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRawMaterialNotFound
+		}
+		return nil, ErrGetRawMaterialsFailed
+	}
+
+	availableQty, _ := numericToFloat64(row.AvailableQty)
+	reservedQty, _ := numericToFloat64(row.ReservedQty)
+	holdQty, _ := numericToFloat64(row.HoldQty)
+	pendingDeliveries, _ := numericToFloat64(row.PendingDeliveries)
+	threshold, _ := numericToFloat64(row.LowStockThreshold)
+
+	return &RawMaterialSummary{
+		ItemID:            uuidString(row.ItemID),
+		SKU:               row.Sku,
+		Name:              row.Name,
+		Specification:     utils.FormatSpecification(row.Specs),
+		Specs:             decodeSpecs(row.Specs),
+		AvailableQty:      availableQty,
+		ReservedQty:       reservedQty,
+		HoldQty:           holdQty,
+		PendingDeliveries: pendingDeliveries,
+		Threshold:         threshold,
+	}, nil
+}
+
+func (s *InventoryService) GetRawMaterialBatches(ctx context.Context, itemID string) ([]RawMaterialBatchRow, error) {
+	if s == nil || s.pool == nil {
+		return nil, ErrGetBatchesByItemFailed
+	}
+
+	parsedItemID, ok := parseUUID(itemID)
+	if !ok {
+		return nil, ErrInvalidItemID
+	}
+
+	rows, err := db.New(s.pool).GetRawMaterialBatches(ctx, parsedItemID)
+	if err != nil {
+		return nil, ErrGetBatchesByItemFailed
+	}
+
+	out := make([]RawMaterialBatchRow, 0, len(rows))
+	for _, row := range rows {
+		initialQty, ok := numericToFloat64(row.InitialQty)
+		if !ok {
+			return nil, ErrGetBatchesByItemFailed
+		}
+
+		remainingQty, ok := numericToFloat64(row.RemainingQty)
+		if !ok {
+			return nil, ErrGetBatchesByItemFailed
+		}
+
+		reservedQty, ok := numericToFloat64(row.ReservedQty)
+		if !ok {
+			return nil, ErrGetBatchesByItemFailed
+		}
+
+		availableQty, ok := numericToFloat64(row.AvailableQty)
+		if !ok {
+			return nil, ErrGetBatchesByItemFailed
+		}
+
+		out = append(out, RawMaterialBatchRow{
+			BatchID:      uuidString(row.ID),
+			BatchCode:    row.BatchCode,
+			VendorName:   row.VendorName,
+			PONumber:     row.PoNumber,
+			ParentPOID:   uuidString(row.ParentPoID),
+			ReceivedAt:   timestampValue(row.CreatedAt),
+			InitialQty:   initialQty,
+			RemainingQty: remainingQty,
+			ReservedQty:  reservedQty,
+			AvailableQty: availableQty,
+			Status:       string(row.Status),
+		})
+	}
+
+	return out, nil
+}
+
+func parseBatchTypeFilter(raw string) (db.BatchType, bool) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "RAW":
+		return db.BatchTypeRAW, true
+	case "MWIP", "MOLDED":
+		return db.BatchTypeMOLDED, true
+	case "BNDL", "FINISHED":
+		return db.BatchTypeFINISHED, true
+	default:
+		return "", false
+	}
+}
+
+func getNextActiveBatchRecord(ctx context.Context, queries nextActiveBatchQuerier, itemID pgtype.UUID, requiredQty float64) (db.GetNextActiveBatchRow, float64, error) {
+	row, err := queries.GetNextActiveBatch(ctx, itemID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return db.GetNextActiveBatchRow{}, 0, ErrFIFOBatchUnavailable
+		}
+		return db.GetNextActiveBatchRow{}, 0, ErrGetActiveBatchesFailed
+	}
+
+	remainingQty, ok := numericToFloat64(row.RemainingQty)
+	if !ok {
+		return db.GetNextActiveBatchRow{}, 0, ErrGetActiveBatchesFailed
+	}
+
+	reservedQty, ok := numericToFloat64(row.ReservedQty)
+	if !ok {
+		return db.GetNextActiveBatchRow{}, 0, ErrGetActiveBatchesFailed
+	}
+
+	availableQty := remainingQty - reservedQty
+	if availableQty < 0 {
+		availableQty = 0
+	}
+
+	if requiredQty > 0 && availableQty < requiredQty {
+		return db.GetNextActiveBatchRow{}, 0, ErrInsufficientBatchQty
+	}
+
+	return row, availableQty, nil
+}
+
+func createBatchWithRetry(ctx context.Context, tx pgx.Tx, queries *db.Queries, itemID pgtype.UUID, quantity pgtype.Numeric) (db.InventoryBatch, error) {
+	var lastErr error
+
+	for attempt := 0; attempt < maxBatchCodeInsertAttempts; attempt++ {
+		batchCode, dailySequence, err := utils.GenerateBatchID(ctx, tx)
+		if err != nil {
+			return db.InventoryBatch{}, fmt.Errorf("generate batch code: %w", err)
+		}
+
+		batch, err := queries.CreateBatch(ctx, db.CreateBatchParams{
+			ItemID:        itemID,
+			BatchCode:     batchCode,
+			DailySequence: dailySequence,
+			InitialQty:    quantity,
+			RemainingQty:  quantity,
+		})
+		if err == nil {
+			return batch, nil
+		}
+		if !isBatchCodeConflict(err) {
+			return db.InventoryBatch{}, fmt.Errorf("create batch: %w", err)
+		}
+		lastErr = err
+	}
+
+	return db.InventoryBatch{}, fmt.Errorf("create batch: %w", lastErr)
+}
+
+func computeRawMaterialStatus(available float64, threshold float64) string {
+	if threshold > 0 && available < threshold {
+		return "LOW"
+	}
+	return "OK"
+}
+
+func isValidBatchStatusTransition(current db.BatchStatus, target db.BatchStatus) bool {
+	if current == db.BatchStatusEXHAUSTED || current == db.BatchStatusREVERSED {
+		return false
+	}
+
+	return target == db.BatchStatusACTIVE || target == db.BatchStatusHOLD
+}
+
+func validateBatchStatusUpdate(batch db.InventoryBatch, target db.BatchStatus) error {
+	if !isValidBatchStatusTransition(batch.Status, target) {
+		return ErrInvalidBatchStatus
+	}
+	if batch.Type != db.BatchTypeRAW {
+		return ErrInvalidBatchFlow
+	}
+	return nil
+}
+
+func computeStockStatus(available float64, threshold float64) string {
+	if available <= 0 {
+		return "OUT_OF_STOCK"
+	}
+	if threshold > 0 && available <= threshold {
+		return "LOW_STOCK"
+	}
+	return "HEALTHY"
+}
+
+func isBatchCodeConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+
+	if pgErr.Code != "23505" {
+		return false
+	}
+
+	const batchCodeConstraint = "inventory_batches_batch_code_key"
+	return pgErr.ConstraintName == "" || pgErr.ConstraintName == batchCodeConstraint
+}
+
 func parseUUID(value string) (pgtype.UUID, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -354,6 +716,17 @@ func numericFromFloat(value float64) (pgtype.Numeric, bool) {
 	}
 
 	return numeric, true
+}
+
+func numericToFloat64(value pgtype.Numeric) (float64, bool) {
+	floatValue, err := value.Float64Value()
+	if err != nil || !floatValue.Valid {
+		return 0, false
+	}
+	if math.IsNaN(floatValue.Float64) || math.IsInf(floatValue.Float64, 0) {
+		return 0, false
+	}
+	return floatValue.Float64, true
 }
 
 func aggregatedQtyToFloat64(value any) (float64, bool) {

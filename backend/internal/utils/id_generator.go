@@ -84,9 +84,24 @@ func GeneratePaymentTransactionID(ctx context.Context, tx pgx.Tx) (string, error
 	return fmt.Sprintf("TX-%s-%03d", dayToken, seq), nil
 }
 
-// GenerateBatchID generates a raw-material batch ID and its per-day sequence value.
+// GenerateBatchID generates a raw-material batch code in the format BATYYMMDD-NNN.
+// Example: BAT260506-001, BAT260506-002
 func GenerateBatchID(ctx context.Context, tx pgx.Tx) (string, int32, error) {
-	return generateInventoryIDByPrefix(ctx, tx, "BAT")
+	dayToken := time.Now().UTC().Format(dayLayout)
+	seq, err := nextDailySequenceByPattern(
+		ctx,
+		tx,
+		"inventory:BAT",
+		"inventory_batches",
+		"batch_code",
+		"BAT"+dayToken+"-%",
+		2,
+	)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return fmt.Sprintf("BAT%s-%03d", dayToken, seq), seq, nil
 }
 
 // GenerateWIPID generates a WIP stage ID and its per-day sequence value.
@@ -103,6 +118,40 @@ func GenerateWIPID(ctx context.Context, tx pgx.Tx, stage string) (string, int32,
 // GenerateBundleID generates a finished-goods bundle ID and its per-day sequence value.
 func GenerateBundleID(ctx context.Context, tx pgx.Tx) (string, int32, error) {
 	return generateInventoryIDByPrefix(ctx, tx, "BNDL")
+}
+
+// GenerateSKU generates a deterministic SKU for raw materials.
+// Format: RM{categoryCode}{sequence} e.g. RMSS001, RMCP002
+// Uses sku_sequences table with advisory locks for uniqueness.
+func GenerateSKU(ctx context.Context, tx pgx.Tx, categoryCode string) (string, error) {
+	code := strings.ToUpper(strings.TrimSpace(categoryCode))
+	if code == "" || len(code) > 4 {
+		return "", fmt.Errorf("invalid category code for SKU generation: %q", categoryCode)
+	}
+
+	lockKey := fmt.Sprintf("sku-seq:%s", code)
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
+		return "", fmt.Errorf("acquire SKU advisory lock: %w", err)
+	}
+
+	// Ensure row exists
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO sku_sequences (category_code, next_val) VALUES ($1, 1) ON CONFLICT (category_code) DO NOTHING`,
+		code,
+	); err != nil {
+		return "", fmt.Errorf("seed SKU sequence row: %w", err)
+	}
+
+	// Atomically fetch current value and increment
+	var seq int32
+	if err := tx.QueryRow(ctx,
+		`UPDATE sku_sequences SET next_val = next_val + 1 WHERE category_code = $1 RETURNING next_val - 1`,
+		code,
+	).Scan(&seq); err != nil {
+		return "", fmt.Errorf("fetch next SKU sequence: %w", err)
+	}
+
+	return fmt.Sprintf("RM%s%03d", code, seq), nil
 }
 
 func generateInventoryIDByPrefix(ctx context.Context, tx pgx.Tx, prefix string) (string, int32, error) {

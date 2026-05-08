@@ -66,12 +66,12 @@ func (s *ReportService) GetInventoryReport(ctx context.Context, days int) (*Inve
 		SELECT
 			i.id::text, COALESCE(i.sku,''), i.name, i.category::text,
 			COALESCE(SUM(b.remaining_qty), 0) AS total_qty,
-			COALESCE(SUM(b.remaining_qty) - SUM(COALESCE(b.reserved_qty, 0)), 0) AS available_qty,
-			COALESCE(SUM(COALESCE(b.reserved_qty, 0)), 0) AS reserved_qty,
+			COALESCE(SUM(GREATEST(b.remaining_qty - COALESCE(b.reserved_qty, 0), 0)) FILTER (WHERE b.status = 'ACTIVE'), 0) AS available_qty,
+			COALESCE(SUM(COALESCE(b.reserved_qty, 0)) FILTER (WHERE b.status = 'ACTIVE'), 0) AS reserved_qty,
 			i.min_qty, i.max_qty,
 			COUNT(b.id) AS batch_count
 		FROM items i
-		LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.status IN ('NEW','ACTIVE')
+		LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.status IN ('NEW','ACTIVE','HOLD')
 		WHERE i.is_active = true
 		GROUP BY i.id, i.sku, i.name, i.category, i.min_qty, i.max_qty
 		ORDER BY i.name

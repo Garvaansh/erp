@@ -100,8 +100,10 @@ type ProcurementListRow struct {
 	ItemID           string  `json:"item_id"`
 	ItemName         string  `json:"item_name"`
 	ItemSKU          string  `json:"item_sku,omitempty"`
+	ItemSpecs        string  `json:"item_specs,omitempty"`
 	OrderedQty       float64 `json:"ordered_qty"`
 	ReceivedQty      float64 `json:"received_qty"`
+	PendingQty       float64 `json:"pending_qty"`
 	UnitPrice        float64 `json:"unit_price"`
 	VendorInvoiceRef string  `json:"vendor_invoice_ref,omitempty"`
 	PaymentStatus    string  `json:"payment_status,omitempty"`
@@ -134,6 +136,7 @@ type ProcurementDetail struct {
 	ItemID           string              `json:"item_id"`
 	ItemName         string              `json:"item_name"`
 	ItemSKU          string              `json:"item_sku,omitempty"`
+	ItemSpecs        string              `json:"item_specs,omitempty"`
 	OrderedQty       float64             `json:"ordered_qty"`
 	ReceivedQty      float64             `json:"received_qty"`
 	UnitPrice        float64             `json:"unit_price"`
@@ -369,6 +372,11 @@ func (s *ProcurementService) ListProcurement(ctx context.Context, limit, offset 
 			vendorShort = buildVendorShortName(vendorName)
 		}
 
+		pendingQty := orderedQty - receivedQty
+		if pendingQty < 0 {
+			pendingQty = 0
+		}
+
 		out = append(out, ProcurementListRow{
 			ID:               uuidString(row.ID),
 			PONumber:         row.PoNumber,
@@ -380,8 +388,10 @@ func (s *ProcurementService) ListProcurement(ctx context.Context, limit, offset 
 			ItemID:           uuidString(row.ItemID),
 			ItemName:         row.ItemName,
 			ItemSKU:          textValue(row.Sku),
+			ItemSpecs:        utils.FormatSpecification(row.ItemSpecs),
 			OrderedQty:       orderedQty,
 			ReceivedQty:      receivedQty,
+			PendingQty:       pendingQty,
 			UnitPrice:        unitPrice,
 			VendorInvoiceRef: textValue(row.VendorInvoiceRef),
 			PaymentStatus:    paymentSummary.PaymentStatus,
@@ -488,6 +498,7 @@ func (s *ProcurementService) GetProcurementDetail(ctx context.Context, poID stri
 		ItemID:           uuidString(row.ItemID),
 		ItemName:         row.ItemName,
 		ItemSKU:          textValue(row.Sku),
+		ItemSpecs:        utils.FormatSpecification(row.ItemSpecs),
 		OrderedQty:       orderedQty,
 		ReceivedQty:      receivedQty,
 		UnitPrice:        unitPrice,
@@ -680,24 +691,9 @@ func (s *ProcurementService) ReceiveGoods(ctx context.Context, poID string, qty 
 		return nil, ErrReceivedQuantityExceedsOrdered
 	}
 
-	batchCode, dailySequence, err := utils.GenerateBatchID(ctx, tx)
+	batch, err := createProcurementBatchWithRetry(ctx, tx, qtx, po, receivedQty)
 	if err != nil {
-		return nil, fmt.Errorf("generate batch code: %w", err)
-	}
-
-	batch, err := qtx.CreateInventoryBatch(ctx, db.CreateInventoryBatchParams{
-		ItemID:        po.ItemID,
-		BatchCode:     batchCode,
-		DailySequence: dailySequence,
-		InitialQty:    receivedQty,
-		RemainingQty:  receivedQty,
-		ReservedQty:   zeroNumeric(),
-		UnitCost:      po.UnitPrice,
-		ParentPoID:    po.ID,
-		Status:        db.BatchStatusACTIVE,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create inventory batch: %w", err)
+		return nil, err
 	}
 
 	movementGroupUUID := uuid.New()
@@ -1229,6 +1225,44 @@ func (s *ProcurementService) UpdatePurchaseOrder(ctx context.Context, poID strin
 		Notes:            textValue(updatedPO.Notes),
 		Status:           string(updatedPO.Status),
 	}, nil
+}
+
+func createProcurementBatchWithRetry(
+	ctx context.Context,
+	tx pgx.Tx,
+	queries *db.Queries,
+	po db.PurchaseOrder,
+	receivedQty pgtype.Numeric,
+) (db.InventoryBatch, error) {
+	var lastErr error
+
+	for attempt := 0; attempt < maxBatchCodeInsertAttempts; attempt++ {
+		batchCode, dailySequence, err := utils.GenerateBatchID(ctx, tx)
+		if err != nil {
+			return db.InventoryBatch{}, fmt.Errorf("generate batch code: %w", err)
+		}
+
+		batch, err := queries.CreateInventoryBatch(ctx, db.CreateInventoryBatchParams{
+			ItemID:        po.ItemID,
+			BatchCode:     batchCode,
+			DailySequence: dailySequence,
+			InitialQty:    receivedQty,
+			RemainingQty:  receivedQty,
+			ReservedQty:   zeroNumeric(),
+			UnitCost:      po.UnitPrice,
+			ParentPoID:    po.ID,
+			Status:        db.BatchStatusACTIVE,
+		})
+		if err == nil {
+			return batch, nil
+		}
+		if !isBatchCodeConflict(err) {
+			return db.InventoryBatch{}, fmt.Errorf("create inventory batch: %w", err)
+		}
+		lastErr = err
+	}
+
+	return db.InventoryBatch{}, fmt.Errorf("create inventory batch: %w", lastErr)
 }
 
 func formatReverseLogNote(reason string, reversedBatchCount int) string {

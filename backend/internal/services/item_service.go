@@ -1,19 +1,20 @@
 package services
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/erp/backend/internal/db"
 	"github.com/erp/backend/internal/models"
+	"github.com/erp/backend/internal/utils"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
@@ -24,10 +25,13 @@ var (
 	ErrCreateItemFailed    = errors.New("unable to create item")
 	ErrListItemsFailed     = errors.New("unable to list items")
 	ErrListVariantsFailed  = errors.New("unable to list variants")
+	ErrUpdateThresholdFail = errors.New("unable to update threshold")
+	ErrItemNotFound        = errors.New("item not found")
 )
 
 type ItemService struct {
 	queries *db.Queries
+	pool    *pgxpool.Pool
 }
 
 type SelectableItemOption struct {
@@ -36,8 +40,8 @@ type SelectableItemOption struct {
 	Category string `json:"category"`
 }
 
-func NewItemService(queries *db.Queries) *ItemService {
-	return &ItemService{queries: queries}
+func NewItemService(queries *db.Queries, pool *pgxpool.Pool) *ItemService {
+	return &ItemService{queries: queries, pool: pool}
 }
 
 func (s *ItemService) CreateItem(ctx context.Context, req models.CreateItemRequest) (db.Item, error) {
@@ -47,33 +51,32 @@ func (s *ItemService) CreateItem(ctx context.Context, req models.CreateItemReque
 func (s *ItemService) FindOrCreateItem(ctx context.Context, req models.CreateItemRequest) (db.Item, error) {
 	var zero db.Item
 
-	specsJSON, err := json.Marshal(req.Specs)
+	// Normalize specs to always use _mm keys for storage
+	normalizedSpecs := req.Specs.ToNormalized()
+
+	// For RAW items, always use transactional SKU generation when pool is available
+	if strings.ToUpper(req.Category) == "RAW" && s.pool != nil {
+		return s.createRawItemWithSKU(ctx, req, normalizedSpecs)
+	}
+
+	specsJSON, err := json.Marshal(normalizedSpecs)
 	if err != nil {
 		return zero, ErrInvalidItemPayload
 	}
 
-	var parentID pgtype.UUID
-	if req.ParentID != nil {
-		trimmedParentID := strings.TrimSpace(*req.ParentID)
-		if trimmedParentID != "" {
-			parsedParentID, parseErr := uuid.Parse(trimmedParentID)
-			if parseErr != nil {
-				return zero, ErrInvalidParentID
-			}
-			parentID = pgtype.UUID{Bytes: [16]byte(parsedParentID), Valid: true}
-		}
-	}
+	parentID := parseOptionalParentID(req.ParentID)
 
 	trimmedSKU := strings.TrimSpace(req.SKU)
 	sku := pgtype.Text{String: trimmedSKU, Valid: trimmedSKU != ""}
 
 	item, err := s.queries.CreateItem(ctx, db.CreateItemParams{
-		ParentID: parentID,
-		Sku:      sku,
-		Name:     strings.TrimSpace(req.Name),
-		Category: db.ItemCategory(req.Category),
-		BaseUnit: db.BaseUnitType(req.BaseUnit),
-		Specs:    specsJSON,
+		ParentID:     parentID,
+		Sku:          sku,
+		Name:         strings.TrimSpace(req.Name),
+		Category:     db.ItemCategory(req.Category),
+		BaseUnit:     db.BaseUnitType(req.BaseUnit),
+		Specs:        specsJSON,
+		CategoryCode: pgtype.Text{},
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -87,25 +90,115 @@ func (s *ItemService) FindOrCreateItem(ctx context.Context, req models.CreateIte
 	return item, nil
 }
 
-func buildRawMaterialSKU(thickness float64, width float64) string {
-	thicknessToken := formatDimensionToken(thickness)
-	widthToken := formatDimensionToken(width)
-	if thicknessToken == "" || widthToken == "" {
-		return ""
+func (s *ItemService) createRawItemWithSKU(ctx context.Context, req models.CreateItemRequest, normalizedSpecs models.SteelSpecs) (db.Item, error) {
+	var zero db.Item
+
+	specsJSON, err := json.Marshal(normalizedSpecs)
+	if err != nil {
+		return zero, ErrInvalidItemPayload
 	}
 
-	return fmt.Sprintf("RAW-%sx%s", thicknessToken, widthToken)
+	parentID := parseOptionalParentID(req.ParentID)
+
+	// Derive category code: use explicit value, or derive from material name
+	categoryCode := strings.ToUpper(strings.TrimSpace(req.CategoryCode))
+	if categoryCode == "" {
+		categoryCode = deriveCategoryCode(req.Name)
+	}
+
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return zero, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	// Generate SKU if we have a valid category code
+	var sku pgtype.Text
+	if categoryCode != "" {
+		generatedSKU, skuErr := utils.GenerateSKU(ctx, tx, categoryCode)
+		if skuErr != nil {
+			return zero, fmt.Errorf("generate SKU: %w", skuErr)
+		}
+		sku = pgtype.Text{String: generatedSKU, Valid: true}
+	}
+
+	qtx := db.New(tx)
+	item, err := qtx.CreateItem(ctx, db.CreateItemParams{
+		ParentID:     parentID,
+		Sku:          sku,
+		Name:         strings.TrimSpace(req.Name),
+		Category:     db.ItemCategory(req.Category),
+		BaseUnit:     db.BaseUnitType(req.BaseUnit),
+		Specs:        specsJSON,
+		CategoryCode: pgtype.Text{String: categoryCode, Valid: categoryCode != ""},
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return zero, ErrDuplicateSKU
+		}
+		return zero, ErrCreateItemFailed
+	}
+
+	// Persist low stock threshold if provided
+	if req.LowStockThreshold > 0 {
+		thresholdNumeric, ok := numericFromFloat(req.LowStockThreshold)
+		if ok {
+			if _, threshErr := qtx.UpdateItemThreshold(ctx, db.UpdateItemThresholdParams{
+				ID:                item.ID,
+				LowStockThreshold: thresholdNumeric,
+			}); threshErr != nil {
+				return zero, fmt.Errorf("persist threshold: %w", threshErr)
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return zero, fmt.Errorf("commit transaction: %w", err)
+	}
+	committed = true
+
+	return item, nil
 }
 
-func formatDimensionToken(value float64) string {
-	if value <= 0 {
-		return ""
+// deriveCategoryCode generates a 2-char code from the material name.
+// "Stainless Steel" → "SS", "Carbon Plate" → "CP", "Hot Rolled" → "HR"
+func deriveCategoryCode(name string) string {
+	words := strings.Fields(strings.TrimSpace(name))
+	if len(words) == 0 {
+		return "RM"
 	}
 
-	raw := strconv.FormatFloat(value, 'f', 4, 64)
-	raw = strings.TrimRight(raw, "0")
-	raw = strings.TrimRight(raw, ".")
-	return raw
+	var code strings.Builder
+	for _, word := range words {
+		upper := strings.ToUpper(word)
+		// Skip filler words
+		switch upper {
+		case "COIL", "SHEET", "PLATE", "STRIP", "BAR", "ROD", "PIPE", "TUBE":
+			continue
+		}
+		if code.Len() < 2 && len(upper) > 0 {
+			code.WriteByte(upper[0])
+		}
+		if code.Len() >= 2 {
+			break
+		}
+	}
+
+	result := code.String()
+	if result == "" {
+		return "RM"
+	}
+	if len(result) < 2 {
+		return result + "M"
+	}
+	return result
 }
 
 func (s *ItemService) ListItemsByCategory(ctx context.Context, category string, limit, offset int32) ([]db.Item, error) {
@@ -154,7 +247,11 @@ func (s *ItemService) GetSelectableItems(ctx context.Context) ([]SelectableItemO
 
 	items := make([]SelectableItemOption, 0, len(rows))
 	for _, row := range rows {
-		specsLabel := formatSpecsForLabel(row.Specs)
+		specsLabel := utils.FormatSpecification(row.Specs)
+		if specsLabel == "" {
+			specsLabel = compactSpecsForLabel(row.Specs)
+		}
+
 		items = append(items, SelectableItemOption{
 			ItemID:   uuidString(row.ID),
 			Label:    fmt.Sprintf("%s (%s)", strings.TrimSpace(row.Name), specsLabel),
@@ -165,43 +262,59 @@ func (s *ItemService) GetSelectableItems(ctx context.Context) ([]SelectableItemO
 	return items, nil
 }
 
-func compactSpecsForLabel(specs []byte) string {
-	trimmed := bytes.TrimSpace(specs)
-	if len(trimmed) == 0 {
-		return "{}"
+func (s *ItemService) UpdateThreshold(ctx context.Context, itemID string, threshold float64) (db.Item, error) {
+	var zero db.Item
+
+	parsedID, ok := parseUUID(itemID)
+	if !ok {
+		return zero, ErrItemNotFound
 	}
 
-	var out bytes.Buffer
-	if err := json.Compact(&out, trimmed); err != nil {
-		return string(trimmed)
+	thresholdNumeric := zeroNumeric()
+	if threshold > 0 {
+		if parsed, ok := numericFromFloat(threshold); ok {
+			thresholdNumeric = parsed
+		}
 	}
 
-	return out.String()
+	if s.pool == nil {
+		return zero, ErrUpdateThresholdFail
+	}
+
+	qtx := db.New(s.pool)
+	item, err := qtx.UpdateItemThreshold(ctx, db.UpdateItemThresholdParams{
+		ID:                parsedID,
+		LowStockThreshold: thresholdNumeric,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return zero, ErrItemNotFound
+		}
+		return zero, ErrUpdateThresholdFail
+	}
+
+	return item, nil
 }
 
-func formatSpecsForLabel(specs []byte) string {
-	var parsed models.SteelSpecs
-	if err := json.Unmarshal(specs, &parsed); err != nil {
-		return compactSpecsForLabel(specs)
+func parseOptionalParentID(parentID *string) pgtype.UUID {
+	if parentID == nil {
+		return pgtype.UUID{}
 	}
+	trimmed := strings.TrimSpace(*parentID)
+	if trimmed == "" {
+		return pgtype.UUID{}
+	}
+	parsed, err := uuid.Parse(trimmed)
+	if err != nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: [16]byte(parsed), Valid: true}
+}
 
-	parts := make([]string, 0, 4)
-	if parsed.Thickness > 0 {
-		parts = append(parts, "THK "+formatDimensionToken(parsed.Thickness))
+func compactSpecsForLabel(specs []byte) string {
+	trimmed := strings.TrimSpace(string(specs))
+	if len(trimmed) == 0 || trimmed == "{}" {
+		return "{}"
 	}
-	if parsed.Width > 0 {
-		parts = append(parts, "W "+formatDimensionToken(parsed.Width))
-	}
-	if strings.TrimSpace(parsed.Grade) != "" {
-		parts = append(parts, "GR "+strings.ToUpper(strings.TrimSpace(parsed.Grade)))
-	}
-	if parsed.Diameter > 0 {
-		parts = append(parts, "DIA "+formatDimensionToken(parsed.Diameter))
-	}
-
-	if len(parts) == 0 {
-		return compactSpecsForLabel(specs)
-	}
-
-	return strings.Join(parts, " • ")
+	return trimmed
 }

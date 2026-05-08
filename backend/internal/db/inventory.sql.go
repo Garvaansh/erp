@@ -15,7 +15,7 @@ const createBatch = `-- name: CreateBatch :one
 INSERT INTO inventory_batches (
     item_id, batch_code, daily_sequence, initial_qty, remaining_qty, status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, 'ACTIVE'
 )
 RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date, parent_po_id, unit_cost
 `
@@ -26,7 +26,6 @@ type CreateBatchParams struct {
 	DailySequence int32          `json:"daily_sequence"`
 	InitialQty    pgtype.Numeric `json:"initial_qty"`
 	RemainingQty  pgtype.Numeric `json:"remaining_qty"`
-	Status        BatchStatus    `json:"status"`
 }
 
 func (q *Queries) CreateBatch(ctx context.Context, arg CreateBatchParams) (InventoryBatch, error) {
@@ -36,7 +35,6 @@ func (q *Queries) CreateBatch(ctx context.Context, arg CreateBatchParams) (Inven
 		arg.DailySequence,
 		arg.InitialQty,
 		arg.RemainingQty,
-		arg.Status,
 	)
 	var i InventoryBatch
 	err := row.Scan(
@@ -161,16 +159,16 @@ func (q *Queries) ExhaustBatchByID(ctx context.Context, id pgtype.UUID) (Invento
 
 const finalizeBatchReservation = `-- name: FinalizeBatchReservation :one
 UPDATE inventory_batches
-SET reserved_qty = reserved_qty - $1,
+SET remaining_qty = remaining_qty - $1,
+    reserved_qty = reserved_qty - $1,
     updated_at = NOW(),
     status = CASE
-                WHEN remaining_qty <= 0 AND reserved_qty - $1 <= 0 THEN 'EXHAUSTED'::batch_status
-                WHEN reserved_qty - $1 > 0 THEN 'HOLD'::batch_status
-        WHEN remaining_qty < initial_qty THEN 'ACTIVE'::batch_status
+                WHEN remaining_qty - $1 <= 0 THEN 'EXHAUSTED'::batch_status
         ELSE status
     END
 WHERE id = $2
     AND $1 > 0
+    AND remaining_qty >= $1
     AND reserved_qty >= $1
 RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date, parent_po_id, unit_cost
 `
@@ -210,15 +208,15 @@ SELECT
     b.batch_code,
     COALESCE(i.sku, '') AS sku,
     b.initial_qty,
-    b.remaining_qty,
+    GREATEST(b.remaining_qty - b.reserved_qty, 0)::numeric AS remaining_qty,
     b.status,
     b.created_at
 FROM inventory_batches b
 JOIN items i ON i.id = b.item_id
 WHERE b.item_id = $1
-    AND b.remaining_qty > 0
+    AND b.remaining_qty > b.reserved_qty
     AND b.status = 'ACTIVE'::batch_status
-ORDER BY b.created_at DESC
+ORDER BY b.created_at ASC
 `
 
 type GetActiveBatchesByItemRow struct {
@@ -265,16 +263,16 @@ SELECT
     b.batch_code,
     COALESCE(i.sku, '') AS sku,
     b.initial_qty,
-    b.remaining_qty,
+    GREATEST(b.remaining_qty - b.reserved_qty, 0)::numeric AS remaining_qty,
     b.status,
     b.created_at
 FROM inventory_batches b
 JOIN items i ON i.id = b.item_id
 WHERE b.item_id = $1
     AND b.type = $2
-    AND b.remaining_qty > 0
+    AND b.remaining_qty > b.reserved_qty
     AND b.status = 'ACTIVE'::batch_status
-ORDER BY b.created_at DESC
+ORDER BY b.created_at ASC
 `
 
 type GetActiveBatchesByItemAndTypeParams struct {
@@ -326,15 +324,15 @@ SELECT
     b.batch_code,
     COALESCE(i.sku, '') AS sku,
     b.initial_qty,
-    b.remaining_qty,
+    GREATEST(b.remaining_qty - b.reserved_qty, 0)::numeric AS remaining_qty,
     b.status,
     b.created_at
 FROM inventory_batches b
 JOIN items i ON i.id = b.item_id
 WHERE b.type = $1
-    AND b.remaining_qty > 0
+    AND b.remaining_qty > b.reserved_qty
     AND b.status = 'ACTIVE'::batch_status
-ORDER BY b.created_at DESC
+ORDER BY b.created_at ASC
 `
 
 type GetActiveBatchesByTypeRow struct {
@@ -440,9 +438,9 @@ SELECT i.category,
     i.sku,
        i.name,
        i.specs,
-    SUM(b.remaining_qty + b.reserved_qty) as total_qty,
-    SUM(b.remaining_qty) as available_qty,
-    SUM(b.reserved_qty) as reserved_qty
+    SUM(b.remaining_qty) as total_qty,
+    COALESCE(SUM(GREATEST(b.remaining_qty - b.reserved_qty, 0)) FILTER (WHERE b.status = 'ACTIVE'), 0) as available_qty,
+    COALESCE(SUM(b.reserved_qty) FILTER (WHERE b.status = 'ACTIVE'), 0) as reserved_qty
 FROM inventory_batches b
 JOIN items i ON b.item_id = i.id
 WHERE (b.remaining_qty > 0 OR b.reserved_qty > 0)
@@ -496,6 +494,51 @@ func (q *Queries) GetInventoryAggregated(ctx context.Context) ([]GetInventoryAgg
 	return items, nil
 }
 
+const getNextActiveBatch = `-- name: GetNextActiveBatch :one
+SELECT
+    b.id,
+    b.item_id,
+    b.batch_code,
+    b.initial_qty,
+    b.remaining_qty,
+    b.reserved_qty,
+    b.status,
+    b.created_at
+FROM inventory_batches b
+WHERE b.item_id = $1
+    AND b.status = 'ACTIVE'::batch_status
+    AND b.remaining_qty > b.reserved_qty
+ORDER BY b.created_at ASC, b.id ASC
+LIMIT 1
+`
+
+type GetNextActiveBatchRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	ItemID       pgtype.UUID        `json:"item_id"`
+	BatchCode    string             `json:"batch_code"`
+	InitialQty   pgtype.Numeric     `json:"initial_qty"`
+	RemainingQty pgtype.Numeric     `json:"remaining_qty"`
+	ReservedQty  pgtype.Numeric     `json:"reserved_qty"`
+	Status       BatchStatus        `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetNextActiveBatch(ctx context.Context, itemID pgtype.UUID) (GetNextActiveBatchRow, error) {
+	row := q.db.QueryRow(ctx, getNextActiveBatch, itemID)
+	var i GetNextActiveBatchRow
+	err := row.Scan(
+		&i.ID,
+		&i.ItemID,
+		&i.BatchCode,
+		&i.InitialQty,
+		&i.RemainingQty,
+		&i.ReservedQty,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getProcurementReceiptTransactionForUpdate = `-- name: GetProcurementReceiptTransactionForUpdate :one
 SELECT id, movement_group_id, item_id, batch_id, direction, quantity, reference_type, reference_id, performed_by, notes, created_at FROM inventory_transactions
 WHERE id = $1
@@ -519,6 +562,188 @@ func (q *Queries) GetProcurementReceiptTransactionForUpdate(ctx context.Context,
 		&i.PerformedBy,
 		&i.Notes,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getRawMaterialBatches = `-- name: GetRawMaterialBatches :many
+SELECT
+    b.id,
+    b.batch_code,
+    b.initial_qty,
+    b.remaining_qty,
+    b.reserved_qty,
+    GREATEST(b.remaining_qty - b.reserved_qty, 0)::numeric AS available_qty,
+    b.status,
+    b.created_at,
+    b.parent_po_id,
+    COALESCE(v.name, '') AS vendor_name,
+    COALESCE(po.po_number, '') AS po_number
+FROM inventory_batches b
+LEFT JOIN purchase_orders po ON po.id = b.parent_po_id
+LEFT JOIN vendors v ON v.id = po.vendor_id
+WHERE b.item_id = $1
+    AND b.type = 'RAW'
+ORDER BY b.created_at ASC
+`
+
+type GetRawMaterialBatchesRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	BatchCode    string             `json:"batch_code"`
+	InitialQty   pgtype.Numeric     `json:"initial_qty"`
+	RemainingQty pgtype.Numeric     `json:"remaining_qty"`
+	ReservedQty  pgtype.Numeric     `json:"reserved_qty"`
+	AvailableQty pgtype.Numeric     `json:"available_qty"`
+	Status       BatchStatus        `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ParentPoID   pgtype.UUID        `json:"parent_po_id"`
+	VendorName   string             `json:"vendor_name"`
+	PoNumber     string             `json:"po_number"`
+}
+
+func (q *Queries) GetRawMaterialBatches(ctx context.Context, itemID pgtype.UUID) ([]GetRawMaterialBatchesRow, error) {
+	rows, err := q.db.Query(ctx, getRawMaterialBatches, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetRawMaterialBatchesRow
+	for rows.Next() {
+		var i GetRawMaterialBatchesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BatchCode,
+			&i.InitialQty,
+			&i.RemainingQty,
+			&i.ReservedQty,
+			&i.AvailableQty,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ParentPoID,
+			&i.VendorName,
+			&i.PoNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRawMaterialMaster = `-- name: GetRawMaterialMaster :many
+SELECT
+    i.id AS item_id,
+    COALESCE(i.sku, '') AS sku,
+    i.name,
+    i.specs,
+    i.low_stock_threshold,
+    COALESCE(SUM(GREATEST(b.remaining_qty - b.reserved_qty, 0)) FILTER (WHERE b.status = 'ACTIVE'), 0)::numeric AS available_qty,
+    COALESCE(SUM(b.reserved_qty) FILTER (WHERE b.status = 'ACTIVE'), 0)::numeric AS reserved_qty,
+    COALESCE((
+        SELECT SUM(GREATEST(po.ordered_qty - po.received_qty, 0))
+        FROM purchase_orders po
+        WHERE po.item_id = i.id
+          AND po.status IN ('PENDING', 'PARTIAL')
+    ), 0)::numeric AS pending_deliveries
+FROM items i
+LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.type = 'RAW'
+WHERE i.category = 'RAW'::item_category AND i.is_active = true
+GROUP BY i.id, i.sku, i.name, i.specs, i.low_stock_threshold
+ORDER BY i.name
+`
+
+type GetRawMaterialMasterRow struct {
+	ItemID            pgtype.UUID    `json:"item_id"`
+	Sku               string         `json:"sku"`
+	Name              string         `json:"name"`
+	Specs             []byte         `json:"specs"`
+	LowStockThreshold pgtype.Numeric `json:"low_stock_threshold"`
+	AvailableQty      pgtype.Numeric `json:"available_qty"`
+	ReservedQty       pgtype.Numeric `json:"reserved_qty"`
+	PendingDeliveries pgtype.Numeric `json:"pending_deliveries"`
+}
+
+func (q *Queries) GetRawMaterialMaster(ctx context.Context) ([]GetRawMaterialMasterRow, error) {
+	rows, err := q.db.Query(ctx, getRawMaterialMaster)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetRawMaterialMasterRow
+	for rows.Next() {
+		var i GetRawMaterialMasterRow
+		if err := rows.Scan(
+			&i.ItemID,
+			&i.Sku,
+			&i.Name,
+			&i.Specs,
+			&i.LowStockThreshold,
+			&i.AvailableQty,
+			&i.ReservedQty,
+			&i.PendingDeliveries,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRawMaterialSummary = `-- name: GetRawMaterialSummary :one
+SELECT
+    i.id AS item_id,
+    COALESCE(i.sku, '') AS sku,
+    i.name,
+    i.specs,
+    i.low_stock_threshold,
+    COALESCE(SUM(GREATEST(b.remaining_qty - b.reserved_qty, 0)) FILTER (WHERE b.status = 'ACTIVE'), 0)::numeric AS available_qty,
+    COALESCE(SUM(b.reserved_qty) FILTER (WHERE b.status = 'ACTIVE'), 0)::numeric AS reserved_qty,
+    COALESCE(SUM(b.remaining_qty) FILTER (WHERE b.status = 'HOLD'), 0)::numeric AS hold_qty,
+    COALESCE((
+        SELECT SUM(GREATEST(po.ordered_qty - po.received_qty, 0))
+        FROM purchase_orders po
+        WHERE po.item_id = i.id
+          AND po.status IN ('PENDING', 'PARTIAL')
+    ), 0)::numeric AS pending_deliveries
+FROM items i
+LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.type = 'RAW'
+WHERE i.id = $1
+    AND i.category = 'RAW'::item_category
+    AND i.is_active = true
+GROUP BY i.id, i.sku, i.name, i.specs, i.low_stock_threshold
+`
+
+type GetRawMaterialSummaryRow struct {
+	ItemID            pgtype.UUID    `json:"item_id"`
+	Sku               string         `json:"sku"`
+	Name              string         `json:"name"`
+	Specs             []byte         `json:"specs"`
+	LowStockThreshold pgtype.Numeric `json:"low_stock_threshold"`
+	AvailableQty      pgtype.Numeric `json:"available_qty"`
+	ReservedQty       pgtype.Numeric `json:"reserved_qty"`
+	HoldQty           pgtype.Numeric `json:"hold_qty"`
+	PendingDeliveries pgtype.Numeric `json:"pending_deliveries"`
+}
+
+func (q *Queries) GetRawMaterialSummary(ctx context.Context, id pgtype.UUID) (GetRawMaterialSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getRawMaterialSummary, id)
+	var i GetRawMaterialSummaryRow
+	err := row.Scan(
+		&i.ItemID,
+		&i.Sku,
+		&i.Name,
+		&i.Specs,
+		&i.LowStockThreshold,
+		&i.AvailableQty,
+		&i.ReservedQty,
+		&i.HoldQty,
+		&i.PendingDeliveries,
 	)
 	return i, err
 }
@@ -647,15 +872,8 @@ func (q *Queries) RecordTransaction(ctx context.Context, arg RecordTransactionPa
 
 const releaseBatchReservation = `-- name: ReleaseBatchReservation :one
 UPDATE inventory_batches
-SET remaining_qty = remaining_qty + $1,
-        reserved_qty = reserved_qty - $1,
-    updated_at = NOW(),
-    status = CASE
-                WHEN remaining_qty + $1 <= 0 AND reserved_qty - $1 > 0 THEN 'HOLD'::batch_status
-                WHEN remaining_qty + $1 <= 0 THEN 'EXHAUSTED'::batch_status
-                WHEN remaining_qty + $1 < initial_qty THEN 'ACTIVE'::batch_status
-        ELSE status
-    END
+SET reserved_qty = reserved_qty - $1,
+    updated_at = NOW()
 WHERE id = $2
     AND $1 > 0
     AND reserved_qty >= $1
@@ -693,18 +911,12 @@ func (q *Queries) ReleaseBatchReservation(ctx context.Context, arg ReleaseBatchR
 
 const reserveBatchStock = `-- name: ReserveBatchStock :one
 UPDATE inventory_batches
-SET remaining_qty = remaining_qty - $1,
-        reserved_qty = reserved_qty + $1,
-    updated_at = NOW(),
-    status = CASE
-                WHEN remaining_qty - $1 <= 0 AND reserved_qty + $1 > 0 THEN 'HOLD'::batch_status
-                WHEN remaining_qty - $1 <= 0 THEN 'EXHAUSTED'::batch_status
-                WHEN remaining_qty - $1 < initial_qty THEN 'ACTIVE'::batch_status
-        ELSE status
-    END
+SET reserved_qty = reserved_qty + $1,
+    updated_at = NOW()
 WHERE id = $2
     AND $1 > 0
-    AND remaining_qty >= $1
+    AND status = 'ACTIVE'::batch_status
+    AND reserved_qty + $1 <= remaining_qty
 RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date, parent_po_id, unit_cost
 `
 
@@ -715,6 +927,43 @@ type ReserveBatchStockParams struct {
 
 func (q *Queries) ReserveBatchStock(ctx context.Context, arg ReserveBatchStockParams) (InventoryBatch, error) {
 	row := q.db.QueryRow(ctx, reserveBatchStock, arg.Qty, arg.ID)
+	var i InventoryBatch
+	err := row.Scan(
+		&i.ID,
+		&i.ItemID,
+		&i.BatchCode,
+		&i.InitialQty,
+		&i.RemainingQty,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DailySequence,
+		&i.Type,
+		&i.Diameter,
+		&i.ReservedQty,
+		&i.ParentBatchID,
+		&i.ExpiryDate,
+		&i.ParentPoID,
+		&i.UnitCost,
+	)
+	return i, err
+}
+
+const setBatchStatus = `-- name: SetBatchStatus :one
+UPDATE inventory_batches
+SET status = $2,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, item_id, batch_code, initial_qty, remaining_qty, status, created_at, updated_at, daily_sequence, type, diameter, reserved_qty, parent_batch_id, expiry_date, parent_po_id, unit_cost
+`
+
+type SetBatchStatusParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status BatchStatus `json:"status"`
+}
+
+func (q *Queries) SetBatchStatus(ctx context.Context, arg SetBatchStatusParams) (InventoryBatch, error) {
+	row := q.db.QueryRow(ctx, setBatchStatus, arg.ID, arg.Status)
 	var i InventoryBatch
 	err := row.Scan(
 		&i.ID,

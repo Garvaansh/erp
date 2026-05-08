@@ -150,10 +150,10 @@ func (s *DashboardService) getLowStockCount(ctx context.Context) int64 {
 		SELECT COUNT(*) FROM (
 			SELECT i.id
 			FROM items i
-			LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.status IN ('NEW','ACTIVE')
-			WHERE i.is_active = true AND i.min_qty > 0
-			GROUP BY i.id, i.min_qty
-			HAVING COALESCE(SUM(b.remaining_qty), 0) < i.min_qty
+			LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.status = 'ACTIVE'
+			WHERE i.is_active = true AND i.low_stock_threshold > 0
+			GROUP BY i.id, i.low_stock_threshold
+			HAVING COALESCE(SUM(b.remaining_qty), 0) < i.low_stock_threshold
 		) sub
 	`).Scan(&count)
 	if err != nil {
