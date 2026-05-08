@@ -20,8 +20,10 @@ export type PurchaseOrder = {
   item_id: string;
   item_name: string;
   item_sku?: string;
+  item_specs?: string;
   ordered_qty: number;
   received_qty: number;
+  pending_qty?: number;
   unit_price: number;
   vendor_invoice_ref?: string;
   payment_status?: ProcurementPaymentStatus;

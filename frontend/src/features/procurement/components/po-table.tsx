@@ -1,122 +1,183 @@
 "use client";
 
-import Link from "next/link";
-import type { ProcurementOrderListItem } from "@/features/procurement/types";
-import { ArrowRight, PackageOpen } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { PurchaseOrder } from "@/features/procurement/types";
+import { formatMaterialLabel } from "@/lib/format-spec";
 
 type POTableProps = {
-  orders: ProcurementOrderListItem[];
+  orders: PurchaseOrder[];
+  onRowClick: (order: PurchaseOrder) => void;
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    PENDING: "erp-badge--warning",
-    DELIVERED: "erp-badge--success",
-    CANCELLED: "erp-badge--critical",
-  };
-  return (
-    <span className={`erp-badge ${map[status] || "erp-badge--neutral"}`}>
-      {status}
-    </span>
-  );
+function statusBadgeVariant(
+  status: PurchaseOrder["status"],
+): "default" | "secondary" | "outline" | "destructive" {
+  switch (status) {
+    case "PENDING":
+      return "secondary";
+    case "PARTIAL":
+      return "default";
+    case "COMPLETED":
+      return "outline";
+    case "CLOSED":
+      return "outline";
+    default:
+      return "outline";
+  }
 }
 
-export function POTable({ orders }: POTableProps) {
-  if (orders.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <PackageOpen className="size-10 text-[var(--erp-text-muted)] mb-3 opacity-40" />
-        <p className="text-sm text-[var(--erp-text-muted)]">
-          No procurement orders yet.
-        </p>
-        <Link
-          href="/procurement"
-          className="mt-4 text-xs font-semibold text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] uppercase tracking-wider transition-colors"
-        >
-          Create your first order →
-        </Link>
-      </div>
-    );
+function paymentBadgeVariant(
+  status: PurchaseOrder["payment_status"],
+): "default" | "secondary" | "destructive" | "outline" {
+  switch (status) {
+    case "PAID":
+      return "default";
+    case "PARTIAL":
+      return "secondary";
+    case "UNPAID":
+      return "destructive";
+    default:
+      return "outline";
   }
+}
 
+function formatCurrency(value: number | undefined): string {
+  if (value === undefined || value === null) return "—";
+  return `₹${value.toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatQty(value: number | undefined): string {
+  if (value === undefined || value === null) return "—";
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "2-digit",
+  }).format(date);
+}
+
+export function POTable({ orders, onRowClick }: POTableProps) {
   return (
     <div className="overflow-x-auto">
-      <table className="erp-table">
-        <thead>
-          <tr>
-            <th>PO Number</th>
-            <th>Supplier</th>
-            <th>Item</th>
-            <th className="text-right">Ordered</th>
-            <th className="text-right">Received</th>
-            <th className="text-right">Unit Price</th>
-            <th>Status</th>
-            <th className="text-right">Created</th>
-            <th style={{ width: "40px" }} />
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order, i) => (
-            <tr
-              key={order.id}
-              className="erp-fade-in"
-              style={{ animationDelay: `${i * 0.03}s` }}
-            >
-              <td>
-                <Link
-                  href={`/procurement/${order.id}`}
-                  className="text-[var(--erp-accent)] hover:text-[var(--erp-accent-bright)] font-mono text-xs font-semibold transition-colors"
-                >
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>PO</TableHead>
+            <TableHead>Vendor</TableHead>
+            <TableHead>Material</TableHead>
+            <TableHead>Spec</TableHead>
+            <TableHead className="text-right">Ordered</TableHead>
+            <TableHead className="text-right">Received</TableHead>
+            <TableHead className="text-right">Pending</TableHead>
+            <TableHead className="text-right">Unit Price</TableHead>
+            <TableHead>Payment</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Date</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {orders.map((order) => {
+            const pendingQty =
+              order.pending_qty ?? Math.max(0, order.ordered_qty - order.received_qty);
+
+            return (
+              <TableRow
+                key={order.id}
+                className="cursor-pointer"
+                onClick={() => onRowClick(order)}
+              >
+                <TableCell className="font-mono text-xs font-medium">
                   {order.po_number}
-                </Link>
-              </td>
-              <td>
-                <span className="text-sm text-[var(--erp-text-primary)]">
-                  {order.supplier_name}
-                </span>
-              </td>
-              <td>
-                <span className="text-sm text-[var(--erp-text-secondary)]">
-                  {order.item_name || "—"}
-                </span>
-                {order.item_sku && (
-                  <span className="block text-[10px] font-mono text-[var(--erp-text-muted)]">
-                    {order.item_sku}
+                </TableCell>
+                <TableCell className="text-sm">
+                  <span className="block font-medium">
+                    {order.vendor_short_name || order.vendor_name}
                   </span>
-                )}
-              </td>
-              <td className="text-right font-mono text-sm text-[var(--erp-text-primary)]">
-                {order.ordered_qty.toLocaleString()}
-              </td>
-              <td className="text-right font-mono text-sm text-[var(--erp-text-primary)]">
-                {order.received_qty.toLocaleString()}
-              </td>
-              <td className="text-right font-mono text-sm text-[var(--erp-text-secondary)]">
-                ₹{order.unit_price.toLocaleString()}
-              </td>
-              <td>
-                <StatusBadge status={order.status} />
-              </td>
-              <td className="text-right text-xs text-[var(--erp-text-muted)]">
-                {order.created_at
-                  ? new Date(order.created_at).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                    })
-                  : "—"}
-              </td>
-              <td>
-                <Link
-                  href={`/procurement/${order.id}`}
-                  className="text-[var(--erp-text-muted)] hover:text-[var(--erp-accent)] transition-colors"
-                >
-                  <ArrowRight className="size-4" />
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                  {order.vendor_code ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {order.vendor_code}
+                    </span>
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {formatMaterialLabel(order.item_name, order.item_specs)}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {order.item_specs || "—"}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {formatQty(order.ordered_qty)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {formatQty(order.received_qty)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {pendingQty > 0 ? (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {formatQty(pendingQty)}
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      0
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {formatCurrency(order.unit_price)}
+                </TableCell>
+                <TableCell>
+                  {order.payment_status ? (
+                    <Badge variant={paymentBadgeVariant(order.payment_status)}>
+                      {order.payment_status}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={statusBadgeVariant(order.status)}>
+                    {order.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {formatDate(order.created_at)}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+
+          {orders.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={11}
+                className="text-center text-sm text-muted-foreground"
+              >
+                No purchase orders found.
+              </TableCell>
+            </TableRow>
+          ) : null}
+        </TableBody>
+      </Table>
     </div>
   );
 }

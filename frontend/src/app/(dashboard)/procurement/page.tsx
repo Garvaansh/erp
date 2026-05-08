@@ -54,6 +54,7 @@ import type {
   PurchaseOrder,
 } from "@/features/procurement/types";
 import type { Vendor } from "@/features/vendors/types";
+import { formatMaterialLabel } from "@/lib/format-spec";
 import { vendorsKeys } from "@/lib/react-query/keys";
 
 type TabValue = "pending" | "recent";
@@ -307,8 +308,8 @@ export default function ProcurementPage() {
     const allRows = [...(pendingRows ?? []), ...(recentRows ?? [])];
     allRows.forEach((row) => {
       const withSku = row.item_sku?.trim()
-        ? `${row.item_name} (${row.item_sku})`
-        : row.item_name;
+        ? `${formatMaterialLabel(row.item_name, row.item_specs)} (${row.item_sku})`
+        : formatMaterialLabel(row.item_name, row.item_specs);
       if (row.item_id && withSku.trim()) {
         map.set(row.item_id, withSku.trim());
       }
@@ -677,7 +678,9 @@ export default function ProcurementPage() {
           <TableCell className="font-medium">{row.po_number}</TableCell>
           <TableCell>
             <div className="font-medium">{row.vendor_name}</div>
-            <div className="text-xs text-muted-foreground">{row.item_name}</div>
+            <div className="text-xs text-muted-foreground">
+              {formatMaterialLabel(row.item_name, row.item_specs)}
+            </div>
             <div className="text-xs text-muted-foreground">
               Payment: {formatPaymentStatusLabel(row.payment_status)}
             </div>

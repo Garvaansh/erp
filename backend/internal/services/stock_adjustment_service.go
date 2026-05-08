@@ -126,13 +126,13 @@ func (s *StockAdjustmentService) GetLowStockAlerts(ctx context.Context) ([]model
 		SELECT
 			i.id, COALESCE(i.sku,''), i.name, i.category::text,
 			COALESCE(SUM(b.remaining_qty), 0) AS current_qty,
-			i.min_qty, i.max_qty
+			i.low_stock_threshold, i.max_qty
 		FROM items i
-		LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.status IN ('NEW','ACTIVE')
-		WHERE i.is_active = true AND i.min_qty > 0
-		GROUP BY i.id, i.sku, i.name, i.category, i.min_qty, i.max_qty
-		HAVING COALESCE(SUM(b.remaining_qty), 0) < i.min_qty
-		ORDER BY (i.min_qty - COALESCE(SUM(b.remaining_qty), 0)) DESC
+		LEFT JOIN inventory_batches b ON b.item_id = i.id AND b.status = 'ACTIVE'
+		WHERE i.is_active = true AND i.low_stock_threshold > 0
+		GROUP BY i.id, i.sku, i.name, i.category, i.low_stock_threshold, i.max_qty
+		HAVING COALESCE(SUM(b.remaining_qty), 0) < i.low_stock_threshold
+		ORDER BY (i.low_stock_threshold - COALESCE(SUM(b.remaining_qty), 0)) DESC
 	`)
 	if err != nil {
 		return nil, ErrGetLowStockFailed

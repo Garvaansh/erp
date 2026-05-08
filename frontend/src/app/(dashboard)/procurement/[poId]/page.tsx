@@ -352,6 +352,7 @@ export default function ProcurementDetailPage({
           <p className="text-sm text-muted-foreground">
             Vendor: {formatVendorDisplay(po.vendor_name, po.vendor_short_name)}{" "}
             • Item: {po.item_name}
+            {po.item_specs ? ` • Spec: ${po.item_specs}` : ""}
             {po.item_sku ? ` • SKU: ${po.item_sku}` : ""}
           </p>
           <p className="text-xs text-muted-foreground">Item ID: {po.item_id}</p>

@@ -41,6 +41,13 @@ func (h *ItemHandler) CreateItem(c *fiber.Ctx) error {
 		})
 	}
 
+	if !req.Specs.IsValid() {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "At least one dimension (thickness, width, or diameter) must be provided",
+		})
+	}
+
 	item, err := h.itemService.CreateItem(c.Context(), req)
 	if err != nil {
 		if errors.Is(err, services.ErrDuplicateSKU) {
@@ -84,7 +91,7 @@ func normalizeCreateItemRequest(req *models.CreateItemRequest, rawBody []byte) {
 		return
 	}
 
-	legacyRawInput := hasAnyKey(payload, "thickness", "width", "item_type", "initial_weight", "coil_weight")
+	legacyRawInput := hasAnyKey(payload, "thickness", "width", "item_type", "initial_weight")
 	if legacyRawInput {
 		if req.Category == "" {
 			req.Category = "RAW"
@@ -97,6 +104,18 @@ func normalizeCreateItemRequest(req *models.CreateItemRequest, rawBody []byte) {
 	var specsPayload map[string]any
 	if rawSpecs, ok := payload["specs"].(map[string]any); ok {
 		specsPayload = rawSpecs
+	}
+
+	// Handle both _mm suffixed and legacy keys
+	if req.Specs.ThicknessMM <= 0 {
+		if value, ok := numberFromMap(specsPayload, "thickness_mm"); ok {
+			req.Specs.ThicknessMM = value
+		}
+	}
+	if req.Specs.WidthMM <= 0 {
+		if value, ok := numberFromMap(specsPayload, "width_mm"); ok {
+			req.Specs.WidthMM = value
+		}
 	}
 
 	if req.Specs.Thickness <= 0 {
@@ -128,6 +147,13 @@ func normalizeCreateItemRequest(req *models.CreateItemRequest, rawBody []byte) {
 			req.Specs.Grade = value
 		} else if value, ok := stringFromMap(specsPayload, "grade"); ok {
 			req.Specs.Grade = value
+		}
+	}
+
+	// Extract low_stock_threshold from payload
+	if req.LowStockThreshold <= 0 {
+		if value, ok := numberFromMap(payload, "low_stock_threshold"); ok && value >= 0 {
+			req.LowStockThreshold = value
 		}
 	}
 }
@@ -290,6 +316,51 @@ func (h *ItemHandler) GetSelectableItems(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(items)
+}
+
+func (h *ItemHandler) UpdateThreshold(c *fiber.Ctx) error {
+	itemID := strings.TrimSpace(c.Params("id"))
+	if itemID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Item ID is required",
+		})
+	}
+
+	var body struct {
+		Threshold float64 `json:"threshold" validate:"gte=0"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Invalid request body",
+		})
+	}
+	if err := h.validator.Struct(body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Validation failed: " + err.Error(),
+		})
+	}
+
+	item, err := h.itemService.UpdateThreshold(c.Context(), itemID, body.Threshold)
+	if err != nil {
+		if errors.Is(err, services.ErrItemNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Item not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Failed to update threshold",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "ok",
+		"item":   services.MapItemResponse(item),
+	})
 }
 
 func validationErrors(err error) []string {

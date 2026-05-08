@@ -111,7 +111,7 @@ func (s *ProductionService) ProcessDailyLog(ctx context.Context, input models.Pr
 	}()
 
 	qtx := db.New(tx)
-	itemService := NewItemService(qtx)
+	itemService := NewItemService(qtx, nil)
 
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", idempotencyKey); err != nil {
 		return nil, fmt.Errorf("acquire idempotency lock: %w", err)
@@ -308,17 +308,4 @@ func numericFromSignedFloat(value float64) (pgtype.Numeric, bool) {
 		return pgtype.Numeric{}, false
 	}
 	return numeric, true
-}
-
-func numericToFloat64(value pgtype.Numeric) (float64, bool) {
-	floatValue, err := value.Float64Value()
-	if err != nil || !floatValue.Valid {
-		return 0, false
-	}
-
-	if math.IsNaN(floatValue.Float64) || math.IsInf(floatValue.Float64, 0) {
-		return 0, false
-	}
-
-	return floatValue.Float64, true
 }

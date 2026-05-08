@@ -333,7 +333,8 @@ func mapWIPError(c *fiber.Ctx, err error, fallbackMessage string) error {
 			"status":  "error",
 			"message": err.Error(),
 		})
-	case errors.Is(err, services.ErrWIPInsufficientStock):
+	case errors.Is(err, services.ErrWIPInsufficientStock),
+		errors.Is(err, services.ErrFIFOAllocationRequired):
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 			"status":  "error",
 			"message": err.Error(),

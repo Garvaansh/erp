@@ -587,6 +587,27 @@ func (s *WIPProductionService) processStage(ctx context.Context, req wipStageReq
 		return nil, ErrWIPInsufficientStock
 	}
 
+	requiredQty := float64(inputScaled) / float64(decimalScale)
+	nextBatch, _, err := getNextActiveBatchRecord(ctx, qtx, sourceBatch.ItemID, requiredQty)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrFIFOBatchUnavailable), errors.Is(err, ErrInsufficientBatchQty):
+			return nil, ErrWIPInsufficientStock
+		default:
+			return nil, err
+		}
+	}
+	if nextBatch.ID != sourceBatch.ID {
+		return nil, ErrFIFOAllocationRequired
+	}
+
+	if err := validateBatchReservationCapacity(sourceBatch.RemainingQty, sourceBatch.ReservedQty, inputNumeric); err != nil {
+		if errors.Is(err, ErrInsufficientBatchQty) {
+			return nil, ErrWIPInsufficientStock
+		}
+		return nil, err
+	}
+
 	if req.sourceType == db.BatchTypeMOLDED && !sourceBatch.Diameter.Valid {
 		return nil, ErrWIPDiameterRequired
 	}
@@ -780,6 +801,23 @@ func applyBatchConsumption(remainingScaled, consumeScaled int64) (int64, bool, e
 	}
 	nextRemaining := remainingScaled - consumeScaled
 	return nextRemaining, nextRemaining == 0, nil
+}
+
+func validateBatchReservationCapacity(remainingQty, reservedQty, allocation pgtype.Numeric) error {
+	nextReservedQty, err := addNumerics(reservedQty, allocation)
+	if err != nil {
+		return ErrProcessWIPFailed
+	}
+
+	cmp, err := compareNumerics(nextReservedQty, remainingQty)
+	if err != nil {
+		return ErrProcessWIPFailed
+	}
+	if cmp > 0 {
+		return ErrInsufficientBatchQty
+	}
+
+	return nil
 }
 
 func nextStageBatchCode(ctx context.Context, tx pgx.Tx, batchType db.BatchType) (string, int32, error) {

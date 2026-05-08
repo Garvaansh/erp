@@ -77,4 +77,3 @@ func (h *FinanceHandler) GetLedger(c *fiber.Ctx) error {
 		"data":   entries,
 	})
 }
-
