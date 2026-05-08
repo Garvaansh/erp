@@ -19,6 +19,7 @@ export async function exportReportToXlsx({
   columns,
   rows,
   fileName,
+  headerFields,
 }: ExportReportInput): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Report", {
@@ -60,9 +61,11 @@ export async function exportReportToXlsx({
   worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
   worksheet.getRow(1).height = 24;
 
+  let tableHeaderRowIndex = REPORT_EXPORT_STYLE.spacing.excelHeaderRowIndex;
+
   worksheet.mergeCells(2, 1, 2, lastCol);
   const subtitleCell = worksheet.getCell(2, 1);
-  subtitleCell.value = `${reportTitle} | ${dateRangeLabel}`;
+  subtitleCell.value = reportTitle;
   subtitleCell.font = {
     name: REPORT_EXPORT_STYLE.fonts.primary,
     size: REPORT_EXPORT_STYLE.typography.subheaderSize,
@@ -71,11 +74,42 @@ export async function exportReportToXlsx({
   worksheet.getRow(2).alignment = { horizontal: "center", vertical: "middle" };
   worksheet.getRow(2).height = 20;
 
-  worksheet.getRow(3).height = REPORT_EXPORT_STYLE.spacing.sectionGap;
+  if (headerFields && headerFields.length > 0) {
+    headerFields.forEach((field, index) => {
+      const rowIndex = 3 + index;
+      worksheet.mergeCells(rowIndex, 1, rowIndex, lastCol);
+      const cell = worksheet.getCell(rowIndex, 1);
+      cell.value = `${field.label}: ${field.value}`;
+      cell.font = {
+        name: REPORT_EXPORT_STYLE.fonts.primary,
+        size: REPORT_EXPORT_STYLE.typography.tableBodySize,
+        color: { argb: REPORT_EXPORT_STYLE.colors.textPrimaryArgb },
+      };
+      worksheet.getRow(rowIndex).alignment = {
+        horizontal: "left",
+        vertical: "middle",
+      };
+      worksheet.getRow(rowIndex).height =
+        REPORT_EXPORT_STYLE.spacing.excelMetaRowHeight;
+    });
 
-  const headerRow = worksheet.getRow(
-    REPORT_EXPORT_STYLE.spacing.excelHeaderRowIndex,
-  );
+    const spacerRowIndex = 3 + headerFields.length;
+    worksheet.getRow(spacerRowIndex).height = REPORT_EXPORT_STYLE.spacing.sectionGap;
+    tableHeaderRowIndex = spacerRowIndex + 1;
+  } else {
+    worksheet.mergeCells(3, 1, 3, lastCol);
+    const dateCell = worksheet.getCell(3, 1);
+    dateCell.value = dateRangeLabel;
+    dateCell.font = {
+      name: REPORT_EXPORT_STYLE.fonts.primary,
+      size: REPORT_EXPORT_STYLE.typography.tableBodySize,
+      color: { argb: REPORT_EXPORT_STYLE.colors.textMutedArgb },
+    };
+    worksheet.getRow(3).alignment = { horizontal: "center", vertical: "middle" };
+    worksheet.getRow(3).height = REPORT_EXPORT_STYLE.spacing.sectionGap;
+  }
+
+  const headerRow = worksheet.getRow(tableHeaderRowIndex);
   headerRow.values = columns.map((column) => toHeaderLabel(column.label));
   headerRow.height = REPORT_EXPORT_STYLE.spacing.excelHeaderRowHeight;
   headerRow.alignment = { vertical: "middle", horizontal: "left" };

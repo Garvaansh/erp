@@ -27,6 +27,7 @@ export function exportReportToPdf({
   columns,
   rows,
   fileName,
+  headerFields,
 }: ExportReportInput): void {
   const doc = new jsPDF({
     orientation: columns.length > 7 ? "landscape" : "portrait",
@@ -69,17 +70,34 @@ export function exportReportToPdf({
   if (typeof doc.setCharSpace === "function") {
     doc.setCharSpace(0);
   }
-  doc.text(
-    dateRangeLabel,
-    pageWidth / 2,
-    REPORT_EXPORT_STYLE.spacing.pdfSubheaderY,
-    { align: "center" },
-  );
+
+  let tableStartY = REPORT_EXPORT_STYLE.spacing.pdfTableStartY;
+
+  if (headerFields && headerFields.length > 0) {
+    let currentY = REPORT_EXPORT_STYLE.spacing.pdfSubheaderY;
+    doc.setTextColor(...REPORT_EXPORT_STYLE.colors.textPrimaryRgb);
+    headerFields.forEach((field) => {
+      doc.text(
+        `${field.label}: ${field.value}`,
+        REPORT_EXPORT_STYLE.pdf.margin.left,
+        currentY,
+      );
+      currentY += REPORT_EXPORT_STYLE.spacing.pdfMetaLineGap;
+    });
+    tableStartY = currentY + 12;
+  } else {
+    doc.text(
+      dateRangeLabel,
+      pageWidth / 2,
+      REPORT_EXPORT_STYLE.spacing.pdfSubheaderY,
+      { align: "center" },
+    );
+  }
 
   doc.setLineHeightFactor(REPORT_EXPORT_STYLE.typography.tableBodyLineHeight);
 
   autoTable(doc, {
-    startY: REPORT_EXPORT_STYLE.spacing.pdfTableStartY,
+    startY: tableStartY,
     margin: {
       left: REPORT_EXPORT_STYLE.pdf.margin.left,
       right: REPORT_EXPORT_STYLE.pdf.margin.right,

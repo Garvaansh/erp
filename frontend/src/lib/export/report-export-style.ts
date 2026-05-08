@@ -7,6 +7,10 @@ export type ExportReportInput = {
   columns: ReportColumn[];
   rows: ReportRow[];
   fileName?: string;
+  headerFields?: Array<{
+    label: string;
+    value: string;
+  }>;
 };
 
 export type ReportColumnProfile = {
@@ -35,10 +39,12 @@ export const REPORT_EXPORT_STYLE = {
     excelHeaderRowIndex: 4,
     excelBodyRowHeight: 20,
     excelHeaderRowHeight: 22,
+    excelMetaRowHeight: 18,
     pdfTopY: 42,
     pdfReportTitleY: 64,
     pdfSubheaderY: 84,
     pdfTableStartY: 112,
+    pdfMetaLineGap: 16,
   },
   colors: {
     textPrimaryRgb: [33, 37, 41] as const,

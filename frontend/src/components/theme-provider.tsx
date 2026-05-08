@@ -41,17 +41,9 @@ function getInitialTheme(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
-  const [mounted, setMounted] = useState(false);
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
 
   useEffect(() => {
-    setTheme(getInitialTheme());
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-
     const root = document.documentElement;
 
     if (theme === "dark") {
@@ -65,14 +57,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // localStorage may be blocked
     }
-  }, [theme, mounted]);
+  }, [theme]);
 
   const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
 
-  // Prevent flash of wrong theme by hiding content until mounted
-  // The initial render uses "light" and the effect corrects it
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       {children}

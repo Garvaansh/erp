@@ -10,6 +10,11 @@ export const inventoryKeys = {
     [...inventoryKeys.all, "active-batches", itemId, batchType] as const,
   selectableRawItems: () =>
     [...inventoryKeys.all, "selectable-raw-items"] as const,
+  rawMaterials: () => [...inventoryKeys.all, "raw-materials"] as const,
+  rawMaterialSummary: (itemId: string) =>
+    [...inventoryKeys.all, "raw-material-summary", itemId] as const,
+  rawMaterialBatches: (itemId: string) =>
+    [...inventoryKeys.all, "raw-material-batches", itemId] as const,
 };
 
 export const wipKeys = {
