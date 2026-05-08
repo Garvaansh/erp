@@ -4,15 +4,19 @@ const printableAsciiSchema = z
   .string()
   .regex(/^[\x20-\x7E]+$/, "Must contain printable ASCII characters only");
 
+/**
+ * Schema for the Add Raw Material form.
+ * Only operational fields — no SKU, no category_code, no internal identifiers.
+ */
 export const defineMaterialSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(120),
-  thickness: z.number().finite().gt(0, "Thickness must be greater than 0"),
-  width: z.number().finite().gt(0, "Width must be greater than 0"),
-  diameter: z
+  thickness_mm: z.number().finite().gt(0, "Thickness must be greater than 0"),
+  width_mm: z.number().finite().gt(0, "Width must be greater than 0"),
+  low_stock_threshold: z
     .number()
     .finite()
-    .gt(0, "Diameter must be greater than 0")
-    .optional(),
+    .gte(0, "Threshold cannot be negative")
+    .default(0),
 });
 
 export const receiveStockCommandSchema = z.object({
@@ -40,15 +44,33 @@ export const baseUnitSchema = z.union(
   { message: "Invalid base unit" },
 );
 
+/**
+ * Normalized specs schema — no coil_weight.
+ * thickness/width accepted as either legacy or _mm suffixed keys.
+ */
 export const steelSpecsSchema = z.object({
-  thickness: z.number().finite().gt(0, "Thickness must be greater than 0"),
-  width: z.number().finite().gt(0, "Width must be greater than 0"),
+  thickness: z
+    .number()
+    .finite()
+    .gt(0, "Thickness must be greater than 0")
+    .optional(),
+  width: z.number().finite().gt(0, "Width must be greater than 0").optional(),
+  thickness_mm: z
+    .number()
+    .finite()
+    .gt(0, "Thickness must be greater than 0")
+    .optional(),
+  width_mm: z
+    .number()
+    .finite()
+    .gt(0, "Width must be greater than 0")
+    .optional(),
   diameter: z
     .number()
     .finite()
     .gt(0, "Diameter must be greater than 0")
     .optional(),
-  coil_weight: z.number().finite().gt(0, "Coil weight must be greater than 0"),
+  grade: z.string().max(32).optional(),
 });
 
 export const itemDefinitionSchema = z.object({
@@ -63,17 +85,19 @@ export const itemDefinitionSchema = z.object({
   category: itemCategorySchema,
   base_unit: baseUnitSchema,
   specs: steelSpecsSchema,
+  specification: z.string().optional(),
+  low_stock_threshold: z.number().optional(),
   is_active: z.boolean(),
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional(),
 });
 
 export const createItemDefinitionInputSchema = z.object({
-  parent_id: z.string().uuid("Parent ID must be a valid UUID").optional(),
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(120),
   category: itemCategorySchema,
   base_unit: baseUnitSchema,
   specs: steelSpecsSchema,
+  low_stock_threshold: z.number().finite().gte(0).optional(),
 });
 
 export const selectableItemSchema = z.object({

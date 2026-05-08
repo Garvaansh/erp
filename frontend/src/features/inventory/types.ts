@@ -3,10 +3,12 @@ export type ItemCategory = "RAW" | "SEMI_FINISHED" | "FINISHED" | "SCRAP";
 export type BaseUnit = "WEIGHT" | "COUNT" | "LENGTH";
 
 export type SteelSpecs = {
-  thickness: number;
-  width: number;
+  thickness?: number;
+  thickness_mm?: number;
+  width?: number;
+  width_mm?: number;
   diameter?: number;
-  coil_weight: number;
+  grade?: string;
 };
 
 export type ItemDefinition = {
@@ -17,6 +19,8 @@ export type ItemDefinition = {
   category: ItemCategory;
   base_unit: BaseUnit;
   specs: SteelSpecs;
+  specification?: string;
+  low_stock_threshold?: number;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
@@ -29,11 +33,11 @@ export type SelectableItem = {
 };
 
 export type CreateItemDefinitionInput = {
-  parent_id?: string;
   name: string;
   category: ItemCategory;
   base_unit: BaseUnit;
   specs: SteelSpecs;
+  low_stock_threshold?: number;
 };
 
 /** A single aggregated inventory row by item — as returned from the view endpoint. */
@@ -58,13 +62,15 @@ export type InventorySnapshot = {
   SCRAP: InventoryViewRow[];
 };
 
+export type BatchStatus = "ACTIVE" | "HOLD" | "EXHAUSTED" | "REVERSED";
+
 export type ActiveBatch = {
   batch_id: string;
   batch_code: string;
   arrival_date: string;
   initial_weight: number;
   remaining_weight: number;
-  status: "NEW" | "IN USE";
+  status: BatchStatus;
 };
 
 export type ReceiveStockPayload = {
@@ -85,9 +91,9 @@ export type InventoryActionState = {
 
 export type DefineMaterialInput = {
   name: string;
-  thickness: number;
-  width: number;
-  diameter?: number;
+  thickness_mm: number;
+  width_mm: number;
+  low_stock_threshold: number;
 };
 
 export type ReceiveStockCommandInput = {
@@ -106,4 +112,51 @@ export type LogProductionInput = {
   input_qty: number;
   finished_qty: number;
   scrap_qty: number;
+};
+
+/** Raw Material Master row — returned from GET /api/v1/inventory/raw-materials */
+export type RawMaterialMasterRow = {
+  item_id: string;
+  sku: string;
+  name: string;
+  specification: string;
+  specs: Record<string, unknown>;
+  available_qty: number;
+  reserved_qty: number;
+  threshold: number;
+  pending_deliveries: number;
+  status: "LOW" | "OK";
+};
+
+export type RawMaterialSummary = {
+  item_id: string;
+  sku: string;
+  name: string;
+  specification: string;
+  specs: Record<string, unknown>;
+  available_qty: number;
+  reserved_qty: number;
+  hold_qty: number;
+  pending_deliveries: number;
+  threshold: number;
+};
+
+/** Batch row for raw material detail — returned from GET /api/v1/inventory/raw-materials/:id/batches */
+export type RawMaterialBatchRow = {
+  batch_id: string;
+  batch_code: string;
+  vendor_name?: string;
+  po_number?: string;
+  parent_po_id?: string;
+  received_at: string;
+  initial_qty: number;
+  remaining_qty: number;
+  reserved_qty: number;
+  available_qty: number;
+  status: BatchStatus;
+};
+
+export type UpdateBatchStatusPayload = {
+  status: "HOLD" | "ACTIVE";
+  reason?: string;
 };

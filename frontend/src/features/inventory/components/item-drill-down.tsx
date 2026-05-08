@@ -3,12 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -17,12 +17,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listActiveBatches } from "@/lib/api/inventory";
+import { getRawMaterialBatches } from "@/lib/api/inventory";
 import { inventoryKeys } from "@/lib/react-query/keys";
-import type { ActiveBatch, ItemDefinition } from "@/features/inventory/types";
+import type {
+  RawMaterialBatchRow,
+  BatchStatus,
+} from "@/features/inventory/types";
 
 type ItemDrillDownProps = {
-  item: ItemDefinition | null;
+  item: { id: string; name: string } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
@@ -32,7 +35,7 @@ function formatArrivalDate(value: string | null): string {
     return "Unknown";
   }
 
-  const date = new Date(`${value}T00:00:00Z`);
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
@@ -52,25 +55,21 @@ function formatKg(value: number): string {
   }).format(value)} kg`;
 }
 
-function deriveStatus(
-  initialWeight: number,
-  remainingWeight: number,
-): "NEW" | "IN USE" {
-  return Math.abs(initialWeight - remainingWeight) < 0.000001
-    ? "NEW"
-    : "IN USE";
-}
-
-function mapCategoryToBatchType(category: ItemDefinition["category"]) {
-  if (category === "SEMI_FINISHED") {
-    return "MOLDED" as const;
+function batchStatusBadgeVariant(
+  status: BatchStatus,
+): "default" | "secondary" | "outline" | "destructive" {
+  switch (status) {
+    case "ACTIVE":
+      return "default";
+    case "HOLD":
+      return "secondary";
+    case "EXHAUSTED":
+      return "outline";
+    case "REVERSED":
+      return "destructive";
+    default:
+      return "outline";
   }
-
-  if (category === "FINISHED") {
-    return "FINISHED" as const;
-  }
-
-  return "RAW" as const;
 }
 
 export function ItemDrillDown({
@@ -79,15 +78,14 @@ export function ItemDrillDown({
   onOpenChange,
 }: ItemDrillDownProps) {
   const activeItemID = open && item ? item.id : "";
-  const activeBatchType = item ? mapCategoryToBatchType(item.category) : "RAW";
 
   const batchesQuery = useQuery({
-    queryKey: inventoryKeys.activeBatches(activeItemID, activeBatchType),
-    queryFn: () => listActiveBatches(activeItemID, activeBatchType),
+    queryKey: ["raw-material-batches", activeItemID],
+    queryFn: () => getRawMaterialBatches(activeItemID),
     enabled: Boolean(activeItemID),
   });
 
-  const batches: ActiveBatch[] = batchesQuery.data ?? [];
+  const batches: RawMaterialBatchRow[] = batchesQuery.data ?? [];
   const isLoading = batchesQuery.isFetching;
   const errorMessage =
     batchesQuery.error instanceof Error
@@ -96,21 +94,17 @@ export function ItemDrillDown({
         ? "Failed to load batch drill-down."
         : null;
 
-  const sortedBatches = [...batches].sort((left, right) =>
-    right.arrival_date.localeCompare(left.arrival_date),
-  );
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>
-            {item ? `${item.name} Batch Drill-Down` : "Batch Drill-Down"}
-          </DialogTitle>
-          <DialogDescription>
-            Physical coil lots for the selected raw material definition.
-          </DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader className="mb-6">
+          <SheetTitle>
+            {item ? `${item.name} Batches` : "Batch Details"}
+          </SheetTitle>
+          <SheetDescription>
+            Physical coil lots and raw material batches currently available.
+          </SheetDescription>
+        </SheetHeader>
 
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading batches...</p>
@@ -123,46 +117,38 @@ export function ItemDrillDown({
         ) : null}
 
         {!isLoading && !errorMessage ? (
-          <div className="overflow-hidden rounded-lg border border-border">
+          <div className="rounded-lg border border-border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Batch Code</TableHead>
-                  <TableHead>Arrival Date</TableHead>
-                  <TableHead className="text-right">Initial Weight</TableHead>
-                  <TableHead className="text-right">Remaining Weight</TableHead>
+                  <TableHead>Batch ID</TableHead>
+                  <TableHead>Received</TableHead>
+                  <TableHead className="text-right">Initial Qty</TableHead>
+                  <TableHead className="text-right">Available Qty</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedBatches.length ? (
-                  sortedBatches.map((batch) => (
+                {batches.length ? (
+                  batches.map((batch) => (
                     <TableRow key={batch.batch_id}>
-                      <TableCell>{batch.batch_code}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {batch.batch_code || batch.batch_id.slice(0, 8)}
+                      </TableCell>
                       <TableCell>
-                        {formatArrivalDate(batch.arrival_date)}
+                        {formatArrivalDate(batch.received_at)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatKg(batch.initial_weight)}
+                        {formatKg(batch.initial_qty)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatKg(batch.remaining_weight)}
+                        {formatKg(batch.remaining_qty)}
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={
-                            deriveStatus(
-                              batch.initial_weight,
-                              batch.remaining_weight,
-                            ) === "NEW"
-                              ? "secondary"
-                              : "outline"
-                          }
+                          variant={batchStatusBadgeVariant(batch.status)}
                         >
-                          {deriveStatus(
-                            batch.initial_weight,
-                            batch.remaining_weight,
-                          )}
+                          {batch.status}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -171,7 +157,7 @@ export function ItemDrillDown({
                   <TableRow>
                     <TableCell
                       colSpan={5}
-                      className="text-sm text-muted-foreground"
+                      className="py-6 text-center text-sm text-muted-foreground"
                     >
                       No active batches found for this item.
                     </TableCell>
@@ -181,7 +167,7 @@ export function ItemDrillDown({
             </Table>
           </div>
         ) : null}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

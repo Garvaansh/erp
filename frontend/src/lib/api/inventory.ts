@@ -13,9 +13,13 @@ import type {
   ItemDefinition,
   InventorySnapshot,
   InventoryViewRow,
+  RawMaterialBatchRow,
+  RawMaterialMasterRow,
+  RawMaterialSummary,
   ReceiveStockPayload,
   ReceiveStockResult,
   SelectableItem,
+  UpdateBatchStatusPayload,
 } from "@/features/inventory/types";
 
 type InventoryViewResponse = {
@@ -31,6 +35,9 @@ type CreateItemResponse = { item: ItemDefinition | null };
 type SelectableItemsResponse = {
   items: SelectableItem[];
 };
+type RawMaterialMasterResponse = { items: RawMaterialMasterRow[] };
+type RawMaterialSummaryResponse = RawMaterialSummary;
+type RawMaterialBatchesResponse = { batches: RawMaterialBatchRow[] };
 
 type ActiveBatchType = "RAW" | "MOLDED" | "FINISHED";
 
@@ -161,4 +168,53 @@ export async function receiveStock(
   });
 
   return data ?? {};
+}
+
+export async function getRawMaterialMaster(): Promise<RawMaterialMasterRow[]> {
+  const data = await apiClient<RawMaterialMasterResponse>(
+    "/inventory/raw-materials",
+    { method: "GET" },
+  );
+
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+export async function getRawMaterialBatches(
+  itemId: string,
+): Promise<RawMaterialBatchRow[]> {
+  const data = await apiClient<RawMaterialBatchesResponse>(
+    `/inventory/raw-materials/${itemId.trim()}/batches`,
+    { method: "GET" },
+  );
+
+  return Array.isArray(data.batches) ? data.batches : [];
+}
+
+export async function getRawMaterialSummary(
+  itemId: string,
+): Promise<RawMaterialSummary> {
+  return apiClient<RawMaterialSummaryResponse>(
+    `/inventory/raw-materials/${itemId.trim()}/summary`,
+    { method: "GET" },
+  );
+}
+
+export async function updateBatchStatus(
+  batchId: string,
+  payload: UpdateBatchStatusPayload,
+): Promise<void> {
+  await apiClient(`/inventory/batches/${batchId.trim()}/status`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateItemThreshold(
+  itemId: string,
+  threshold: number,
+): Promise<void> {
+  await apiClient(`/items/${itemId.trim()}/threshold`, {
+    method: "PATCH",
+    body: JSON.stringify({ threshold }),
+  });
 }

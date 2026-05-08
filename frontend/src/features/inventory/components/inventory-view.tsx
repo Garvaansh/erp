@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, Filter, Plus, Search } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, Plus, Search } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -24,12 +26,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createItemDefinition } from "@/lib/api/inventory";
+import { createItemDefinition, getRawMaterialMaster } from "@/lib/api/inventory";
 import { ApiClientError } from "@/lib/api/api-client";
 import { inventoryKeys } from "@/lib/react-query/keys";
+import {
+  formatSpecification,
+  computeStockStatus,
+  stockStatusLabel,
+  stockStatusColor,
+} from "@/lib/format-spec";
 import type {
   InventorySnapshot,
   InventoryViewRow,
+  RawMaterialMasterRow,
 } from "@/features/inventory/types";
 import { ItemDrillDown } from "@/features/inventory/components/item-drill-down";
 import { WIPActivityTab } from "@/features/inventory/components/wip-activity-tab";
@@ -47,38 +56,16 @@ type RowWithCategory = InventoryViewRow & {
   category: "RAW" | "SEMI_FINISHED" | "FINISHED";
 };
 
-function formatSpec(specs: Record<string, unknown>): string {
-  const parts: string[] = [];
-  if (typeof specs.thickness === "number") {
-    parts.push(`${specs.thickness}mm`);
+function statusBadgeVariant(
+  status: "LOW" | "OK",
+): "default" | "secondary" | "destructive" {
+  switch (status) {
+    case "OK":
+      return "default";
+    case "LOW":
+      return "secondary";
   }
-  if (typeof specs.width === "number") {
-    parts.push(`${specs.width}mm`);
-  }
-  if (typeof specs.diameter === "number") {
-    parts.push(`Ø${specs.diameter}mm`);
-  }
-  return parts.join(" x ") || "-";
-}
-
-function stockStatus(availableQty: number): "In Stock" | "Low" | "Exhausted" {
-  if (availableQty <= 0) {
-    return "Exhausted";
-  }
-  if (availableQty < 500) {
-    return "Low";
-  }
-  return "In Stock";
-}
-
-function statusClass(status: "In Stock" | "Low" | "Exhausted"): string {
-  if (status === "In Stock") {
-    return "text-emerald-600";
-  }
-  if (status === "Low") {
-    return "text-amber-600";
-  }
-  return "text-red-600";
+  return "default";
 }
 
 export function InventoryView({
@@ -87,18 +74,29 @@ export function InventoryView({
   isAdmin,
   serviceAlert,
 }: InventoryViewProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<InventoryTab>(initialTab);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRow, setSelectedRow] = useState<RowWithCategory | null>(null);
 
-  const rawRows = useMemo<RowWithCategory[]>(
-    () =>
-      snapshot.RAW.map((row) => ({
-        ...row,
-        category: "RAW",
-      })),
-    [snapshot.RAW],
-  );
+  const rawMaterialsQuery = useQuery({
+    queryKey: inventoryKeys.rawMaterials(),
+    queryFn: getRawMaterialMaster,
+  });
+
+  const rawMaterials = rawMaterialsQuery.data ?? [];
+
+  const filteredRawMaterials = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return rawMaterials;
+
+    return rawMaterials.filter(
+      (row) =>
+        row.name.toLowerCase().includes(query) ||
+        row.sku.toLowerCase().includes(query) ||
+        row.specification.toLowerCase().includes(query),
+    );
+  }, [rawMaterials, searchQuery]);
 
   const finishedRows = useMemo<RowWithCategory[]>(
     () => [
@@ -114,31 +112,15 @@ export function InventoryView({
     [snapshot.FINISHED, snapshot.SEMI_FINISHED],
   );
 
-  const filteredRawRows = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return rawRows;
-    }
-
-    return rawRows.filter(
-      (row) =>
-        row.name.toLowerCase().includes(query) ||
-        (row.sku ?? "").toLowerCase().includes(query) ||
-        formatSpec(row.specs).toLowerCase().includes(query),
-    );
-  }, [rawRows, searchQuery]);
-
   const filteredFinishedRows = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return finishedRows;
-    }
+    if (!query) return finishedRows;
 
     return finishedRows.filter(
       (row) =>
         row.name.toLowerCase().includes(query) ||
         (row.sku ?? "").toLowerCase().includes(query) ||
-        formatSpec(row.specs).toLowerCase().includes(query),
+        formatSpecification(row.specs).toLowerCase().includes(query),
     );
   }, [finishedRows, searchQuery]);
 
@@ -173,18 +155,19 @@ export function InventoryView({
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search SKU, description…"
+                  placeholder="Search SKU, material, specification…"
                   className="pl-9 h-8 text-[13px]"
                 />
               </div>
               <div className="flex-1" />
               <AddRawMaterialDialog />
             </div>
-            <InventoryTable
-              rows={filteredRawRows}
-              emptyText="No raw material rows found."
-              showType={false}
-              onRowClick={setSelectedRow}
+            <RawMaterialMasterTable
+              rows={filteredRawMaterials}
+              isLoading={rawMaterialsQuery.isFetching}
+              onRowClick={(row) =>
+                router.push(`/inventory/raw-materials/${row.item_id}`)
+              }
             />
           </div>
         </TabsContent>
@@ -222,14 +205,6 @@ export function InventoryView({
             ? {
                 id: selectedRow.item_id,
                 name: selectedRow.name,
-                category: selectedRow.category,
-                base_unit: "WEIGHT",
-                specs: {
-                  thickness: Number(selectedRow.specs?.thickness) || 0,
-                  width: Number(selectedRow.specs?.width) || 0,
-                  coil_weight: Number(selectedRow.specs?.coil_weight) || 0,
-                },
-                is_active: true,
               }
             : null
         }
@@ -240,6 +215,92 @@ export function InventoryView({
           }
         }}
       />
+
+    </div>
+  );
+}
+
+type RawMaterialMasterTableProps = {
+  rows: RawMaterialMasterRow[];
+  isLoading: boolean;
+  onRowClick: (row: RawMaterialMasterRow) => void;
+};
+
+function RawMaterialMasterTable({
+  rows,
+  isLoading,
+  onRowClick,
+}: RawMaterialMasterTableProps) {
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>SKU</TableHead>
+            <TableHead>Material</TableHead>
+            <TableHead>Specification</TableHead>
+            <TableHead className="text-right">Available Stock</TableHead>
+            <TableHead className="text-right">Threshold</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => {
+            return (
+              <TableRow
+                key={row.item_id}
+                className="cursor-pointer"
+                onClick={() => onRowClick(row)}
+              >
+                <TableCell className="font-mono text-xs">
+                  {row.sku || "—"}
+                </TableCell>
+                <TableCell className="font-medium">{row.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {row.specification || "—"}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {row.available_qty.toLocaleString(undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  kg
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                  {row.threshold > 0
+                    ? `${row.threshold.toLocaleString()} kg`
+                    : "—"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={statusBadgeVariant(row.status)}>{row.status}</Badge>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+
+          {!isLoading && rows.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={6}
+                className="text-center text-sm text-muted-foreground"
+              >
+                No raw materials found.
+              </TableCell>
+            </TableRow>
+          ) : null}
+
+          {isLoading && rows.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={6}
+                className="text-center text-sm text-muted-foreground"
+              >
+                Loading raw materials…
+              </TableCell>
+            </TableRow>
+          ) : null}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -258,76 +319,76 @@ function InventoryTable({
   onRowClick,
 }: InventoryTableProps) {
   return (
-    <>
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>SKU</TableHead>
-              <TableHead>Description</TableHead>
-              {showType ? <TableHead>Type</TableHead> : null}
-              <TableHead>Specification</TableHead>
-              <TableHead className="text-right">Total Weight</TableHead>
-              <TableHead className="text-right">Available</TableHead>
-              <TableHead className="text-right">Reserved</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => {
-              const status = stockStatus(row.available_qty);
-              return (
-                <TableRow
-                  key={`${row.category}:${row.item_id}`}
-                  className="cursor-pointer"
-                  onClick={() => onRowClick(row)}
-                >
-                  <TableCell className="font-mono text-xs">
-                    {row.sku || "-"}
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>SKU</TableHead>
+            <TableHead>Description</TableHead>
+            {showType ? <TableHead>Type</TableHead> : null}
+            <TableHead>Specification</TableHead>
+            <TableHead className="text-right">Total Weight</TableHead>
+            <TableHead className="text-right">Available</TableHead>
+            <TableHead className="text-right">Reserved</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => {
+            const status = computeStockStatus(row.available_qty, 0);
+            return (
+              <TableRow
+                key={`${row.category}:${row.item_id}`}
+                className="cursor-pointer"
+                onClick={() => onRowClick(row)}
+              >
+                <TableCell className="font-mono text-xs">
+                  {row.sku || "-"}
+                </TableCell>
+                <TableCell>{row.name}</TableCell>
+                {showType ? (
+                  <TableCell>
+                    {row.category === "SEMI_FINISHED"
+                      ? "Semi-Finished"
+                      : "Finished"}
                   </TableCell>
-                  <TableCell>{row.name}</TableCell>
-                  {showType ? (
-                    <TableCell>
-                      {row.category === "SEMI_FINISHED"
-                        ? "Semi-Finished"
-                        : "Finished"}
-                    </TableCell>
-                  ) : null}
-                  <TableCell className="text-xs text-muted-foreground">
-                    {formatSpec(row.specs)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {row.total_qty.toFixed(4)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {row.available_qty.toFixed(4)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {row.reserved_qty.toFixed(4)}
-                  </TableCell>
-                  <TableCell
-                    className={`text-xs font-medium ${statusClass(status)}`}
+                ) : null}
+                <TableCell className="text-xs text-muted-foreground">
+                  {formatSpecification(row.specs)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {row.total_qty.toFixed(4)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {row.available_qty.toFixed(4)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {row.reserved_qty.toFixed(4)}
+                </TableCell>
+                <TableCell>
+                  <span
+                    className={`text-xs font-medium ${stockStatusColor(status)}`}
                   >
-                    {status}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={showType ? 8 : 7}
-                  className="text-center text-sm text-muted-foreground"
-                >
-                  {emptyText}
+                    {stockStatusLabel(status)}
+                  </span>
                 </TableCell>
               </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </div>
-    </>
+            );
+          })}
+
+          {rows.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={showType ? 8 : 7}
+                className="text-center text-sm text-muted-foreground"
+              >
+                {emptyText}
+              </TableCell>
+            </TableRow>
+          ) : null}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -338,58 +399,69 @@ function AddRawMaterialDialog() {
     ok: false,
     message: "",
   });
+  const [isPending, setIsPending] = useState(false);
 
-  const createItemMutation = useMutation({
-    mutationFn: createItemDefinition,
-    onError: (error) => {
-      if (error instanceof ApiClientError && error.message.trim()) {
-        setState({ ok: false, message: error.message });
-        return;
-      }
-
-      if (error instanceof Error && error.message.trim()) {
-        setState({ ok: false, message: error.message });
-        return;
-      }
-
-      setState({ ok: false, message: "Service unavailable." });
-    },
-  });
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setIsPending(true);
+    setState({ ok: false, message: "" });
 
     const formElement = event.currentTarget;
     const formData = new FormData(formElement);
 
-    createItemMutation.mutate(
-      {
-        name: String(formData.get("name") ?? "").trim(),
+    const name = String(formData.get("name") ?? "").trim();
+    const thicknessMm = Number(formData.get("thickness_mm") ?? 0) || 0;
+    const widthMm = Number(formData.get("width_mm") ?? 0) || 0;
+    const threshold = Number(formData.get("low_stock_threshold") ?? 0) || 0;
+
+    if (!name || thicknessMm <= 0 || widthMm <= 0) {
+      setState({
+        ok: false,
+        message: "Material name, thickness, and width are required.",
+      });
+      setIsPending(false);
+      return;
+    }
+
+    try {
+      const item = await createItemDefinition({
+        name,
         category: "RAW",
         base_unit: "WEIGHT",
         specs: {
-          thickness: Number(formData.get("thickness") ?? 0) || 0,
-          width: Number(formData.get("width") ?? 0) || 0,
-          coil_weight: Number(formData.get("coil_weight") ?? 0) || 0,
+          thickness_mm: thicknessMm,
+          width_mm: widthMm,
         },
-      },
-      {
-        onSuccess: async (item) => {
-          if (!item) {
-            setState({ ok: false, message: "Service unavailable." });
-            return;
-          }
+        low_stock_threshold: threshold,
+      });
 
-          await queryClient.invalidateQueries({
-            queryKey: inventoryKeys.snapshot(),
-          });
+      if (!item) {
+        setState({ ok: false, message: "Service unavailable." });
+        setIsPending(false);
+        return;
+      }
 
-          setState({ ok: true, message: "Item created successfully." });
-          formElement.reset();
-          setOpen(false);
-        },
-      },
-    );
+      await queryClient.invalidateQueries({
+        queryKey: inventoryKeys.rawMaterials(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: inventoryKeys.snapshot(),
+      });
+
+      setState({ ok: true, message: "Material created successfully." });
+      formElement.reset();
+      setOpen(false);
+    } catch (error) {
+      if (error instanceof ApiClientError && error.message.trim()) {
+        setState({ ok: false, message: error.message });
+      } else if (error instanceof Error && error.message.trim()) {
+        setState({ ok: false, message: error.message });
+      } else {
+        setState({ ok: false, message: "Service unavailable." });
+      }
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -404,15 +476,13 @@ function AddRawMaterialDialog() {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input type="hidden" name="item_type" value="COIL" />
-
           <div className="space-y-1">
             <Label htmlFor="raw-name">Material Name</Label>
             <Input
               id="raw-name"
               name="name"
               required
-              placeholder="e.g. Hot Rolled Carbon Steel Coil"
+              placeholder="e.g. Stainless Steel Coil"
             />
           </div>
 
@@ -421,9 +491,10 @@ function AddRawMaterialDialog() {
               <Label htmlFor="raw-thickness">Thickness (mm)</Label>
               <Input
                 id="raw-thickness"
-                name="thickness"
+                name="thickness_mm"
                 type="number"
                 step="0.01"
+                min="0.01"
                 required
               />
             </div>
@@ -431,23 +502,29 @@ function AddRawMaterialDialog() {
               <Label htmlFor="raw-width">Width (mm)</Label>
               <Input
                 id="raw-width"
-                name="width"
+                name="width_mm"
                 type="number"
                 step="0.01"
+                min="0.01"
                 required
               />
             </div>
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="raw-coil-weight">Initial Weight (MT)</Label>
+            <Label htmlFor="raw-threshold">Low Stock Threshold (kg)</Label>
             <Input
-              id="raw-coil-weight"
-              name="coil_weight"
+              id="raw-threshold"
+              name="low_stock_threshold"
               type="number"
-              step="0.01"
-              required
+              step="1"
+              min="0"
+              defaultValue="0"
+              placeholder="e.g. 1000"
             />
+            <p className="text-xs text-muted-foreground">
+              Alert when available stock falls below this weight.
+            </p>
           </div>
 
           {state.message ? (
@@ -466,8 +543,8 @@ function AddRawMaterialDialog() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createItemMutation.isPending}>
-              {createItemMutation.isPending ? "Creating..." : "Create"}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Creating..." : "Create"}
             </Button>
           </div>
         </form>

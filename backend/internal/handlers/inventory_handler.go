@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"errors"
 	"strings"
 
@@ -11,168 +10,168 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type inventoryService interface {
-	ReceiveStock(ctx context.Context, req models.ReceiveStockRequest, performedBy string) (*services.ReceiveStockResult, error)
-	GetActiveBatchesByItem(ctx context.Context, itemID string, batchType string) ([]services.ActiveBatchOption, error)
-	GetInventoryView(ctx context.Context) (map[string][]services.InventoryViewRow, error)
-}
-
 type InventoryHandler struct {
-	inventoryService inventoryService
+	inventoryService *services.InventoryService
 	validator        *validator.Validate
 }
 
-type inventoryViewCategoryRow struct {
-	ItemID       string  `json:"item_id"`
-	SKU          string  `json:"sku,omitempty"`
-	Name         string  `json:"name"`
-	Specs        any     `json:"specs"`
-	TotalQty     float64 `json:"total_qty"`
-	AvailableQty float64 `json:"available_qty"`
-	ReservedQty  float64 `json:"reserved_qty"`
-}
-
-func NewInventoryHandler(inventoryService inventoryService, v *validator.Validate) *InventoryHandler {
+func NewInventoryHandler(inventoryService *services.InventoryService, v *validator.Validate) *InventoryHandler {
 	return &InventoryHandler{inventoryService: inventoryService, validator: v}
 }
 
 func (h *InventoryHandler) ReceiveStock(c *fiber.Ctx) error {
 	var req models.ReceiveStockRequest
-
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Invalid JSON payload",
+			"message": "Invalid request body",
 		})
 	}
-
 	if err := h.validator.Struct(req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Validation failed",
-			"errors":  validationErrors(err),
+			"message": "Validation failed: " + err.Error(),
 		})
 	}
 
-	userID, ok := c.Locals("userID").(string)
-	if !ok || strings.TrimSpace(userID) == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Unauthorized",
-		})
-	}
-
-	result, err := h.inventoryService.ReceiveStock(c.Context(), req, userID)
+	performedBy := c.Locals("userId").(string)
+	result, err := h.inventoryService.ReceiveStock(c.Context(), req, performedBy)
 	if err != nil {
-		if errors.Is(err, services.ErrInvalidInventoryPayload) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
-
-		if errors.Is(err, services.ErrInvalidItemID) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Failed to receive stock",
-		})
+		return mapInventoryError(c, err)
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"status": "success",
-		"data":   result,
-	})
+	return c.Status(fiber.StatusCreated).JSON(result)
 }
 
 func (h *InventoryHandler) GetActiveBatches(c *fiber.Ctx) error {
 	itemID := strings.TrimSpace(c.Query("item_id"))
-	batchType := strings.ToUpper(strings.TrimSpace(c.Query("type")))
-
-	if itemID == "" && batchType == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": "either item_id or type query parameter is required",
-		})
-	}
-
-	if itemID != "" {
-		if err := h.validator.Var(itemID, "uuid4"); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": "item_id must be a valid UUID",
-			})
-		}
-	}
+	batchType := strings.TrimSpace(c.Query("type"))
 
 	batches, err := h.inventoryService.GetActiveBatchesByItem(c.Context(), itemID, batchType)
 	if err != nil {
-		if errors.Is(err, services.ErrInvalidItemID) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": "invalid item_id",
-			})
-		}
-
-		if errors.Is(err, services.ErrInvalidBatchTypeFilter) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": "invalid type filter; allowed values are RAW, MOLDED, FINISHED (aliases: MWIP, BNDL)",
-			})
-		}
-
-		if errors.Is(err, services.ErrBatchQueryFilterMissing) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": "either item_id or type query parameter is required",
-			})
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Failed to load active batches",
-		})
+		return mapInventoryError(c, err)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(batches)
+	return c.JSON(fiber.Map{
+		"batches": batches,
+	})
 }
 
 func (h *InventoryHandler) GetInventoryView(c *fiber.Ctx) error {
-	view, err := h.inventoryService.GetInventoryView(c.Context())
+	snapshot, err := h.inventoryService.GetInventoryView(c.Context())
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		return mapInventoryError(c, err)
+	}
+	return c.JSON(snapshot)
+}
+
+func (h *InventoryHandler) UpdateBatchStatus(c *fiber.Ctx) error {
+	batchID := strings.TrimSpace(c.Params("id"))
+	if batchID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Failed to load inventory view",
+			"message": "Batch ID is required",
 		})
 	}
 
-	out := map[string][]inventoryViewCategoryRow{
-		"RAW":           {},
-		"SEMI_FINISHED": {},
-		"FINISHED":      {},
-		"SCRAP":         {},
+	var req models.UpdateBatchStatusRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Invalid request body",
+		})
+	}
+	if err := h.validator.Var(req.Status, "required,oneof=HOLD ACTIVE"); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Validation failed: " + err.Error(),
+		})
 	}
 
-	for category, rows := range view {
-		mapped := make([]inventoryViewCategoryRow, 0, len(rows))
-		for _, row := range rows {
-			mapped = append(mapped, inventoryViewCategoryRow{
-				ItemID:       row.ItemID,
-				SKU:          row.SKU,
-				Name:         row.Name,
-				Specs:        row.Specs,
-				TotalQty:     row.TotalQty,
-				AvailableQty: row.AvailableQty,
-				ReservedQty:  row.ReservedQty,
-			})
-		}
-		out[category] = mapped
+	performedBy := c.Locals("userId").(string)
+	if err := h.inventoryService.UpdateBatchStatus(c.Context(), batchID, req, performedBy); err != nil {
+		return mapInventoryError(c, err)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(out)
+	return c.JSON(fiber.Map{
+		"status":  "ok",
+		"message": "Batch status updated",
+	})
+}
+
+func (h *InventoryHandler) GetRawMaterialMaster(c *fiber.Ctx) error {
+	rows, err := h.inventoryService.GetRawMaterialMaster(c.Context())
+	if err != nil {
+		return mapInventoryError(c, err)
+	}
+
+	return c.JSON(fiber.Map{
+		"items": rows,
+	})
+}
+
+func (h *InventoryHandler) GetRawMaterialSummary(c *fiber.Ctx) error {
+	itemID := strings.TrimSpace(c.Params("id"))
+	if itemID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Item ID is required",
+		})
+	}
+
+	summary, err := h.inventoryService.GetRawMaterialSummary(c.Context(), itemID)
+	if err != nil {
+		return mapInventoryError(c, err)
+	}
+
+	return c.JSON(summary)
+}
+
+func (h *InventoryHandler) GetRawMaterialBatches(c *fiber.Ctx) error {
+	itemID := strings.TrimSpace(c.Params("id"))
+	if itemID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Item ID is required",
+		})
+	}
+
+	batches, err := h.inventoryService.GetRawMaterialBatches(c.Context(), itemID)
+	if err != nil {
+		return mapInventoryError(c, err)
+	}
+
+	return c.JSON(fiber.Map{
+		"batches": batches,
+	})
+}
+
+func mapInventoryError(c *fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, services.ErrInvalidInventoryPayload),
+		errors.Is(err, services.ErrInvalidItemID),
+		errors.Is(err, services.ErrInvalidBatchTypeFilter),
+		errors.Is(err, services.ErrBatchQueryFilterMissing),
+		errors.Is(err, services.ErrInvalidBatchStatus),
+		errors.Is(err, services.ErrInvalidBatchFlow):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	case errors.Is(err, services.ErrBatchNotFound):
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Batch not found",
+		})
+	case errors.Is(err, services.ErrRawMaterialNotFound):
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Raw material not found",
+		})
+	default:
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
 }

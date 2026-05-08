@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createItemDefinition, receiveStock } from "@/features/inventory/api";
+import { createItemDefinition, receiveStock, updateItemThreshold } from "@/lib/api/inventory";
 import {
   defineMaterialSchema,
   receiveStockCommandSchema,
@@ -10,7 +10,6 @@ import { submitDailyLog } from "@/features/logs/api";
 import type {
   DefineMaterialInput,
   InventoryActionState,
-  ItemCategory,
   LogProductionInput,
   ReceiveStockCommandInput,
 } from "@/features/inventory/types";
@@ -46,23 +45,40 @@ async function receiveStockCommand(
   }
 }
 
+/**
+ * Creates a raw material definition from the Add Raw Material form.
+ * The final payload to the backend uses normalized _mm keys.
+ * Backend auto-generates SKU and category_code.
+ */
 export async function defineAndReceiveAction(
   payload: DefineMaterialInput,
 ): Promise<InventoryActionState> {
   try {
     const parsed = defineMaterialSchema.parse(payload);
 
-    await createItemDefinition({
+    const item = await createItemDefinition({
       name: parsed.name,
       category: "RAW",
       base_unit: "WEIGHT",
       specs: {
-        thickness: parsed.thickness,
-        width: parsed.width,
-        diameter: parsed.diameter,
-        coil_weight: 1,
+        thickness_mm: parsed.thickness_mm,
+        width_mm: parsed.width_mm,
       },
+      low_stock_threshold: parsed.low_stock_threshold,
     });
+
+    if (!item) {
+      return { ok: false, message: "Service unavailable." };
+    }
+
+    // If threshold was provided, persist it via the threshold endpoint
+    if (parsed.low_stock_threshold > 0) {
+      try {
+        await updateItemThreshold(item.id, parsed.low_stock_threshold);
+      } catch {
+        // Material created, threshold update failed — log but don't block
+      }
+    }
 
     revalidatePath("/inventory");
 
@@ -95,41 +111,6 @@ export async function receiveStockFormAction(
     item_id: String(formData.get("item_id") ?? "").trim(),
     weight: Number(formData.get("quantity") ?? 0),
   });
-}
-
-export async function createItemFormAction(
-  _previousState: InventoryActionState = DEFAULT_ACTION_STATE,
-  formData: FormData,
-): Promise<InventoryActionState> {
-  void _previousState;
-
-  try {
-    const itemType = String(formData.get("item_type") ?? "COIL").toUpperCase();
-    const category: ItemCategory = itemType === "COIL" ? "RAW" : "FINISHED";
-
-    await createItemDefinition({
-      name: String(formData.get("name") ?? "").trim(),
-      category,
-      base_unit: "WEIGHT",
-      specs: {
-        thickness: Number(formData.get("thickness") ?? 0) || 0,
-        width: Number(formData.get("width") ?? 0) || 0,
-        coil_weight: Number(formData.get("coil_weight") ?? 0) || 0,
-      },
-    });
-
-    revalidatePath("/inventory");
-
-    return {
-      ok: true,
-      message: "Item created successfully.",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : "Service unavailable.",
-    };
-  }
 }
 
 export async function logProductionAction(
