@@ -120,6 +120,34 @@ func GenerateBundleID(ctx context.Context, tx pgx.Tx) (string, int32, error) {
 	return generateInventoryIDByPrefix(ctx, tx, "BNDL")
 }
 
+// GenerateFinishedGoodSKU generates a deterministic finished-goods SKU.
+// Format: FGP-001, FGP-002.
+func GenerateFinishedGoodSKU(ctx context.Context, tx pgx.Tx) (string, error) {
+	const code = "FGP"
+
+	lockKey := fmt.Sprintf("sku-seq:%s", code)
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", lockKey); err != nil {
+		return "", fmt.Errorf("acquire finished goods SKU advisory lock: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO sku_sequences (category_code, next_val) VALUES ($1, 1) ON CONFLICT (category_code) DO NOTHING`,
+		code,
+	); err != nil {
+		return "", fmt.Errorf("seed finished goods SKU sequence row: %w", err)
+	}
+
+	var seq int32
+	if err := tx.QueryRow(ctx,
+		`UPDATE sku_sequences SET next_val = next_val + 1 WHERE category_code = $1 RETURNING next_val - 1`,
+		code,
+	).Scan(&seq); err != nil {
+		return "", fmt.Errorf("fetch next finished goods SKU sequence: %w", err)
+	}
+
+	return formatFinishedGoodSKU(seq), nil
+}
+
 // GenerateSKU generates a deterministic SKU for raw materials.
 // Format: RM{categoryCode}{sequence} e.g. RMSS001, RMCP002
 // Uses sku_sequences table with advisory locks for uniqueness.
@@ -204,6 +232,10 @@ func normalizeWIPStagePrefix(raw string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func formatFinishedGoodSKU(seq int32) string {
+	return fmt.Sprintf("FGP-%03d", seq)
 }
 
 func nextDailySequenceByPattern(

@@ -70,13 +70,16 @@ func (s *ItemService) FindOrCreateItem(ctx context.Context, req models.CreateIte
 	sku := pgtype.Text{String: trimmedSKU, Valid: trimmedSKU != ""}
 
 	item, err := s.queries.CreateItem(ctx, db.CreateItemParams{
-		ParentID:     parentID,
-		Sku:          sku,
-		Name:         strings.TrimSpace(req.Name),
-		Category:     db.ItemCategory(req.Category),
-		BaseUnit:     db.BaseUnitType(req.BaseUnit),
-		Specs:        specsJSON,
-		CategoryCode: pgtype.Text{},
+		ParentID:            parentID,
+		Sku:                 sku,
+		Name:                strings.TrimSpace(req.Name),
+		Category:            db.ItemCategory(req.Category),
+		BaseUnit:            db.BaseUnitType(req.BaseUnit),
+		Specs:               specsJSON,
+		CategoryCode:        pgtype.Text{},
+		LowStockThreshold:   zeroNumeric(),
+		LinkedRawMaterialID: pgtype.UUID{},
+		Diameter:            pgtype.Numeric{},
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -130,13 +133,16 @@ func (s *ItemService) createRawItemWithSKU(ctx context.Context, req models.Creat
 
 	qtx := db.New(tx)
 	item, err := qtx.CreateItem(ctx, db.CreateItemParams{
-		ParentID:     parentID,
-		Sku:          sku,
-		Name:         strings.TrimSpace(req.Name),
-		Category:     db.ItemCategory(req.Category),
-		BaseUnit:     db.BaseUnitType(req.BaseUnit),
-		Specs:        specsJSON,
-		CategoryCode: pgtype.Text{String: categoryCode, Valid: categoryCode != ""},
+		ParentID:            parentID,
+		Sku:                 sku,
+		Name:                strings.TrimSpace(req.Name),
+		Category:            db.ItemCategory(req.Category),
+		BaseUnit:            db.BaseUnitType(req.BaseUnit),
+		Specs:               specsJSON,
+		CategoryCode:        pgtype.Text{String: categoryCode, Valid: categoryCode != ""},
+		LowStockThreshold:   thresholdNumericOrZero(req.LowStockThreshold),
+		LinkedRawMaterialID: pgtype.UUID{},
+		Diameter:            pgtype.Numeric{},
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -144,19 +150,6 @@ func (s *ItemService) createRawItemWithSKU(ctx context.Context, req models.Creat
 			return zero, ErrDuplicateSKU
 		}
 		return zero, ErrCreateItemFailed
-	}
-
-	// Persist low stock threshold if provided
-	if req.LowStockThreshold > 0 {
-		thresholdNumeric, ok := numericFromFloat(req.LowStockThreshold)
-		if ok {
-			if _, threshErr := qtx.UpdateItemThreshold(ctx, db.UpdateItemThresholdParams{
-				ID:                item.ID,
-				LowStockThreshold: thresholdNumeric,
-			}); threshErr != nil {
-				return zero, fmt.Errorf("persist threshold: %w", threshErr)
-			}
-		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -317,4 +310,14 @@ func compactSpecsForLabel(specs []byte) string {
 		return "{}"
 	}
 	return trimmed
+}
+
+func thresholdNumericOrZero(value float64) pgtype.Numeric {
+	if value > 0 {
+		if numeric, ok := numericFromFloat(value); ok {
+			return numeric
+		}
+	}
+
+	return zeroNumeric()
 }

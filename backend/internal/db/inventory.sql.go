@@ -432,6 +432,409 @@ func (q *Queries) GetBatchForUpdate(ctx context.Context, id pgtype.UUID) (Invent
 	return i, err
 }
 
+const getFinishedGoodBatches = `-- name: GetFinishedGoodBatches :many
+SELECT
+    b.id,
+    b.batch_code,
+    b.initial_qty,
+    b.remaining_qty,
+    b.reserved_qty,
+    GREATEST(b.remaining_qty - b.reserved_qty, 0)::numeric AS available_qty,
+    b.status,
+    b.created_at,
+    b.parent_batch_id,
+    COALESCE(parent.batch_code, '') AS source_molded_batch_code
+FROM inventory_batches b
+LEFT JOIN inventory_batches parent ON parent.id = b.parent_batch_id
+WHERE b.item_id = $1
+  AND b.type = 'FINISHED'
+ORDER BY b.created_at DESC, b.batch_code DESC
+`
+
+type GetFinishedGoodBatchesRow struct {
+	ID                    pgtype.UUID        `json:"id"`
+	BatchCode             string             `json:"batch_code"`
+	InitialQty            pgtype.Numeric     `json:"initial_qty"`
+	RemainingQty          pgtype.Numeric     `json:"remaining_qty"`
+	ReservedQty           pgtype.Numeric     `json:"reserved_qty"`
+	AvailableQty          pgtype.Numeric     `json:"available_qty"`
+	Status                BatchStatus        `json:"status"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ParentBatchID         pgtype.UUID        `json:"parent_batch_id"`
+	SourceMoldedBatchCode string             `json:"source_molded_batch_code"`
+}
+
+func (q *Queries) GetFinishedGoodBatches(ctx context.Context, itemID pgtype.UUID) ([]GetFinishedGoodBatchesRow, error) {
+	rows, err := q.db.Query(ctx, getFinishedGoodBatches, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFinishedGoodBatchesRow
+	for rows.Next() {
+		var i GetFinishedGoodBatchesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BatchCode,
+			&i.InitialQty,
+			&i.RemainingQty,
+			&i.ReservedQty,
+			&i.AvailableQty,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ParentBatchID,
+			&i.SourceMoldedBatchCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFinishedGoodRecentPolishingOutput = `-- name: GetFinishedGoodRecentPolishingOutput :many
+SELECT
+    j.id AS journal_id,
+    j.created_at,
+    fb.id AS finished_batch_id,
+    fb.batch_code AS finished_batch_code,
+    mb.id AS source_molded_batch_id,
+    COALESCE(mb.batch_code, '') AS source_molded_batch_code,
+    j.finished_qty,
+    j.scrap_qty,
+    j.shortlength_qty,
+    j.process_loss_qty,
+    COALESCE(u.name, '') AS operator_name
+FROM inventory_batches fb
+JOIN inventory_transactions ft
+    ON ft.batch_id = fb.id
+   AND ft.direction = 'IN'
+   AND ft.reference_type = 'PRODUCTION_JOURNAL'
+JOIN production_journals j ON j.id = ft.reference_id
+LEFT JOIN inventory_batches mb ON mb.id = fb.parent_batch_id
+LEFT JOIN users u ON u.id = j.created_by
+WHERE fb.item_id = $1
+  AND fb.type = 'FINISHED'
+ORDER BY j.created_at DESC
+LIMIT $2
+`
+
+type GetFinishedGoodRecentPolishingOutputParams struct {
+	ItemID    pgtype.UUID `json:"item_id"`
+	PageLimit int32       `json:"page_limit"`
+}
+
+type GetFinishedGoodRecentPolishingOutputRow struct {
+	JournalID             pgtype.UUID        `json:"journal_id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	FinishedBatchID       pgtype.UUID        `json:"finished_batch_id"`
+	FinishedBatchCode     string             `json:"finished_batch_code"`
+	SourceMoldedBatchID   pgtype.UUID        `json:"source_molded_batch_id"`
+	SourceMoldedBatchCode string             `json:"source_molded_batch_code"`
+	FinishedQty           pgtype.Numeric     `json:"finished_qty"`
+	ScrapQty              pgtype.Numeric     `json:"scrap_qty"`
+	ShortlengthQty        pgtype.Numeric     `json:"shortlength_qty"`
+	ProcessLossQty        pgtype.Numeric     `json:"process_loss_qty"`
+	OperatorName          string             `json:"operator_name"`
+}
+
+func (q *Queries) GetFinishedGoodRecentPolishingOutput(ctx context.Context, arg GetFinishedGoodRecentPolishingOutputParams) ([]GetFinishedGoodRecentPolishingOutputRow, error) {
+	rows, err := q.db.Query(ctx, getFinishedGoodRecentPolishingOutput, arg.ItemID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFinishedGoodRecentPolishingOutputRow
+	for rows.Next() {
+		var i GetFinishedGoodRecentPolishingOutputRow
+		if err := rows.Scan(
+			&i.JournalID,
+			&i.CreatedAt,
+			&i.FinishedBatchID,
+			&i.FinishedBatchCode,
+			&i.SourceMoldedBatchID,
+			&i.SourceMoldedBatchCode,
+			&i.FinishedQty,
+			&i.ScrapQty,
+			&i.ShortlengthQty,
+			&i.ProcessLossQty,
+			&i.OperatorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFinishedGoodSourceMoldedBatches = `-- name: GetFinishedGoodSourceMoldedBatches :many
+SELECT
+    mb.id,
+    mb.batch_code,
+    mb.created_at,
+    mb.status,
+    GREATEST(mb.remaining_qty - mb.reserved_qty, 0)::numeric AS available_qty,
+    COALESCE(SUM(j.finished_qty), 0)::numeric AS produced_qty,
+    MAX(j.created_at) AS latest_polished_at
+FROM inventory_batches fb
+JOIN inventory_transactions ft
+    ON ft.batch_id = fb.id
+   AND ft.direction = 'IN'
+   AND ft.reference_type = 'PRODUCTION_JOURNAL'
+JOIN production_journals j ON j.id = ft.reference_id
+JOIN inventory_batches mb ON mb.id = fb.parent_batch_id
+WHERE fb.item_id = $1
+  AND fb.type = 'FINISHED'
+GROUP BY mb.id, mb.batch_code, mb.created_at, mb.status, mb.remaining_qty, mb.reserved_qty
+ORDER BY latest_polished_at DESC, mb.batch_code DESC
+`
+
+type GetFinishedGoodSourceMoldedBatchesRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	BatchCode        string             `json:"batch_code"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	Status           BatchStatus        `json:"status"`
+	AvailableQty     pgtype.Numeric     `json:"available_qty"`
+	ProducedQty      pgtype.Numeric     `json:"produced_qty"`
+	LatestPolishedAt interface{}        `json:"latest_polished_at"`
+}
+
+func (q *Queries) GetFinishedGoodSourceMoldedBatches(ctx context.Context, itemID pgtype.UUID) ([]GetFinishedGoodSourceMoldedBatchesRow, error) {
+	rows, err := q.db.Query(ctx, getFinishedGoodSourceMoldedBatches, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFinishedGoodSourceMoldedBatchesRow
+	for rows.Next() {
+		var i GetFinishedGoodSourceMoldedBatchesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BatchCode,
+			&i.CreatedAt,
+			&i.Status,
+			&i.AvailableQty,
+			&i.ProducedQty,
+			&i.LatestPolishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFinishedGoodSourceRawBatches = `-- name: GetFinishedGoodSourceRawBatches :many
+WITH source_molded AS (
+    SELECT DISTINCT fb.parent_batch_id AS molded_batch_id
+    FROM inventory_batches fb
+    WHERE fb.item_id = $1
+      AND fb.type = 'FINISHED'
+      AND fb.parent_batch_id IS NOT NULL
+)
+SELECT
+    rb.id,
+    rb.batch_code,
+    rb.created_at,
+    rb.status,
+    GREATEST(rb.remaining_qty - rb.reserved_qty, 0)::numeric AS available_qty,
+    COALESCE(v.name, '') AS vendor_name,
+    COALESCE(po.po_number, '') AS po_number,
+    MAX(mj.created_at) AS latest_used_at
+FROM source_molded sm
+JOIN inventory_transactions mt
+    ON mt.batch_id = sm.molded_batch_id
+   AND mt.direction = 'IN'
+   AND mt.reference_type = 'PRODUCTION_JOURNAL'
+JOIN production_journals mj ON mj.id = mt.reference_id
+JOIN inventory_batches rb ON rb.id = mj.source_batch_id
+LEFT JOIN purchase_orders po ON po.id = rb.parent_po_id
+LEFT JOIN vendors v ON v.id = po.vendor_id
+GROUP BY rb.id, rb.batch_code, rb.created_at, rb.status, rb.remaining_qty, rb.reserved_qty, v.name, po.po_number
+ORDER BY latest_used_at DESC, rb.batch_code DESC
+`
+
+type GetFinishedGoodSourceRawBatchesRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	BatchCode    string             `json:"batch_code"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Status       BatchStatus        `json:"status"`
+	AvailableQty pgtype.Numeric     `json:"available_qty"`
+	VendorName   string             `json:"vendor_name"`
+	PoNumber     string             `json:"po_number"`
+	LatestUsedAt interface{}        `json:"latest_used_at"`
+}
+
+func (q *Queries) GetFinishedGoodSourceRawBatches(ctx context.Context, itemID pgtype.UUID) ([]GetFinishedGoodSourceRawBatchesRow, error) {
+	rows, err := q.db.Query(ctx, getFinishedGoodSourceRawBatches, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFinishedGoodSourceRawBatchesRow
+	for rows.Next() {
+		var i GetFinishedGoodSourceRawBatchesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BatchCode,
+			&i.CreatedAt,
+			&i.Status,
+			&i.AvailableQty,
+			&i.VendorName,
+			&i.PoNumber,
+			&i.LatestUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFinishedGoodSummary = `-- name: GetFinishedGoodSummary :one
+SELECT
+    i.id AS item_id,
+    COALESCE(i.sku, '') AS sku,
+    i.name,
+    i.diameter,
+    i.low_stock_threshold,
+    i.linked_raw_material_id,
+    COALESCE(raw.sku, '') AS linked_raw_material_sku,
+    COALESCE(raw.name, '') AS linked_raw_material_name,
+    raw.specs AS linked_raw_material_specs,
+    COALESCE(SUM(b.remaining_qty), 0)::numeric AS total_qty,
+    COALESCE(SUM(GREATEST(b.remaining_qty - b.reserved_qty, 0)) FILTER (WHERE b.status = 'ACTIVE'), 0)::numeric AS available_qty,
+    COALESCE(SUM(b.reserved_qty) FILTER (WHERE b.status = 'ACTIVE'), 0)::numeric AS reserved_qty,
+    COALESCE(SUM(b.remaining_qty) FILTER (WHERE b.status = 'HOLD'), 0)::numeric AS hold_qty,
+    COUNT(b.id)::int AS batch_count
+FROM items i
+LEFT JOIN items raw ON raw.id = i.linked_raw_material_id
+LEFT JOIN inventory_batches b
+    ON b.item_id = i.id
+   AND b.type = 'FINISHED'
+WHERE i.id = $1
+  AND i.category = 'FINISHED'::item_category
+  AND i.is_active = true
+GROUP BY
+    i.id,
+    i.sku,
+    i.name,
+    i.diameter,
+    i.low_stock_threshold,
+    i.linked_raw_material_id,
+    raw.sku,
+    raw.name,
+    raw.specs
+`
+
+type GetFinishedGoodSummaryRow struct {
+	ItemID                 pgtype.UUID    `json:"item_id"`
+	Sku                    string         `json:"sku"`
+	Name                   string         `json:"name"`
+	Diameter               pgtype.Numeric `json:"diameter"`
+	LowStockThreshold      pgtype.Numeric `json:"low_stock_threshold"`
+	LinkedRawMaterialID    pgtype.UUID    `json:"linked_raw_material_id"`
+	LinkedRawMaterialSku   string         `json:"linked_raw_material_sku"`
+	LinkedRawMaterialName  string         `json:"linked_raw_material_name"`
+	LinkedRawMaterialSpecs []byte         `json:"linked_raw_material_specs"`
+	TotalQty               pgtype.Numeric `json:"total_qty"`
+	AvailableQty           pgtype.Numeric `json:"available_qty"`
+	ReservedQty            pgtype.Numeric `json:"reserved_qty"`
+	HoldQty                pgtype.Numeric `json:"hold_qty"`
+	BatchCount             int32          `json:"batch_count"`
+}
+
+func (q *Queries) GetFinishedGoodSummary(ctx context.Context, id pgtype.UUID) (GetFinishedGoodSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getFinishedGoodSummary, id)
+	var i GetFinishedGoodSummaryRow
+	err := row.Scan(
+		&i.ItemID,
+		&i.Sku,
+		&i.Name,
+		&i.Diameter,
+		&i.LowStockThreshold,
+		&i.LinkedRawMaterialID,
+		&i.LinkedRawMaterialSku,
+		&i.LinkedRawMaterialName,
+		&i.LinkedRawMaterialSpecs,
+		&i.TotalQty,
+		&i.AvailableQty,
+		&i.ReservedQty,
+		&i.HoldQty,
+		&i.BatchCount,
+	)
+	return i, err
+}
+
+const getFinishedGoodsMaster = `-- name: GetFinishedGoodsMaster :many
+SELECT
+    i.id AS item_id,
+    COALESCE(i.sku, '') AS sku,
+    i.name,
+    i.diameter,
+    i.low_stock_threshold,
+    COALESCE(SUM(GREATEST(b.remaining_qty - b.reserved_qty, 0)) FILTER (WHERE b.status = 'ACTIVE'), 0)::numeric AS available_qty,
+    COALESCE(SUM(b.reserved_qty) FILTER (WHERE b.status = 'ACTIVE'), 0)::numeric AS reserved_qty
+FROM items i
+LEFT JOIN inventory_batches b
+    ON b.item_id = i.id
+   AND b.type = 'FINISHED'
+WHERE i.category = 'FINISHED'::item_category
+  AND i.is_active = true
+GROUP BY i.id, i.sku, i.name, i.diameter, i.low_stock_threshold
+ORDER BY i.name
+`
+
+type GetFinishedGoodsMasterRow struct {
+	ItemID            pgtype.UUID    `json:"item_id"`
+	Sku               string         `json:"sku"`
+	Name              string         `json:"name"`
+	Diameter          pgtype.Numeric `json:"diameter"`
+	LowStockThreshold pgtype.Numeric `json:"low_stock_threshold"`
+	AvailableQty      pgtype.Numeric `json:"available_qty"`
+	ReservedQty       pgtype.Numeric `json:"reserved_qty"`
+}
+
+func (q *Queries) GetFinishedGoodsMaster(ctx context.Context) ([]GetFinishedGoodsMasterRow, error) {
+	rows, err := q.db.Query(ctx, getFinishedGoodsMaster)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFinishedGoodsMasterRow
+	for rows.Next() {
+		var i GetFinishedGoodsMasterRow
+		if err := rows.Scan(
+			&i.ItemID,
+			&i.Sku,
+			&i.Name,
+			&i.Diameter,
+			&i.LowStockThreshold,
+			&i.AvailableQty,
+			&i.ReservedQty,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInventoryAggregated = `-- name: GetInventoryAggregated :many
 SELECT i.category,
        i.id as item_id,
@@ -461,8 +864,8 @@ type GetInventoryAggregatedRow struct {
 	Name         string       `json:"name"`
 	Specs        []byte       `json:"specs"`
 	TotalQty     int64        `json:"total_qty"`
-	AvailableQty int64        `json:"available_qty"`
-	ReservedQty  int64        `json:"reserved_qty"`
+	AvailableQty interface{}  `json:"available_qty"`
+	ReservedQty  interface{}  `json:"reserved_qty"`
 }
 
 func (q *Queries) GetInventoryAggregated(ctx context.Context) ([]GetInventoryAggregatedRow, error) {

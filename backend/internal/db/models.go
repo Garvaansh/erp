@@ -504,20 +504,22 @@ type InventoryTransaction struct {
 }
 
 type Item struct {
-	ID                pgtype.UUID        `json:"id"`
-	ParentID          pgtype.UUID        `json:"parent_id"`
-	Sku               pgtype.Text        `json:"sku"`
-	Name              string             `json:"name"`
-	Category          ItemCategory       `json:"category"`
-	BaseUnit          BaseUnitType       `json:"base_unit"`
-	Specs             []byte             `json:"specs"`
-	IsActive          bool               `json:"is_active"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	MinQty            pgtype.Numeric     `json:"min_qty"`
-	MaxQty            pgtype.Numeric     `json:"max_qty"`
-	CategoryCode      pgtype.Text        `json:"category_code"`
-	LowStockThreshold pgtype.Numeric     `json:"low_stock_threshold"`
+	ID                  pgtype.UUID        `json:"id"`
+	ParentID            pgtype.UUID        `json:"parent_id"`
+	Sku                 pgtype.Text        `json:"sku"`
+	Name                string             `json:"name"`
+	Category            ItemCategory       `json:"category"`
+	BaseUnit            BaseUnitType       `json:"base_unit"`
+	Specs               []byte             `json:"specs"`
+	IsActive            bool               `json:"is_active"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	MinQty              pgtype.Numeric     `json:"min_qty"`
+	MaxQty              pgtype.Numeric     `json:"max_qty"`
+	CategoryCode        pgtype.Text        `json:"category_code"`
+	LowStockThreshold   pgtype.Numeric     `json:"low_stock_threshold"`
+	LinkedRawMaterialID pgtype.UUID        `json:"linked_raw_material_id"`
+	Diameter            pgtype.Numeric     `json:"diameter"`
 }
 
 type ProductionJournal struct {

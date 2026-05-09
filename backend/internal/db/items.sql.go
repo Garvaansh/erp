@@ -13,21 +13,33 @@ import (
 
 const createItem = `-- name: CreateItem :one
 INSERT INTO items (
-    parent_id, sku, name, category, base_unit, specs, category_code
+    parent_id,
+    sku,
+    name,
+    category,
+    base_unit,
+    specs,
+    category_code,
+    low_stock_threshold,
+    linked_raw_material_id,
+    diameter
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold
+RETURNING id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold, linked_raw_material_id, diameter
 `
 
 type CreateItemParams struct {
-	ParentID     pgtype.UUID  `json:"parent_id"`
-	Sku          pgtype.Text  `json:"sku"`
-	Name         string       `json:"name"`
-	Category     ItemCategory `json:"category"`
-	BaseUnit     BaseUnitType `json:"base_unit"`
-	Specs        []byte       `json:"specs"`
-	CategoryCode pgtype.Text  `json:"category_code"`
+	ParentID            pgtype.UUID    `json:"parent_id"`
+	Sku                 pgtype.Text    `json:"sku"`
+	Name                string         `json:"name"`
+	Category            ItemCategory   `json:"category"`
+	BaseUnit            BaseUnitType   `json:"base_unit"`
+	Specs               []byte         `json:"specs"`
+	CategoryCode        pgtype.Text    `json:"category_code"`
+	LowStockThreshold   pgtype.Numeric `json:"low_stock_threshold"`
+	LinkedRawMaterialID pgtype.UUID    `json:"linked_raw_material_id"`
+	Diameter            pgtype.Numeric `json:"diameter"`
 }
 
 func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, error) {
@@ -39,6 +51,9 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, e
 		arg.BaseUnit,
 		arg.Specs,
 		arg.CategoryCode,
+		arg.LowStockThreshold,
+		arg.LinkedRawMaterialID,
+		arg.Diameter,
 	)
 	var i Item
 	err := row.Scan(
@@ -56,12 +71,52 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Item, e
 		&i.MaxQty,
 		&i.CategoryCode,
 		&i.LowStockThreshold,
+		&i.LinkedRawMaterialID,
+		&i.Diameter,
+	)
+	return i, err
+}
+
+const getFinishedGoodByRecipe = `-- name: GetFinishedGoodByRecipe :one
+SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold, linked_raw_material_id, diameter FROM items
+WHERE category = 'FINISHED'::item_category
+  AND linked_raw_material_id = $1
+  AND diameter = $2
+  AND is_active = true
+LIMIT 1
+`
+
+type GetFinishedGoodByRecipeParams struct {
+	LinkedRawMaterialID pgtype.UUID    `json:"linked_raw_material_id"`
+	Diameter            pgtype.Numeric `json:"diameter"`
+}
+
+func (q *Queries) GetFinishedGoodByRecipe(ctx context.Context, arg GetFinishedGoodByRecipeParams) (Item, error) {
+	row := q.db.QueryRow(ctx, getFinishedGoodByRecipe, arg.LinkedRawMaterialID, arg.Diameter)
+	var i Item
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Sku,
+		&i.Name,
+		&i.Category,
+		&i.BaseUnit,
+		&i.Specs,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MinQty,
+		&i.MaxQty,
+		&i.CategoryCode,
+		&i.LowStockThreshold,
+		&i.LinkedRawMaterialID,
+		&i.Diameter,
 	)
 	return i, err
 }
 
 const getItem = `-- name: GetItem :one
-SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold FROM items
+SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold, linked_raw_material_id, diameter FROM items
 WHERE id = $1 LIMIT 1
 `
 
@@ -83,6 +138,8 @@ func (q *Queries) GetItem(ctx context.Context, id pgtype.UUID) (Item, error) {
 		&i.MaxQty,
 		&i.CategoryCode,
 		&i.LowStockThreshold,
+		&i.LinkedRawMaterialID,
+		&i.Diameter,
 	)
 	return i, err
 }
@@ -127,7 +184,7 @@ func (q *Queries) GetSelectableItems(ctx context.Context) ([]GetSelectableItemsR
 }
 
 const listActiveItemsByCategory = `-- name: ListActiveItemsByCategory :many
-SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold FROM items
+SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold, linked_raw_material_id, diameter FROM items
 WHERE category = $1 AND is_active = true
 ORDER BY name
 LIMIT $2 OFFSET $3
@@ -163,6 +220,8 @@ func (q *Queries) ListActiveItemsByCategory(ctx context.Context, arg ListActiveI
 			&i.MaxQty,
 			&i.CategoryCode,
 			&i.LowStockThreshold,
+			&i.LinkedRawMaterialID,
+			&i.Diameter,
 		); err != nil {
 			return nil, err
 		}
@@ -175,7 +234,7 @@ func (q *Queries) ListActiveItemsByCategory(ctx context.Context, arg ListActiveI
 }
 
 const listVariantsByParent = `-- name: ListVariantsByParent :many
-SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold FROM items
+SELECT id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold, linked_raw_material_id, diameter FROM items
 WHERE parent_id = $1 AND is_active = true
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -211,6 +270,8 @@ func (q *Queries) ListVariantsByParent(ctx context.Context, arg ListVariantsByPa
 			&i.MaxQty,
 			&i.CategoryCode,
 			&i.LowStockThreshold,
+			&i.LinkedRawMaterialID,
+			&i.Diameter,
 		); err != nil {
 			return nil, err
 		}
@@ -226,7 +287,7 @@ const updateItemThreshold = `-- name: UpdateItemThreshold :one
 UPDATE items
 SET low_stock_threshold = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold
+RETURNING id, parent_id, sku, name, category, base_unit, specs, is_active, created_at, updated_at, min_qty, max_qty, category_code, low_stock_threshold, linked_raw_material_id, diameter
 `
 
 type UpdateItemThresholdParams struct {
@@ -252,6 +313,8 @@ func (q *Queries) UpdateItemThreshold(ctx context.Context, arg UpdateItemThresho
 		&i.MaxQty,
 		&i.CategoryCode,
 		&i.LowStockThreshold,
+		&i.LinkedRawMaterialID,
+		&i.Diameter,
 	)
 	return i, err
 }
