@@ -328,6 +328,7 @@ func mapWIPError(c *fiber.Ctx, err error, fallbackMessage string) error {
 		errors.Is(err, services.ErrWIPNoteRequired),
 		errors.Is(err, services.ErrInvalidBatchType),
 		errors.Is(err, services.ErrWIPDiameterRequired),
+		errors.Is(err, services.ErrFinishedGoodRequired),
 		errors.Is(err, services.ErrPendingApprovalOnly):
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",

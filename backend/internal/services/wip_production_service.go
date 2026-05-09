@@ -29,6 +29,7 @@ var (
 	ErrWIPInsufficientStock   = errors.New("insufficient stock")
 	ErrInvalidBatchType       = errors.New("invalid source batch type for this stage")
 	ErrWIPDiameterRequired    = errors.New("diameter is required on the source molded batch")
+	ErrFinishedGoodRequired   = errors.New("finished good is not configured for this raw material and diameter")
 	ErrPendingApprovalOnly    = errors.New("journal is not pending approval")
 	ErrWIPApproveUnauthorized = errors.New("admin privileges required")
 	ErrProcessWIPFailed       = errors.New("unable to process wip transaction")
@@ -740,13 +741,25 @@ func finalizeJournal(ctx context.Context, tx pgx.Tx, qtx *db.Queries, journal db
 	if !diameter.Valid {
 		diameter = sourceBatch.Diameter
 	}
+	outputItemID := sourceBatch.ItemID
 	parentBatchID := pgtype.UUID{}
 	if outputType == db.BatchTypeFINISHED {
+		finishedItem, err := qtx.GetFinishedGoodByRecipe(ctx, db.GetFinishedGoodByRecipeParams{
+			LinkedRawMaterialID: sourceBatch.ItemID,
+			Diameter:            diameter,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return "", ErrFinishedGoodRequired
+			}
+			return "", fmt.Errorf("resolve finished good item: %w", err)
+		}
+		outputItemID = finishedItem.ID
 		parentBatchID = sourceBatch.ID
 	}
 
 	derivedBatch, err := qtx.CreateDerivedBatch(ctx, db.CreateDerivedBatchParams{
-		ItemID:        sourceBatch.ItemID,
+		ItemID:        outputItemID,
 		BatchCode:     batchCode,
 		DailySequence: dailySequence,
 		InitialQty:    journal.FinishedQty,
