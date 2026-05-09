@@ -34,7 +34,7 @@ func (h *InventoryHandler) ReceiveStock(c *fiber.Ctx) error {
 		})
 	}
 
-	performedBy := c.Locals("userId").(string)
+	performedBy, _ := c.Locals("userID").(string)
 	result, err := h.inventoryService.ReceiveStock(c.Context(), req, performedBy)
 	if err != nil {
 		return mapInventoryError(c, err)
@@ -88,13 +88,13 @@ func (h *InventoryHandler) UpdateBatchStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	performedBy := c.Locals("userId").(string)
+	performedBy, _ := c.Locals("userID").(string)
 	if err := h.inventoryService.UpdateBatchStatus(c.Context(), batchID, req, performedBy); err != nil {
 		return mapInventoryError(c, err)
 	}
 
 	return c.JSON(fiber.Map{
-		"status":  "ok",
+		"status":  "success",
 		"message": "Batch status updated",
 	})
 }

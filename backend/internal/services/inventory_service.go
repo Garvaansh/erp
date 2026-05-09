@@ -247,6 +247,10 @@ func (s *InventoryService) UpdateBatchStatus(ctx context.Context, batchID string
 		ID:     parsedBatchID,
 		Status: targetStatus,
 	}); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
+			return ErrInvalidBatchStatus
+		}
 		return fmt.Errorf("set batch status: %w", err)
 	}
 
