@@ -1,6 +1,9 @@
 import { apiClient } from "@/lib/api/api-client";
 import {
+  createFinishedGoodInputSchema,
   createItemDefinitionInputSchema,
+  finishedGoodDetailSchema,
+  finishedGoodMasterRowSchema,
   itemDefinitionSchema,
   itemDefinitionsSchema,
   receiveStockPayloadSchema,
@@ -9,6 +12,9 @@ import {
 import type {
   ActiveBatch,
   CreateItemDefinitionInput,
+  CreateFinishedGoodInput,
+  FinishedGoodDetail,
+  FinishedGoodMasterRow,
   ItemCategory,
   ItemDefinition,
   InventorySnapshot,
@@ -38,6 +44,8 @@ type SelectableItemsResponse = {
 type RawMaterialMasterResponse = { items: RawMaterialMasterRow[] };
 type RawMaterialSummaryResponse = RawMaterialSummary;
 type RawMaterialBatchesResponse = { batches: RawMaterialBatchRow[] };
+type FinishedGoodsMasterResponse = { items: FinishedGoodMasterRow[] };
+type FinishedGoodDetailResponse = FinishedGoodDetail;
 
 type ActiveBatchType = "RAW" | "MOLDED" | "FINISHED";
 
@@ -217,4 +225,40 @@ export async function updateItemThreshold(
     method: "PATCH",
     body: JSON.stringify({ threshold }),
   });
+}
+
+export async function createFinishedGood(
+  input: CreateFinishedGoodInput,
+): Promise<ItemDefinition | null> {
+  const parsedInput = createFinishedGoodInputSchema.parse(input);
+
+  const data = await apiClient<CreateItemResponse>("/inventory/finished-goods", {
+    method: "POST",
+    body: JSON.stringify(parsedInput),
+  });
+
+  const parsedItem = itemDefinitionSchema.safeParse(data.item);
+  return parsedItem.success ? parsedItem.data : null;
+}
+
+export async function getFinishedGoodsMaster(): Promise<FinishedGoodMasterRow[]> {
+  const data = await apiClient<FinishedGoodsMasterResponse>(
+    "/inventory/finished-goods",
+    { method: "GET" },
+  );
+
+  const parsed = finishedGoodMasterRowSchema.array().safeParse(data.items);
+  return parsed.success ? parsed.data : [];
+}
+
+export async function getFinishedGoodDetail(
+  productId: string,
+): Promise<FinishedGoodDetail | null> {
+  const data = await apiClient<FinishedGoodDetailResponse>(
+    `/inventory/finished-goods/${productId.trim()}`,
+    { method: "GET" },
+  );
+
+  const parsed = finishedGoodDetailSchema.safeParse(data);
+  return parsed.success ? parsed.data : null;
 }

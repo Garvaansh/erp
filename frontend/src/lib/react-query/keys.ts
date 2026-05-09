@@ -15,6 +15,9 @@ export const inventoryKeys = {
     [...inventoryKeys.all, "raw-material-summary", itemId] as const,
   rawMaterialBatches: (itemId: string) =>
     [...inventoryKeys.all, "raw-material-batches", itemId] as const,
+  finishedGoods: () => [...inventoryKeys.all, "finished-goods"] as const,
+  finishedGoodDetail: (productId: string) =>
+    [...inventoryKeys.all, "finished-good-detail", productId] as const,
 };
 
 export const wipKeys = {

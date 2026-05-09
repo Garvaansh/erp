@@ -20,6 +20,8 @@ export type ItemDefinition = {
   base_unit: BaseUnit;
   specs: SteelSpecs;
   specification?: string;
+  linked_raw_material_id?: string;
+  diameter?: number;
   low_stock_threshold?: number;
   is_active: boolean;
   created_at?: string;
@@ -159,4 +161,85 @@ export type RawMaterialBatchRow = {
 export type UpdateBatchStatusPayload = {
   status: "HOLD" | "ACTIVE";
   reason?: string;
+};
+
+export type CreateFinishedGoodInput = {
+  name: string;
+  linked_raw_material_id: string;
+  diameter: number;
+  low_stock_threshold?: number;
+};
+
+export type FinishedGoodMasterRow = {
+  item_id: string;
+  sku: string;
+  name: string;
+  diameter: number;
+  available_qty: number;
+  reserved_qty: number;
+  status: "OK" | "LOW" | "OUT";
+};
+
+export type FinishedGoodSummary = {
+  item_id: string;
+  sku: string;
+  name: string;
+  diameter: number;
+  total_qty: number;
+  available_qty: number;
+  reserved_qty: number;
+  hold_qty: number;
+  status: "OK" | "LOW" | "OUT";
+  batch_count: number;
+  linked_raw_material_id?: string;
+  linked_raw_material_sku?: string;
+  linked_raw_material_name?: string;
+  linked_raw_material_specification?: string;
+};
+
+export type FinishedGoodBatchRow = {
+  batch_id: string;
+  batch_code: string;
+  created_at: string;
+  initial_qty: number;
+  remaining_qty: number;
+  reserved_qty: number;
+  available_qty: number;
+  status: BatchStatus;
+  source_molded_batch_id?: string;
+  source_molded_batch_code?: string;
+};
+
+export type FinishedGoodRecentPolishingRow = {
+  journal_id: string;
+  created_at: string;
+  finished_batch_id: string;
+  finished_batch_code: string;
+  source_molded_batch_id?: string;
+  source_molded_batch_code?: string;
+  output_qty: string;
+  scrap_qty: string;
+  shortlength_qty: string;
+  process_loss_qty: string;
+  operator_name?: string;
+};
+
+export type FinishedGoodLineageBatchRow = {
+  batch_id: string;
+  batch_code: string;
+  created_at: string;
+  status: BatchStatus;
+  available_qty: number;
+  produced_qty?: number;
+  latest_used_at?: string;
+  vendor_name?: string;
+  po_number?: string;
+};
+
+export type FinishedGoodDetail = {
+  summary: FinishedGoodSummary;
+  batches: FinishedGoodBatchRow[];
+  recent_polishing_output: FinishedGoodRecentPolishingRow[];
+  source_molded_batches: FinishedGoodLineageBatchRow[];
+  source_raw_batches: FinishedGoodLineageBatchRow[];
 };

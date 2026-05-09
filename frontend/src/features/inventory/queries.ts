@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  getFinishedGoodDetail,
+  getFinishedGoodsMaster,
   getRawMaterialBatches,
   getRawMaterialMaster,
   getRawMaterialSummary,
@@ -28,6 +30,23 @@ export function useRawMaterialBatches(itemId: string) {
     queryKey: inventoryKeys.rawMaterialBatches(itemId),
     queryFn: () => getRawMaterialBatches(itemId),
     enabled: Boolean(itemId.trim()),
+    staleTime: 15_000,
+  });
+}
+
+export function useFinishedGoodsMaster() {
+  return useQuery({
+    queryKey: inventoryKeys.finishedGoods(),
+    queryFn: getFinishedGoodsMaster,
+    staleTime: 30_000,
+  });
+}
+
+export function useFinishedGoodDetail(productId: string) {
+  return useQuery({
+    queryKey: inventoryKeys.finishedGoodDetail(productId),
+    queryFn: () => getFinishedGoodDetail(productId),
+    enabled: Boolean(productId.trim()),
     staleTime: 15_000,
   });
 }

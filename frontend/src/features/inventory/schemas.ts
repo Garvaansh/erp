@@ -100,6 +100,13 @@ export const createItemDefinitionInputSchema = z.object({
   low_stock_threshold: z.number().finite().gte(0).optional(),
 });
 
+export const createFinishedGoodInputSchema = z.object({
+  name: z.string().trim().min(2, "Name must be at least 2 characters").max(120),
+  linked_raw_material_id: z.string().uuid("Raw material ID must be a valid UUID"),
+  diameter: z.number().finite().gt(0, "Diameter must be greater than 0"),
+  low_stock_threshold: z.number().finite().gte(0).optional(),
+});
+
 export const selectableItemSchema = z.object({
   item_id: z.string().uuid("Item ID must be a valid UUID"),
   label: z.string().trim().min(1),
@@ -108,3 +115,93 @@ export const selectableItemSchema = z.object({
 
 export const itemDefinitionsSchema = z.array(itemDefinitionSchema);
 export const selectableItemsSchema = z.array(selectableItemSchema);
+
+export const finishedGoodStatusSchema = z.union([
+  z.literal("OK"),
+  z.literal("LOW"),
+  z.literal("OUT"),
+]);
+
+export const finishedGoodMasterRowSchema = z.object({
+  item_id: z.string().uuid(),
+  sku: z.string(),
+  name: z.string(),
+  diameter: z.number(),
+  available_qty: z.number(),
+  reserved_qty: z.number(),
+  status: finishedGoodStatusSchema,
+});
+
+export const finishedGoodBatchRowSchema = z.object({
+  batch_id: z.string().uuid(),
+  batch_code: z.string(),
+  created_at: z.string(),
+  initial_qty: z.number(),
+  remaining_qty: z.number(),
+  reserved_qty: z.number(),
+  available_qty: z.number(),
+  status: z.union([
+    z.literal("ACTIVE"),
+    z.literal("HOLD"),
+    z.literal("EXHAUSTED"),
+    z.literal("REVERSED"),
+  ]),
+  source_molded_batch_id: z.string().uuid().optional(),
+  source_molded_batch_code: z.string().optional(),
+});
+
+export const finishedGoodRecentPolishingRowSchema = z.object({
+  journal_id: z.string().uuid(),
+  created_at: z.string(),
+  finished_batch_id: z.string().uuid(),
+  finished_batch_code: z.string(),
+  source_molded_batch_id: z.string().uuid().optional(),
+  source_molded_batch_code: z.string().optional(),
+  output_qty: z.string(),
+  scrap_qty: z.string(),
+  shortlength_qty: z.string(),
+  process_loss_qty: z.string(),
+  operator_name: z.string().optional(),
+});
+
+export const finishedGoodLineageBatchRowSchema = z.object({
+  batch_id: z.string().uuid(),
+  batch_code: z.string(),
+  created_at: z.string(),
+  status: z.union([
+    z.literal("ACTIVE"),
+    z.literal("HOLD"),
+    z.literal("EXHAUSTED"),
+    z.literal("REVERSED"),
+  ]),
+  available_qty: z.number(),
+  produced_qty: z.number().optional(),
+  latest_used_at: z.string().optional(),
+  vendor_name: z.string().optional(),
+  po_number: z.string().optional(),
+});
+
+export const finishedGoodSummarySchema = z.object({
+  item_id: z.string().uuid(),
+  sku: z.string(),
+  name: z.string(),
+  diameter: z.number(),
+  total_qty: z.number(),
+  available_qty: z.number(),
+  reserved_qty: z.number(),
+  hold_qty: z.number(),
+  status: finishedGoodStatusSchema,
+  batch_count: z.number(),
+  linked_raw_material_id: z.string().uuid().optional(),
+  linked_raw_material_sku: z.string().optional(),
+  linked_raw_material_name: z.string().optional(),
+  linked_raw_material_specification: z.string().optional(),
+});
+
+export const finishedGoodDetailSchema = z.object({
+  summary: finishedGoodSummarySchema,
+  batches: z.array(finishedGoodBatchRowSchema),
+  recent_polishing_output: z.array(finishedGoodRecentPolishingRowSchema),
+  source_molded_batches: z.array(finishedGoodLineageBatchRowSchema),
+  source_raw_batches: z.array(finishedGoodLineageBatchRowSchema),
+});
