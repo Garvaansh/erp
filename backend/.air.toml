@@ -6,7 +6,7 @@ tmp_dir = "tmp"
   cmd = "go build -o tmp/main.exe cmd/api/main.go"
   
   # The binary Air will execute after a successful build
-  bin = "tmp/main.exe"
+  entrypoint = ["tmp/main.exe"]
   
   # Watch these file extensions for changes
   include_ext = ["go", "env"]
