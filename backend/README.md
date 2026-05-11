@@ -60,11 +60,35 @@ backend/
 
      ```bash
      # Install golang-migrate if not already installed
-     go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+     go install github.com/pressly/goose/v3/cmd/goose@latest
+
+     # Verify it runs from your terminal
+     goose -dir db/migrations postgres "postgres://postgres:[password]@[url]:[port]/[DB_NAME]?sslmode=disable" status
 
      # Run migrations
-     migrate -path db/migrations -database "$DATABASE_URL" up
+     goose -dir db/migrations postgres "postgres://postgres:[password]@[url]:[port]/[DB_NAME]?sslmode=disable" up
      ```
+
+     **OR**
+
+     **Setup Goose driver in .env file**
+     ```env
+     GOOSE_DRIVER=postgres
+     GOOSE_DBSTRING=postgres://postgres:[email_address]:5432/RevaDB_local?sslmode=disable
+     GOOSE_MIGRATION_DIR=db/migrations
+     ```
+
+     **AND**
+
+     ```bash
+     # check current migration status
+     goose status
+     # apply all pending migrations
+     goose up
+     # roll back the last migration
+     goose down
+     ```
+
 
    - (Optional) Seed the database with initial data:
      ```bash
@@ -77,12 +101,6 @@ backend/
    ```
 
 ## Running the Application
-
-### Seed the database with developer auth credentials
-
-```bash
-go  run cmd/seed/main.go
-```
 
 ### Development Mode (with Hot Reloading)
 

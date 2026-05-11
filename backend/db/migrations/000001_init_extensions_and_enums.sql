@@ -1,0 +1,23 @@
+-- +goose Up
+-- Enable UUID generation
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Create Enums
+CREATE TYPE item_category AS ENUM ('RAW', 'SEMI_FINISHED', 'FINISHED', 'SCRAP');
+CREATE TYPE base_unit_type AS ENUM ('WEIGHT', 'COUNT', 'LENGTH');
+CREATE TYPE batch_status AS ENUM ('NEW', 'ACTIVE', 'EXHAUSTED', 'HOLD');
+CREATE TYPE tx_direction AS ENUM ('IN', 'OUT');
+CREATE TYPE tx_reference_type AS ENUM ('PURCHASE_RECEIPT', 'PRODUCTION_JOURNAL', 'TRANSFER', 'ADJUSTMENT');
+CREATE TYPE bom_status AS ENUM ('DRAFT', 'ACTIVE', 'ARCHIVED');
+CREATE TYPE production_order_status AS ENUM ('DRAFT', 'PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+CREATE TYPE purchase_order_status AS ENUM ('PENDING', 'DELIVERED', 'CANCELLED');
+
+-- +goose Down
+DROP TYPE IF EXISTS base_unit_type;
+DROP TYPE IF EXISTS item_category;
+DROP TYPE IF EXISTS batch_status;
+DROP TYPE IF EXISTS tx_direction;
+DROP TYPE IF EXISTS tx_reference_type;
+DROP TYPE IF EXISTS bom_status;
+DROP TYPE IF EXISTS production_order_status;
+DROP TYPE IF EXISTS purchase_order_status;
