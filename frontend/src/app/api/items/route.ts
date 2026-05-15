@@ -21,6 +21,7 @@ type ItemDTO = {
   base_unit: string;
   specs: Record<string, unknown>;
   is_active: boolean;
+  linked_raw_material_id?: string;
   created_at?: string;
   updated_at?: string;
 };
@@ -42,6 +43,10 @@ function sanitizeItems(payload: unknown): ItemDTO[] {
       base_unit: typeof row.base_unit === "string" ? row.base_unit : "WEIGHT",
       specs: isRecord(row.specs) ? row.specs : {},
       is_active: Boolean(row.is_active),
+      linked_raw_material_id:
+        typeof row.linked_raw_material_id === "string" && row.linked_raw_material_id.trim()
+          ? row.linked_raw_material_id.trim()
+          : undefined,
       created_at:
         typeof row.created_at === "string" ? row.created_at : undefined,
       updated_at:
@@ -70,6 +75,10 @@ function sanitizeSingleItem(payload: unknown): ItemDTO | null {
     base_unit: typeof raw.base_unit === "string" ? raw.base_unit : "WEIGHT",
     specs: isRecord(raw.specs) ? raw.specs : {},
     is_active: Boolean(raw.is_active),
+    linked_raw_material_id:
+      typeof raw.linked_raw_material_id === "string" && raw.linked_raw_material_id.trim()
+        ? raw.linked_raw_material_id.trim()
+        : undefined,
     created_at: typeof raw.created_at === "string" ? raw.created_at : undefined,
     updated_at: typeof raw.updated_at === "string" ? raw.updated_at : undefined,
   };
