@@ -13,19 +13,20 @@ import (
 )
 
 type ItemResponse struct {
-	ID                string            `json:"id"`
-	ParentID          *string           `json:"parent_id,omitempty"`
-	SKU               string            `json:"sku,omitempty"`
-	Name              string            `json:"name"`
-	Category          string            `json:"category"`
-	CategoryCode      string            `json:"category_code,omitempty"`
-	BaseUnit          string            `json:"base_unit"`
-	Specs             models.SteelSpecs `json:"specs"`
-	Specification     string            `json:"specification,omitempty"`
-	LowStockThreshold float64           `json:"low_stock_threshold"`
-	IsActive          bool              `json:"is_active"`
-	CreatedAt         string            `json:"created_at,omitempty"`
-	UpdatedAt         string            `json:"updated_at,omitempty"`
+	ID                  string            `json:"id"`
+	ParentID            *string           `json:"parent_id,omitempty"`
+	SKU                 string            `json:"sku,omitempty"`
+	Name                string            `json:"name"`
+	Category            string            `json:"category"`
+	CategoryCode        string            `json:"category_code,omitempty"`
+	BaseUnit            string            `json:"base_unit"`
+	Specs               models.SteelSpecs `json:"specs"`
+	Specification       string            `json:"specification,omitempty"`
+	LowStockThreshold   float64           `json:"low_stock_threshold"`
+	LinkedRawMaterialID *string           `json:"linked_raw_material_id,omitempty"`
+	IsActive            bool              `json:"is_active"`
+	CreatedAt           string            `json:"created_at,omitempty"`
+	UpdatedAt           string            `json:"updated_at,omitempty"`
 }
 
 func MapItemResponse(item db.Item) ItemResponse {
@@ -74,6 +75,14 @@ func MapItemResponse(item db.Item) ItemResponse {
 
 	if thresholdVal, ok := numericToFloat64(item.LowStockThreshold); ok {
 		response.LowStockThreshold = thresholdVal
+	}
+
+	// Expose the recipe linkage so the WIP molding dialog can verify recipe configuration.
+	if item.LinkedRawMaterialID.Valid {
+		linkedID := uuidString(item.LinkedRawMaterialID)
+		if linkedID != "" {
+			response.LinkedRawMaterialID = &linkedID
+		}
 	}
 
 	return response

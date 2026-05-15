@@ -14,27 +14,94 @@ type Querier interface {
 	ApproveJournal(ctx context.Context, arg ApproveJournalParams) (ProductionJournal, error)
 	ChangeUserPasswordCommand(ctx context.Context, arg ChangeUserPasswordCommandParams) error
 	CreateBatch(ctx context.Context, arg CreateBatchParams) (InventoryBatch, error)
+	// =============================================================================
+	// SECTION 3 — BATCH LINEAGE
+	// =============================================================================
+	CreateBatchConsumption(ctx context.Context, arg CreateBatchConsumptionParams) (BatchConsumption, error)
 	CreateDerivedBatch(ctx context.Context, arg CreateDerivedBatchParams) (InventoryBatch, error)
 	CreateInventoryBatch(ctx context.Context, arg CreateInventoryBatchParams) (InventoryBatch, error)
 	CreateInventoryTransaction(ctx context.Context, arg CreateInventoryTransactionParams) (InventoryTransaction, error)
 	CreateItem(ctx context.Context, arg CreateItemParams) (Item, error)
 	CreateJournal(ctx context.Context, arg CreateJournalParams) (pgtype.UUID, error)
+	// Creates the output inventory batch from a production run (molded or finished).
+	// Use this instead of CreateDerivedBatch for WIP flows: named args (not positional
+	// $n), explicit RETURNING columns, and parent_batch_id for optional quick-reference
+	// to the immediate upstream batch. Full many-to-many lineage is stored separately
+	// in batch_consumptions — parent_batch_id here is convenience only.
+	// NOTE: diameter is intentionally excluded — specification belongs to item, not batch.
+	CreateProducedBatch(ctx context.Context, arg CreateProducedBatchParams) (CreateProducedBatchRow, error)
+	// =============================================================================
+	// SECTION 2 — PRODUCTION RUNS
+	// =============================================================================
+	CreateProductionRun(ctx context.Context, arg CreateProductionRunParams) (ProductionRun, error)
 	CreatePurchaseOrder(ctx context.Context, arg CreatePurchaseOrderParams) (PurchaseOrder, error)
 	CreateUserCommand(ctx context.Context, arg CreateUserCommandParams) (CreateUserCommandRow, error)
 	CreateVendor(ctx context.Context, arg CreateVendorParams) (Vendor, error)
 	CreateWIPJournal(ctx context.Context, arg CreateWIPJournalParams) (ProductionJournal, error)
+	// Deducts qty_to_deduct from remaining_qty in a single atomic operation.
+	// PostgreSQL computes the new remaining — the caller never passes a pre-calculated value.
+	// Auto-exhausts the batch when remaining_qty reaches zero after deduction.
+	//
+	// WHY remaining_qty > 0 instead of remaining_qty >= qty_to_deduct:
+	// The FIFO allocation loop intentionally does PARTIAL consumption. When a batch
+	// has less than needed (e.g. 50kg available, 100kg needed), the loop already
+	// computes actual_deduct = MIN(needed, remaining). Enforcing >= qty_to_deduct
+	// would cause 0 rows returned mid-allocation, silently breaking the loop.
+	// The FOR UPDATE lock on GetFIFOBatchesForUpdate already guarantees no concurrent
+	// modification. remaining_qty > 0 is the correct guard here.
+	DeductBatchForProduction(ctx context.Context, arg DeductBatchForProductionParams) (DeductBatchForProductionRow, error)
 	ExhaustBatchByID(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
 	FinalizeBatchReservation(ctx context.Context, arg FinalizeBatchReservationParams) (InventoryBatch, error)
 	GetActiveBatchesByItem(ctx context.Context, itemID pgtype.UUID) ([]GetActiveBatchesByItemRow, error)
 	GetActiveBatchesByItemAndType(ctx context.Context, arg GetActiveBatchesByItemAndTypeParams) ([]GetActiveBatchesByItemAndTypeRow, error)
 	GetActiveBatchesByType(ctx context.Context, type_ BatchType) ([]GetActiveBatchesByTypeRow, error)
+	// Returns the number of ACTIVE batches available for FIFO allocation.
+	// Use for UI fragmentation visibility (e.g. "3 batches available") and
+	// pre-flight checks before starting an allocation transaction.
+	GetAllocatableBatchCountForItem(ctx context.Context, itemID pgtype.UUID) (int32, error)
 	GetBatch(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
+	// =============================================================================
+	// BATCH TRACEABILITY QUERIES
+	// =============================================================================
+	GetBatchByCode(ctx context.Context, batchCode string) (GetBatchByCodeRow, error)
 	GetBatchByID(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
+	// Forward traceability: raw batch → all downstream production runs and output batches.
+	// Hits idx_batch_consumptions_source_batch_id.
+	GetBatchConsumersBySourceBatch(ctx context.Context, sourceBatchID pgtype.UUID) ([]GetBatchConsumersBySourceBatchRow, error)
+	// Returns all consumption events where this batch was the SOURCE.
+	GetBatchConsumptionEvents(ctx context.Context, sourceBatchID pgtype.UUID) ([]GetBatchConsumptionEventsRow, error)
 	GetBatchForUpdate(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
+	// Reverse traceability: finished/molded batch → all source raw batches consumed.
+	// Hits idx_batch_consumptions_lineage (target_batch_id, source_batch_id).
+	GetBatchLineageByTargetBatch(ctx context.Context, targetBatchID pgtype.UUID) ([]GetBatchLineageByTargetBatchRow, error)
+	// Gets the production run that CREATED this batch (target_batch_id = this batch).
+	GetBatchProductionRun(ctx context.Context, targetBatchID pgtype.UUID) (GetBatchProductionRunRow, error)
+	// Returns the FULL upstream chain for a batch:
+	// For a FINISHED batch: FINISHED -> MOLDED -> RAW
+	// For a MOLDED batch: MOLDED -> RAW
+	// Each row = one upstream batch with its consumption details.
+	GetBatchUpstreamLineage(ctx context.Context, targetBatchID pgtype.UUID) ([]GetBatchUpstreamLineageRow, error)
+	// Gets vendor traceability for a RAW batch via its parent_po_id.
+	GetBatchVendorInfo(ctx context.Context, id pgtype.UUID) (GetBatchVendorInfoRow, error)
+	// =============================================================================
+	// SECTION 1 — FIFO BATCH ALLOCATION
+	// =============================================================================
+	// Returns all allocatable ACTIVE batches for a given item in strict FIFO order.
+	// Caller MUST be inside a transaction. FOR UPDATE prevents phantom reads
+	// and concurrent double-allocation during FIFO deduction.
+	GetFIFOBatchesForUpdate(ctx context.Context, itemID pgtype.UUID) ([]GetFIFOBatchesForUpdateRow, error)
 	GetFinanceLedgerRows(ctx context.Context, arg GetFinanceLedgerRowsParams) ([]GetFinanceLedgerRowsRow, error)
 	GetFinancePayablesRows(ctx context.Context) ([]GetFinancePayablesRowsRow, error)
 	GetFinishedGoodBatches(ctx context.Context, itemID pgtype.UUID) ([]GetFinishedGoodBatchesRow, error)
 	GetFinishedGoodByRecipe(ctx context.Context, arg GetFinishedGoodByRecipeParams) (Item, error)
+	// =============================================================================
+	// SECTION 4 — FINISHED GOODS TRACEABILITY
+	// =============================================================================
+	// Returns the full production audit trail for a finished-good item.
+	// One row per production run. Source batch aggregation avoids N+1:
+	// source_batch_codes is a comma-joined aggregate for display.
+	// Hits idx_production_runs_output_item_id + idx_batch_consumptions_production_run_id.
+	GetFinishedGoodProductionHistory(ctx context.Context, arg GetFinishedGoodProductionHistoryParams) ([]GetFinishedGoodProductionHistoryRow, error)
 	GetFinishedGoodRecentPolishingOutput(ctx context.Context, arg GetFinishedGoodRecentPolishingOutputParams) ([]GetFinishedGoodRecentPolishingOutputRow, error)
 	GetFinishedGoodSourceMoldedBatches(ctx context.Context, itemID pgtype.UUID) ([]GetFinishedGoodSourceMoldedBatchesRow, error)
 	GetFinishedGoodSourceRawBatches(ctx context.Context, itemID pgtype.UUID) ([]GetFinishedGoodSourceRawBatchesRow, error)
@@ -48,6 +115,7 @@ type Querier interface {
 	GetProcurementDetail(ctx context.Context, id pgtype.UUID) (GetProcurementDetailRow, error)
 	GetProcurementList(ctx context.Context, arg GetProcurementListParams) ([]GetProcurementListRow, error)
 	GetProcurementReceiptTransactionForUpdate(ctx context.Context, id pgtype.UUID) (InventoryTransaction, error)
+	GetProductionRunByID(ctx context.Context, id pgtype.UUID) (GetProductionRunByIDRow, error)
 	GetPurchaseOrderByID(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error)
 	GetPurchaseOrderByIDForUpdate(ctx context.Context, id pgtype.UUID) (PurchaseOrder, error)
 	GetRawMaterialBatches(ctx context.Context, itemID pgtype.UUID) ([]GetRawMaterialBatchesRow, error)
@@ -56,6 +124,13 @@ type Querier interface {
 	GetRecentActivity(ctx context.Context) ([]GetRecentActivityRow, error)
 	GetRoleByCode(ctx context.Context, code string) (GetRoleByCodeRow, error)
 	GetSelectableItems(ctx context.Context) ([]GetSelectableItemsRow, error)
+	// =============================================================================
+	// SECTION 5 — AGGREGATED INVENTORY SUPPORT
+	// =============================================================================
+	// Returns total allocatable quantity across all ACTIVE batches for an item.
+	// HOLD and EXHAUSTED batches are excluded by the status filter.
+	// Returns 0 if no allocatable stock exists (COALESCE guards NULL from empty set).
+	GetTotalAllocatableQtyForItem(ctx context.Context, itemID pgtype.UUID) (pgtype.Numeric, error)
 	GetTotalFinishedPipesWeight(ctx context.Context) (pgtype.Numeric, error)
 	GetTotalRawMaterialWeight(ctx context.Context) (pgtype.Numeric, error)
 	GetTransactionByMovementGroup(ctx context.Context, movementGroupID pgtype.UUID) (InventoryTransaction, error)
@@ -69,6 +144,10 @@ type Querier interface {
 	InsertPurchaseOrderLog(ctx context.Context, arg InsertPurchaseOrderLogParams) (PurchaseOrderLog, error)
 	ListActiveItemsByCategory(ctx context.Context, arg ListActiveItemsByCategoryParams) ([]Item, error)
 	ListPendingApprovals(ctx context.Context, arg ListPendingApprovalsParams) ([]ListPendingApprovalsRow, error)
+	// Newest first. Offset-based pagination (limit + offset). Switch to cursor
+	// pagination when production history volumes grow large.
+	// Optionally filter by output_item_id (pass NULL to list all).
+	ListProductionRuns(ctx context.Context, arg ListProductionRunsParams) ([]ListProductionRunsRow, error)
 	ListTransactionsByBatch(ctx context.Context, arg ListTransactionsByBatchParams) ([]InventoryTransaction, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
 	ListVariantsByParent(ctx context.Context, arg ListVariantsByParentParams) ([]Item, error)

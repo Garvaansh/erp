@@ -78,6 +78,8 @@ func main() {
 	finishedGoodsQueryService := services.NewFinishedGoodsQueryService(dbpool)
 	productionService := services.NewProductionService(dbpool)
 	wipProductionService := services.NewWIPProductionService(dbpool)
+	wipCommandService := services.NewWIPProductionCommandService(dbpool)
+	wipQueryService := services.NewWIPProductionQueryService(dbpool)
 	procurementCommandService := services.NewProcurementCommandService(dbpool)
 	procurementQueryService := services.NewProcurementQueryService(dbpool)
 	paymentService := services.NewPaymentService(dbpool)
@@ -89,12 +91,14 @@ func main() {
 	stockAdjustmentService := services.NewStockAdjustmentService(dbpool)
 	reportService := services.NewReportService(dbpool)
 	dashboardService := services.NewDashboardService(queries, dbpool)
+	batchTraceabilityService := services.NewBatchTraceabilityService(dbpool)
 	requestValidator := validator.New(validator.WithRequiredStructEnabled())
 	itemHandler := handlers.NewItemHandler(itemService, requestValidator)
 	inventoryHandler := handlers.NewInventoryHandler(inventoryService, requestValidator)
 	finishedGoodsHandler := handlers.NewFinishedGoodsHandler(finishedGoodsCommandService, finishedGoodsQueryService, requestValidator)
 	productionHandler := handlers.NewDailyLogHandler(productionService, requestValidator)
 	wipProductionHandler := handlers.NewWIPProductionHandler(wipProductionService, requestValidator)
+	wipHandler := handlers.NewWIPHandler(wipCommandService, wipQueryService, requestValidator)
 	procurementHandler := handlers.NewProcurementHandler(procurementCommandService, procurementQueryService, requestValidator)
 	paymentHandler := handlers.NewPaymentHandler(paymentService, requestValidator)
 	financeHandler := handlers.NewFinanceHandler(financeService)
@@ -103,6 +107,7 @@ func main() {
 	stockAdjustmentHandler := handlers.NewStockAdjustmentHandler(stockAdjustmentService, requestValidator)
 	reportHandler := handlers.NewReportHandler(reportService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
+	batchTraceabilityHandler := handlers.NewBatchTraceabilityHandler(batchTraceabilityService)
 
 	// 4. Initialize Fiber App
 	app := fiber.New(fiber.Config{
@@ -176,6 +181,7 @@ func main() {
 	inventoryGroup.Get("/finished-goods", finishedGoodsHandler.ListFinishedGoods)
 	inventoryGroup.Post("/finished-goods", finishedGoodsHandler.CreateFinishedGood)
 	inventoryGroup.Get("/finished-goods/:id", finishedGoodsHandler.GetFinishedGoodDetail)
+	inventoryGroup.Get("/batches/:batchCode/traceability", batchTraceabilityHandler.GetBatchTraceability)
 
 	logsGroup := api.Group("/logs", requireAuth)
 	logsGroup.Post("/", productionHandler.CreateLog)
@@ -187,6 +193,14 @@ func main() {
 	productionGroup.Get("/pending", middleware.RequireAdmin, wipProductionHandler.GetPendingApprovals)
 	productionGroup.Patch("/approve/:id", middleware.RequireAdmin, wipProductionHandler.ApproveJournal)
 	productionGroup.Patch("/reject/:id", middleware.RequireAdmin, wipProductionHandler.RejectJournal)
+
+	// WIP Execution Layer — CQRS production execution endpoints
+	wipGroup := api.Group("/wip", requireAuth)
+	wipGroup.Post("/molding", wipHandler.CreateMoldingRun)
+	wipGroup.Post("/polishing", wipHandler.CreatePolishingRun)
+	wipGroup.Get("/runs", wipHandler.ListProductionRuns)
+	wipGroup.Get("/runs/:id", wipHandler.GetProductionRun)
+	wipGroup.Get("/batch-lineage/:batchId", wipHandler.GetBatchLineage)
 
 	procurementGroup := api.Group("/procurement", requireAuth)
 	procurementGroup.Post("/", procurementHandler.CreatePurchaseOrder)

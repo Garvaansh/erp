@@ -448,6 +448,17 @@ func (ns NullTxReferenceType) Value() (driver.Value, error) {
 	return string(ns.TxReferenceType), nil
 }
 
+type BatchConsumption struct {
+	ID                   pgtype.UUID        `json:"id"`
+	ProductionRunID      pgtype.UUID        `json:"production_run_id"`
+	SourceBatchID        pgtype.UUID        `json:"source_batch_id"`
+	TargetBatchID        pgtype.UUID        `json:"target_batch_id"`
+	QuantityConsumed     pgtype.Numeric     `json:"quantity_consumed"`
+	BatchRemainingBefore pgtype.Numeric     `json:"batch_remaining_before"`
+	BatchRemainingAfter  pgtype.Numeric     `json:"batch_remaining_after"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 type BomLine struct {
 	ID           pgtype.UUID        `json:"id"`
 	BomVersionID pgtype.UUID        `json:"bom_version_id"`
@@ -556,6 +567,23 @@ type ProductionOrder struct {
 	CompletedAt      pgtype.Timestamptz    `json:"completed_at"`
 	CreatedAt        pgtype.Timestamptz    `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz    `json:"updated_at"`
+}
+
+type ProductionRun struct {
+	ID             pgtype.UUID        `json:"id"`
+	RunSequence    pgtype.Int8        `json:"run_sequence"`
+	OutputItemID   pgtype.UUID        `json:"output_item_id"`
+	OperatorID     pgtype.UUID        `json:"operator_id"`
+	Workstation    pgtype.Text        `json:"workstation"`
+	InputQty       pgtype.Numeric     `json:"input_qty"`
+	OutputQty      pgtype.Numeric     `json:"output_qty"`
+	ScrapQty       pgtype.Numeric     `json:"scrap_qty"`
+	ShortlengthQty pgtype.Numeric     `json:"shortlength_qty"`
+	ProcessLossQty pgtype.Numeric     `json:"process_loss_qty"`
+	Status         string             `json:"status"`
+	Notes          pgtype.Text        `json:"notes"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PurchaseOrder struct {
