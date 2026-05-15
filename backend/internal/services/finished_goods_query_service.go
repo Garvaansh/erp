@@ -157,8 +157,8 @@ func (s *FinishedGoodsQueryService) GetFinishedGoodDetail(ctx context.Context, p
 	}
 
 	recentRows, err := queries.GetFinishedGoodRecentPolishingOutput(ctx, db.GetFinishedGoodRecentPolishingOutputParams{
-		ItemID:    parsedID,
-		PageLimit: 10,
+		OutputItemID: parsedID,
+		PageLimit:    10,
 	})
 	if err != nil {
 		return nil, ErrFinishedGoodsQueryFailed
@@ -228,10 +228,10 @@ func (s *FinishedGoodsQueryService) GetFinishedGoodDetail(ctx context.Context, p
 		detail.RecentPolishingOutput = append(detail.RecentPolishingOutput, FinishedGoodRecentPolishingRow{
 			JournalID:             uuidString(row.JournalID),
 			CreatedAt:             fgTimestampValue(row.CreatedAt),
-			FinishedBatchID:       uuidString(row.FinishedBatchID),
-			FinishedBatchCode:     row.FinishedBatchCode,
-			SourceMoldedBatchID:   uuidString(row.SourceMoldedBatchID),
-			SourceMoldedBatchCode: strings.TrimSpace(row.SourceMoldedBatchCode),
+			FinishedBatchID:       fgUUIDStringAny(row.FinishedBatchID),
+			FinishedBatchCode:     fgStringAny(row.FinishedBatchCode),
+			SourceMoldedBatchID:   fgUUIDStringAny(row.SourceMoldedBatchID),
+			SourceMoldedBatchCode: fgStringAny(row.SourceMoldedBatchCode),
 			OutputQty:             numericToDecimalString(row.FinishedQty),
 			ScrapQty:              numericToDecimalString(row.ScrapQty),
 			ShortlengthQty:        numericToDecimalString(row.ShortlengthQty),
@@ -305,6 +305,50 @@ func fgTimestampAny(value any) string {
 		return fgTimestampValue(typed)
 	case string:
 		return strings.TrimSpace(typed)
+	default:
+		return ""
+	}
+}
+
+func fgStringAny(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case []byte:
+		return strings.TrimSpace(string(typed))
+	case pgtype.Text:
+		if !typed.Valid {
+			return ""
+		}
+		return strings.TrimSpace(typed.String)
+	default:
+		return ""
+	}
+}
+
+func fgUUIDStringAny(value any) string {
+	switch typed := value.(type) {
+	case pgtype.UUID:
+		return uuidString(typed)
+	case [16]byte:
+		return uuidString(pgtype.UUID{Bytes: typed, Valid: true})
+	case []byte:
+		if len(typed) != 16 {
+			parsed, ok := parseUUID(strings.TrimSpace(string(typed)))
+			if !ok {
+				return ""
+			}
+			return uuidString(parsed)
+		}
+		var raw [16]byte
+		copy(raw[:], typed)
+		return uuidString(pgtype.UUID{Bytes: raw, Valid: true})
+	case string:
+		parsed, ok := parseUUID(typed)
+		if !ok {
+			return ""
+		}
+		return uuidString(parsed)
 	default:
 		return ""
 	}
