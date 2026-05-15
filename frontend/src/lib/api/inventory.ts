@@ -232,16 +232,21 @@ export async function createFinishedGood(
 ): Promise<ItemDefinition | null> {
   const parsedInput = createFinishedGoodInputSchema.parse(input);
 
-  const data = await apiClient<CreateItemResponse>("/inventory/finished-goods", {
-    method: "POST",
-    body: JSON.stringify(parsedInput),
-  });
+  const data = await apiClient<CreateItemResponse>(
+    "/inventory/finished-goods",
+    {
+      method: "POST",
+      body: JSON.stringify(parsedInput),
+    },
+  );
 
   const parsedItem = itemDefinitionSchema.safeParse(data.item);
   return parsedItem.success ? parsedItem.data : null;
 }
 
-export async function getFinishedGoodsMaster(): Promise<FinishedGoodMasterRow[]> {
+export async function getFinishedGoodsMaster(): Promise<
+  FinishedGoodMasterRow[]
+> {
   const data = await apiClient<FinishedGoodsMasterResponse>(
     "/inventory/finished-goods",
     { method: "GET" },
@@ -252,10 +257,10 @@ export async function getFinishedGoodsMaster(): Promise<FinishedGoodMasterRow[]>
 }
 
 export async function getFinishedGoodDetail(
-  productId: string,
+  itemId: string,
 ): Promise<FinishedGoodDetail | null> {
   const data = await apiClient<FinishedGoodDetailResponse>(
-    `/inventory/finished-goods/${productId.trim()}`,
+    `/inventory/finished-goods/${itemId.trim()}`,
     { method: "GET" },
   );
 

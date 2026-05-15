@@ -191,6 +191,7 @@ export type FinishedGoodSummary = {
   hold_qty: number;
   status: "OK" | "LOW" | "OUT";
   batch_count: number;
+  low_stock_threshold?: number;
   linked_raw_material_id?: string;
   linked_raw_material_sku?: string;
   linked_raw_material_name?: string;

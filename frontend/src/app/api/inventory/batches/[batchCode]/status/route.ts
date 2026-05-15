@@ -18,10 +18,10 @@ import {
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ batchId: string }> },
+  { params }: { params: Promise<{ batchCode: string }> },
 ) {
-  const { batchId } = await params;
-  const trimmedId = batchId?.trim();
+  const { batchCode } = await params;
+  const trimmedId = batchCode?.trim();
   if (!trimmedId) {
     return apiError("Batch ID is required", 400);
   }

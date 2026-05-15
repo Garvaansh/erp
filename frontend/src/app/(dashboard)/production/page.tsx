@@ -1,7 +1,5 @@
-"use client";
-
 import { redirect } from "next/navigation";
 
-export default function InventoryWIPPage() {
+export default function ProductionPage() {
   redirect("/production/wip");
 }

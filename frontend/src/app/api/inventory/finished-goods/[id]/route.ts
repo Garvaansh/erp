@@ -149,10 +149,10 @@ function sanitizeDetail(payload: unknown) {
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ productId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { productId } = await params;
-  const trimmedId = productId?.trim();
+  const { id } = await params;
+  const trimmedId = id?.trim();
   if (!trimmedId) {
     return apiError("Product ID is required", 400);
   }
