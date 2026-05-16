@@ -15,13 +15,29 @@ export const inventoryKeys = {
     [...inventoryKeys.all, "raw-material-summary", itemId] as const,
   rawMaterialBatches: (itemId: string) =>
     [...inventoryKeys.all, "raw-material-batches", itemId] as const,
+  rawBatches: () => [...inventoryKeys.all, "batch-detail", "raw"] as const,
+  rawBatch: (code: string) =>
+    [...inventoryKeys.rawBatches(), code.trim()] as const,
   finishedGoods: () => [...inventoryKeys.all, "finished-goods"] as const,
-  finishedGoodDetail: (productId: string) =>
-    [...inventoryKeys.all, "finished-good-detail", productId] as const,
+  finishedGoodDetail: (itemId: string) =>
+    [...inventoryKeys.all, "finished-good-detail", itemId] as const,
+  finishedBundles: () =>
+    [...inventoryKeys.all, "batch-detail", "finished"] as const,
+  finishedBundle: (code: string) =>
+    [...inventoryKeys.finishedBundles(), code.trim()] as const,
+};
+
+export const productionKeys = {
+  all: ["production"] as const,
+  wipBatches: () => [...productionKeys.all, "wip-batches"] as const,
+  wipBatch: (code: string) =>
+    [...productionKeys.wipBatches(), code.trim()] as const,
 };
 
 export const wipKeys = {
   all: ["wip"] as const,
+  runs: (page = 1, pageSize = 100) =>
+    [...wipKeys.all, "runs", page, pageSize] as const,
   selectableItems: (stage: "molding" | "polishing") =>
     [...wipKeys.all, "selectable-items", stage] as const,
   lots: (stage: "molding" | "polishing", itemId: string) =>

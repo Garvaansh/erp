@@ -192,6 +192,7 @@ export const finishedGoodSummarySchema = z.object({
   hold_qty: z.number(),
   status: finishedGoodStatusSchema,
   batch_count: z.number(),
+  low_stock_threshold: z.number().optional(),
   linked_raw_material_id: z.string().uuid().optional(),
   linked_raw_material_sku: z.string().optional(),
   linked_raw_material_name: z.string().optional(),

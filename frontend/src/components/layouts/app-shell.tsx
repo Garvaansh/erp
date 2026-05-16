@@ -16,6 +16,7 @@ import {
   BarChart3,
   ClipboardList,
   Settings,
+  Factory,
 } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useAuthStore } from "@/stores/auth.store";
@@ -43,6 +44,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/inventory", label: "Inventory", icon: PackageSearch },
+      { href: "/production/wip", label: "Production", icon: Factory },
       { href: "/procurement", label: "Procurement", icon: Truck },
       { href: "/procurement/vendors", label: "Vendors", icon: Building2 },
     ],

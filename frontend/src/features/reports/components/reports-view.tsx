@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import {
-  ChartColumnBig,
   PackageSearch,
   ShoppingCart,
   Truck,

@@ -1,4 +1,4 @@
-import { RawMaterialDetailPage } from "@/features/inventory/components/raw-material-detail-page";
+import { RawMaterialDetailPage } from "@/app/(dashboard)/inventory/raw-materials/components/raw-material-detail-page";
 
 type RawMaterialDetailRouteProps = {
   params: Promise<{

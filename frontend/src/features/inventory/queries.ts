@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { getBatchTraceability } from "@/lib/api/batch-traceability";
 import {
   getFinishedGoodDetail,
   getFinishedGoodsMaster,
@@ -6,7 +7,7 @@ import {
   getRawMaterialMaster,
   getRawMaterialSummary,
 } from "@/lib/api/inventory";
-import { inventoryKeys } from "@/lib/react-query/keys";
+import { inventoryKeys, productionKeys } from "@/lib/react-query/keys";
 
 export function useRawMaterialMaster() {
   return useQuery({
@@ -42,11 +43,41 @@ export function useFinishedGoodsMaster() {
   });
 }
 
-export function useFinishedGoodDetail(productId: string) {
+export function useFinishedGoodDetail(itemId: string) {
   return useQuery({
-    queryKey: inventoryKeys.finishedGoodDetail(productId),
-    queryFn: () => getFinishedGoodDetail(productId),
-    enabled: Boolean(productId.trim()),
+    queryKey: inventoryKeys.finishedGoodDetail(itemId),
+    queryFn: () => getFinishedGoodDetail(itemId),
+    enabled: Boolean(itemId.trim()),
     staleTime: 15_000,
   });
+}
+
+function buildBatchDetailQuery<TQueryKey extends readonly unknown[]>(
+  batchCode: string,
+  queryKey: TQueryKey
+) {
+  return {
+    queryKey,
+    queryFn: () => getBatchTraceability(batchCode),
+    enabled: Boolean(batchCode.trim()),
+    staleTime: 15_000,
+  };
+}
+
+export function useRawBatchDetail(batchCode: string) {
+  return useQuery(
+    buildBatchDetailQuery(batchCode, inventoryKeys.rawBatch(batchCode))
+  );
+}
+
+export function useWipBatchDetail(batchCode: string) {
+  return useQuery(
+    buildBatchDetailQuery(batchCode, productionKeys.wipBatch(batchCode))
+  );
+}
+
+export function useFinishedBundleDetail(batchCode: string) {
+  return useQuery(
+    buildBatchDetailQuery(batchCode, inventoryKeys.finishedBundle(batchCode))
+  );
 }
