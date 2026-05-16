@@ -66,16 +66,16 @@ export function FinancePageClient() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Finance</h1>
-          <p className="text-[13px] text-muted-foreground mt-0.5">
+          <h1 className="text-headline text-foreground">Finance</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Liabilities, payments, and accounting workflows.
           </p>
         </div>
         <Button
           variant="outline"
-          size="sm"
+          className="rounded-full shadow-sm px-6"
           onClick={() => void payablesQuery.refetch()}
           loading={payablesQuery.isRefetching}
         >
@@ -84,26 +84,26 @@ export function FinancePageClient() {
       </div>
 
       {/* Stat strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Vendors</p>
-          <p className="text-xl font-semibold text-foreground tabular-nums mt-1">{overview.vendors}</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between">
+          <p className="text-body-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">Vendors</p>
+          <p className="text-display-sm text-foreground tabular-nums leading-none">{overview.vendors}</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Purchased</p>
-          <p className="text-xl font-semibold text-foreground tabular-nums mt-1">
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between">
+          <p className="text-body-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">Purchased</p>
+          <p className="text-display-sm text-foreground tabular-nums leading-none">
             <MoneyDisplay amount={overview.totalPurchased} />
           </p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Paid</p>
-          <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums mt-1">
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between">
+          <p className="text-body-sm font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wide mb-3">Paid</p>
+          <p className="text-display-sm text-emerald-600 dark:text-emerald-400 tabular-nums leading-none">
             <MoneyDisplay amount={overview.totalPaid} />
           </p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Due</p>
-          <p className="text-xl font-semibold text-rose-600 dark:text-rose-400 tabular-nums mt-1">
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between">
+          <p className="text-body-sm font-medium text-rose-600 dark:text-rose-400 uppercase tracking-wide mb-3">Due</p>
+          <p className="text-display-sm text-rose-600 dark:text-rose-400 tabular-nums leading-none">
             <MoneyDisplay amount={overview.totalDue} />
           </p>
         </div>
@@ -132,9 +132,9 @@ export function FinancePageClient() {
 
         <TabsContent value="overview" className="pt-4">
           {activeTab === "overview" ? (
-            <div className="rounded-xl border border-border bg-card shadow-sm">
-              <div className="px-5 py-4 border-b border-border">
-                <h3 className="text-sm font-semibold text-foreground">
+            <div className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+              <div className="px-6 py-5 border-b border-border bg-muted/20">
+                <h3 className="text-body-lg font-medium text-foreground">
                   Highest Outstanding Vendors
                 </h3>
               </div>
@@ -147,19 +147,19 @@ export function FinancePageClient() {
                   payablesQuery.data.slice(0, 5).map((vendor) => (
                     <div
                       key={vendor.vendor_id}
-                      className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-muted/30 transition-colors"
+                      className="flex items-center justify-between gap-4 px-6 py-4 hover:bg-muted/30 transition-colors"
                     >
                       <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-foreground">
+                        <p className="text-sm font-medium text-foreground">
                           {vendor.vendor_name}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {vendor.vendor_code || "—"}
                         </p>
                       </div>
                       <MoneyDisplay
                         amount={vendor.total_due}
-                        className="text-sm font-semibold text-rose-600 dark:text-rose-400 tabular-nums"
+                        className="text-body-lg font-semibold text-rose-600 dark:text-rose-400 tabular-nums"
                       />
                     </div>
                   ))

@@ -232,17 +232,17 @@ export function ReportView({ config, state }: ReportViewProps) {
   };
 
   return (
-    <Card>
-      <CardHeader className="gap-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <CardTitle>{config.title}</CardTitle>
+    <Card className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+      <CardHeader className="gap-3 border-b border-border bg-muted/20 px-6 py-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <CardTitle className="text-body-lg font-medium">{config.title}</CardTitle>
 
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={preset}
               onValueChange={(value) => setPreset(value as DatePreset)}
             >
-              <SelectTrigger className="w-45">
+              <SelectTrigger className="w-45 rounded-full">
                 <SelectValue placeholder="Select range" />
               </SelectTrigger>
               <SelectContent>
@@ -258,13 +258,13 @@ export function ReportView({ config, state }: ReportViewProps) {
                   type="date"
                   value={customFrom}
                   onChange={(event) => setCustomFrom(event.target.value)}
-                  className="w-40"
+                  className="w-40 rounded-full"
                 />
                 <Input
                   type="date"
                   value={customTo}
                   onChange={(event) => setCustomTo(event.target.value)}
-                  className="w-40"
+                  className="w-40 rounded-full"
                 />
               </>
             ) : null}
@@ -273,6 +273,7 @@ export function ReportView({ config, state }: ReportViewProps) {
               type="button"
               variant="outline"
               size="sm"
+              className="rounded-full shadow-sm px-5"
               disabled={
                 rows.length === 0 || reportQuery.isLoading || !hasValidDateRange
               }
@@ -287,6 +288,7 @@ export function ReportView({ config, state }: ReportViewProps) {
               type="button"
               variant="outline"
               size="sm"
+              className="rounded-full shadow-sm px-5"
               disabled={
                 rows.length === 0 || reportQuery.isLoading || !hasValidDateRange
               }

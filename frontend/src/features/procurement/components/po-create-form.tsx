@@ -83,7 +83,7 @@ export function POCreateForm({ materials }: POCreateFormProps) {
   };
 
   return (
-    <Card className="border-slate-200 bg-white">
+    <Card className="rounded-[16px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border-border bg-card">
       <CardHeader>
         <CardTitle>Create Purchase Order</CardTitle>
       </CardHeader>

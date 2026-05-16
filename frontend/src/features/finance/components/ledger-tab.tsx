@@ -150,9 +150,9 @@ export function LedgerTab() {
   };
 
   return (
-    <div className="rounded-[24px] border border-border overflow-hidden">
-      <div className="px-6 py-4 border-b border-border flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <p className="text-sm font-medium text-foreground">Transaction Ledger</p>
+    <div className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+      <div className="px-6 py-5 border-b border-border bg-muted/20 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <p className="text-body-lg font-medium text-foreground">Transaction Ledger</p>
 
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -161,7 +161,7 @@ export function LedgerTab() {
                 setTypeFilter(value as LedgerTypeFilter)
               }
             >
-              <SelectTrigger className="w-28" id="ledger-type-filter">
+              <SelectTrigger className="w-28 rounded-full" id="ledger-type-filter">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
@@ -175,7 +175,7 @@ export function LedgerTab() {
               value={preset}
               onValueChange={(value) => setPreset(value as DatePreset)}
             >
-              <SelectTrigger className="w-40" id="ledger-date-preset">
+              <SelectTrigger className="w-40 rounded-full" id="ledger-date-preset">
                 <SelectValue placeholder="Date range" />
               </SelectTrigger>
               <SelectContent>
@@ -192,14 +192,14 @@ export function LedgerTab() {
                   type="date"
                   value={customFrom}
                   onChange={(event) => setCustomFrom(event.target.value)}
-                  className="w-40"
+                  className="w-40 rounded-full"
                 />
                 <Input
                   id="ledger-to-date"
                   type="date"
                   value={customTo}
                   onChange={(event) => setCustomTo(event.target.value)}
-                  className="w-40"
+                  className="w-40 rounded-full"
                 />
               </>
             ) : null}
@@ -208,6 +208,7 @@ export function LedgerTab() {
               type="button"
               variant="outline"
               size="sm"
+              className="rounded-full shadow-sm px-5"
               disabled={filteredEntries.length === 0 || ledgerQuery.isLoading}
               onClick={() => {
                 void exportReportToXlsx(exportPayload);
@@ -220,6 +221,7 @@ export function LedgerTab() {
               type="button"
               variant="outline"
               size="sm"
+              className="rounded-full shadow-sm px-5"
               disabled={filteredEntries.length === 0 || ledgerQuery.isLoading}
               onClick={() => {
                 exportReportToPdf(exportPayload);

@@ -52,10 +52,23 @@ function formatNumber(value: number): string {
 }
 
 function formatSummaryLabel(key: string): string {
+  if (key === "total_stock_qty") return "Total Stock Volume";
+  
   return key
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatSummaryValue(key: string, value: unknown): string {
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isNaN(num)) {
+    if (key.includes("amount") || key.includes("value") || key.includes("revenue") || key.includes("spend")) {
+      return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(num);
+    }
+    return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(num);
+  }
+  return String(value);
 }
 
 function groupRows(
@@ -116,14 +129,14 @@ function SummaryCards({ summary }: { summary: ReportSummary }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {entries.map(([key, value]) => (
-        <div key={key} className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+        <div key={key} className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between">
+          <p className="text-body-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">
             {formatSummaryLabel(key)}
           </p>
-          <p className="text-lg font-semibold text-foreground mt-1 tabular-nums">
-            {String(value)}
+          <p className="text-display-sm text-foreground tabular-nums leading-none">
+            {formatSummaryValue(key, value)}
           </p>
         </div>
       ))}
@@ -240,7 +253,7 @@ function InsightsSection({
       <SummaryCards summary={summary} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
           <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground mb-4">
             <CalendarDays className="size-3.5" />
             {config.key === "inventory"
@@ -260,7 +273,7 @@ function InsightsSection({
           )}
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-4">
             <TrendingUp className="size-4" />
             {config.key === "inventory"
@@ -283,7 +296,7 @@ function InsightsSection({
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-border p-6">
+      <div className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-3">
           <Lightbulb className="size-4" />
           Insights
@@ -327,7 +340,14 @@ export function ReportsView() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold text-foreground">Reports</h1>
+      <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-headline text-foreground">Reports</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Real-time insights and analytics for all modules.
+          </p>
+        </div>
+      </div>
 
       <Tabs
         value={activeTab}

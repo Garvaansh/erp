@@ -348,7 +348,7 @@ export default function ProcurementDetailPage({
     <div className="space-y-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">{po.po_number}</h1>
+          <h1 className="text-headline">{po.po_number}</h1>
           <p className="text-sm text-muted-foreground">
             Vendor: {formatVendorDisplay(po.vendor_name, po.vendor_short_name)}{" "}
             • Item: {po.item_name}
@@ -379,7 +379,7 @@ export default function ProcurementDetailPage({
         </div>
       </header>
 
-      <section className="rounded-xl border bg-background p-4">
+      <section className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">
           PO Summary
         </h2>
@@ -425,7 +425,7 @@ export default function ProcurementDetailPage({
         </dl>
       </section>
 
-      <section className="rounded-xl border bg-background p-4">
+      <section className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">
           Vendor Details
         </h2>
@@ -464,7 +464,7 @@ export default function ProcurementDetailPage({
         </dl>
       </section>
 
-      <section className="rounded-xl border bg-background p-4">
+      <section className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">
           Payment Summary
         </h2>
@@ -490,7 +490,7 @@ export default function ProcurementDetailPage({
         </dl>
       </section>
 
-      <section className="rounded-xl border bg-background p-4">
+      <section className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-medium text-muted-foreground">Batches</h2>
           <p className="text-xs text-muted-foreground">
@@ -556,7 +556,7 @@ export default function ProcurementDetailPage({
         </Table>
       </section>
 
-      <section className="rounded-xl border bg-background p-4">
+      <section className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">
           Activity Logs
         </h2>

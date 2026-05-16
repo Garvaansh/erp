@@ -31,7 +31,7 @@ export function POSummaryCard({ order }: POSummaryCardProps) {
       : 0;
 
   return (
-    <Card className="border-slate-200 bg-white">
+    <Card className="rounded-[16px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border-border bg-card">
       <CardHeader className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-lg text-slate-900">

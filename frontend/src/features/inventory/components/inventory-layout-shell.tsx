@@ -49,16 +49,16 @@ export function InventoryLayoutShell({
 
   return (
     <div className="space-y-4">
-      <header className="space-y-2">
-        <h1 className="text-xl font-semibold text-foreground">Inventory</h1>
-        <p className="text-sm text-muted-foreground">
+      <header className="space-y-2 mb-6">
+        <h1 className="text-headline text-foreground">Inventory</h1>
+        <p className="text-body-lg text-muted-foreground">
           Operational stock control across raw material, WIP, and finished goods.
         </p>
       </header>
 
       <nav
         aria-label="Inventory sections"
-        className="flex flex-wrap gap-2 border-b border-border pb-3"
+        className="flex flex-wrap gap-2 border-b border-border pb-4"
       >
         {INVENTORY_TABS.map((tab) => {
           const isActive = activeTab === tab.key;
@@ -68,6 +68,7 @@ export function InventoryLayoutShell({
               key={tab.key}
               type="button"
               variant={isActive ? "default" : "outline"}
+              className={`rounded-full px-5 ${isActive ? "shadow-md" : "hover:bg-muted"}`}
               onClick={() => router.push(tab.href)}
               aria-current={isActive ? "page" : undefined}
             >
@@ -77,7 +78,7 @@ export function InventoryLayoutShell({
         })}
       </nav>
 
-      <div>{children}</div>
+      <div className="pt-2">{children}</div>
     </div>
   );
 }

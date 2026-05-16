@@ -126,8 +126,13 @@ export function InventoryView({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-foreground">Inventory</h1>
+      <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-headline text-foreground">Inventory</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage raw materials, WIP, and finished goods.
+          </p>
+        </div>
       </div>
 
       {serviceAlert ? (

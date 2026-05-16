@@ -62,27 +62,26 @@ export function RawMaterialsOverviewPage() {
   return (
     <div className="space-y-4">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">
-            Raw Materials
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Operational inventory view for available stock, reservations, and
-            procurement coverage.
+        <div>
+          <h2 className="text-body-lg font-medium text-foreground">
+            Raw Materials Overview
+          </h2>
+          <p className="text-caption text-muted-foreground mt-1">
+            Available stock, reservations, and procurement coverage.
           </p>
         </div>
         <AddRawMaterialDialog />
       </header>
 
-      <section className="rounded-xl border bg-background">
-        <div className="flex items-center gap-3 border-b px-4 py-3">
+      <section className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+        <div className="flex items-center gap-3 border-b border-border bg-muted/20 px-5 py-4">
           <div className="relative w-full max-w-sm">
-            <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search SKU, material, specification"
-              className="pl-9"
+              placeholder="Search SKU, material, specification..."
+              className="pl-10 rounded-full border-border bg-card/50 focus-visible:ring-primary/20"
             />
           </div>
         </div>
@@ -105,13 +104,13 @@ export function RawMaterialsOverviewPage() {
               {filteredRows.map((row) => (
                 <TableRow
                   key={row.item_id}
-                  className="cursor-pointer"
+                  className="cursor-pointer hover:bg-muted/30 transition-colors"
                   onClick={() =>
                     router.push(`/inventory/raw-materials/${row.item_id}`)
                   }
                 >
-                  <TableCell className="font-mono text-xs">{row.sku}</TableCell>
-                  <TableCell className="font-medium">{row.name}</TableCell>
+                  <TableCell className="font-mono text-[13px] text-muted-foreground pl-5">{row.sku}</TableCell>
+                  <TableCell className="font-medium text-[15px]">{row.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {row.specification || "-"}
                   </TableCell>

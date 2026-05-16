@@ -69,21 +69,21 @@ function StatCard({
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm hover:shadow-md transition-all duration-200 group ${
+      className={`flex items-center gap-4 rounded-[16px] border bg-card p-5 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 transition-all duration-300 group ${
         alert ? "border-rose-200 dark:border-rose-500/30" : "border-border"
       }`}
     >
       <div
-        className={`flex size-10 items-center justify-center rounded-lg shrink-0 ${iconBg}`}
+        className={`flex size-12 items-center justify-center rounded-xl shrink-0 ${iconBg}`}
       >
-        <Icon className={`size-[18px] ${iconColor}`} />
+        <Icon className={`size-[20px] ${iconColor}`} />
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+        <p className="text-caption text-muted-foreground uppercase tracking-[0.1em] font-medium">
           {label}
         </p>
         <p
-          className={`text-xl font-semibold tabular-nums mt-0.5 ${
+          className={`text-headline tabular-nums mt-0.5 ${
             alert ? "text-rose-600 dark:text-rose-400" : "text-foreground"
           }`}
         >
@@ -174,41 +174,49 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
       {/* ── Middle row: Progress + Quick Actions ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Production progress card */}
-        <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-foreground">
+        <div className="lg:col-span-2 rounded-[16px] border border-[rgba(252,252,252,0.08)] code-well p-6 sm:p-8 shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+            <Layers className="w-48 h-48" />
+          </div>
+          <div className="flex items-center justify-between mb-6 relative z-10">
+            <h3 className="text-body-lg font-medium text-white">
               Production Output
             </h3>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-code-sm text-white/50 bg-white/10 px-3 py-1.5 rounded-full">
               Target: 20,000
             </span>
           </div>
 
-          <div className="flex items-end gap-6 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-6 sm:gap-10 mb-8 relative z-10">
             <div>
-              <p className="text-3xl font-bold text-foreground tabular-nums">
+              <p className="text-display-lg text-white tabular-nums leading-none">
                 {formatNumber(finishedWeight)}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-code-sm text-white/60 mt-3 uppercase tracking-wider">
                 Finished pipes weight
               </p>
             </div>
+            <div className="pb-1 hidden sm:block">
+              <div className="h-12 w-px bg-white/20 mx-2" />
+            </div>
             <div className="pb-1">
-              <p className="text-lg font-semibold text-muted-foreground tabular-nums">
+              <p className="text-display-md text-white/80 tabular-nums leading-none">
                 {formatNumber(rawWeight)}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Raw material</p>
+              <p className="text-code-sm text-white/60 mt-3 uppercase tracking-wider">
+                Raw material
+              </p>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="h-2 bg-primary/10 rounded-full overflow-hidden">
+          <div className="space-y-3 relative z-10">
+            <div className="h-2.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
               <div
-                className="h-full bg-gradient-to-r from-primary to-indigo-400 rounded-full transition-all duration-700"
+                className="h-full bg-gradient-to-r from-primary to-primary-deep rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(234,40,4,0.5)]"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-            <div className="flex justify-between text-[11px] text-muted-foreground">
+            <div className="flex justify-between text-code-sm text-white/50">
               <span>{progressPct}% complete</span>
               <span>{formatNumber(20000 - finishedWeight)} remaining</span>
             </div>
@@ -216,55 +224,55 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
         </div>
 
         {/* Quick actions card */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-foreground mb-3">
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-sm">
+          <h3 className="text-body-lg font-medium text-foreground mb-4">
             Quick Actions
           </h3>
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <Link
               href="/procurement"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-muted transition-colors group"
+              className="flex items-center gap-4 rounded-[12px] px-3 py-3 hover:bg-muted/50 transition-colors group border border-transparent hover:border-border"
             >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-500/15">
-                <Truck className="size-3.5 text-teal-600 dark:text-teal-400" />
+              <div className="flex size-10 items-center justify-center rounded-xl bg-teal-100 dark:bg-teal-500/15">
+                <Truck className="size-4 text-teal-600 dark:text-teal-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-foreground">
+                <p className="text-body-sm font-medium text-foreground">
                   New Order
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-caption text-muted-foreground mt-0.5">
                   Create purchase order
                 </p>
               </div>
             </Link>
             <Link
               href="/inventory"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-muted transition-colors group"
+              className="flex items-center gap-4 rounded-[12px] px-3 py-3 hover:bg-muted/50 transition-colors group border border-transparent hover:border-border"
             >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-500/15">
-                <PackagePlus className="size-3.5 text-indigo-600 dark:text-indigo-400" />
+              <div className="flex size-10 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-500/15">
+                <PackagePlus className="size-4 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-foreground">
+                <p className="text-body-sm font-medium text-foreground">
                   Update Stock
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-caption text-muted-foreground mt-0.5">
                   Inventory correction
                 </p>
               </div>
             </Link>
             <Link
               href="/inventory?action=add"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-muted transition-colors group"
+              className="flex items-center gap-4 rounded-[12px] px-3 py-3 hover:bg-muted/50 transition-colors group border border-transparent hover:border-border"
             >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-500/15">
-                <ClipboardPlus className="size-3.5 text-amber-600 dark:text-amber-400" />
+              <div className="flex size-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-500/15">
+                <ClipboardPlus className="size-4 text-amber-600 dark:text-amber-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-foreground">
+                <p className="text-body-sm font-medium text-foreground">
                   Add Item
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-caption text-muted-foreground mt-0.5">
                   Register new SKU
                 </p>
               </div>
@@ -274,9 +282,9 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
       </div>
 
       {/* ── Activity Feed ── */}
-      <div className="rounded-xl border border-border bg-card shadow-sm">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h3 className="text-sm font-semibold text-foreground">
+      <div className="rounded-[16px] border border-border bg-card shadow-sm">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-border">
+          <h3 className="text-body-lg font-medium text-foreground">
             Recent Activity
           </h3>
           <Link
@@ -299,7 +307,7 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
             {recentActivity.slice(0, 5).map((item, i) => (
               <div
                 key={item.journal_id || i}
-                className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors"
+                className="flex items-center gap-4 px-6 py-4 hover:bg-muted/30 transition-colors"
               >
                 <StatusDot
                   status={item.scrap_qty > 0 ? "FLAGGED" : "COMPLETED"}
@@ -318,7 +326,7 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
                     -{item.scrap_qty}
                   </span>
                 )}
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                <span className="text-caption text-muted-foreground whitespace-nowrap ml-4">
                   {timeAgo(item.created_at)}
                 </span>
               </div>
@@ -328,33 +336,33 @@ export function DashboardSummaryCard({ summary }: DashboardSummaryCardProps) {
       </div>
 
       {/* ── Bottom links row ── */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <Link
           href="/procurement/vendors"
-          className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm hover:shadow-md transition-all group"
+          className="flex items-center gap-4 rounded-[16px] border border-border bg-card p-5 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 transition-all group"
         >
-          <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-500/15">
-            <Building2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+          <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-500/15">
+            <Building2 className="size-5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground tabular-nums">
+            <p className="text-headline text-foreground tabular-nums">
               {totalVendors}
             </p>
-            <p className="text-[11px] text-muted-foreground">Active Vendors</p>
+            <p className="text-caption text-muted-foreground uppercase tracking-wide mt-0.5">Active Vendors</p>
           </div>
         </Link>
         <Link
           href="/logs"
-          className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm hover:shadow-md transition-all group"
+          className="flex items-center gap-4 rounded-[16px] border border-border bg-card p-5 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 transition-all group"
         >
-          <div className="flex size-9 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-500/15">
-            <Building2 className="size-4 text-violet-600 dark:text-violet-400" />
+          <div className="flex size-12 items-center justify-center rounded-xl bg-violet-100 dark:bg-violet-500/15">
+            <ClipboardPlus className="size-5 text-violet-600 dark:text-violet-400" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground tabular-nums">
+            <p className="text-headline text-foreground tabular-nums">
               {recentActivity.length}
             </p>
-            <p className="text-[11px] text-muted-foreground">Recent Logs</p>
+            <p className="text-caption text-muted-foreground uppercase tracking-wide mt-0.5">Recent Logs</p>
           </div>
         </Link>
       </div>

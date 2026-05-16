@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist, JetBrains_Mono } from "next/font/google";
 import { AppToaster } from "@/components/app-toaster";
-import { ThemeProvider } from "@/components/theme-provider";
 import { ReactQueryProvider } from "@/lib/react-query/provider";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+const display = Bricolage_Grotesque({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+});
+
+const body = Geist({
+  variable: "--font-body",
   subsets: ["latin"],
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
+const mono = JetBrains_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
 });
 
@@ -29,36 +34,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        {/* Inline script to prevent flash of wrong theme */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var theme = localStorage.getItem('reva-erp-theme');
-                  if (!theme) {
-                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                  }
-                  if (theme === 'dark') {
-                    document.documentElement.classList.add('dark');
-                  }
-                } catch(e) {}
-              })();
-            `,
-          }}
-        />
-      </head>
       <body className="min-h-full bg-background text-foreground">
-        <ThemeProvider>
-          <ReactQueryProvider>
-            {children}
-            <AppToaster />
-          </ReactQueryProvider>
-        </ThemeProvider>
+        <ReactQueryProvider>
+          {children}
+          <AppToaster />
+        </ReactQueryProvider>
       </body>
     </html>
   );

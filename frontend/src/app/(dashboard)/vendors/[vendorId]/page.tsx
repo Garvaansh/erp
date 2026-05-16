@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Building2 } from "lucide-react";
 import { VendorEditDialog } from "@/features/vendors/components/vendor-edit-dialog";
 import {
   Table,
@@ -55,64 +56,75 @@ export default function VendorDetailPage({ params }: VendorDetailPageProps) {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">{vendor.name}</h1>
+      <header className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-headline tracking-tight">{vendor.name}</h1>
+            <Badge variant={vendor.is_active ? "default" : "secondary"}>
+              {vendor.is_active ? "Active" : "Archived"}
+            </Badge>
+          </div>
           <p className="text-sm text-muted-foreground">Vendor code: {vendor.code}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={vendor.is_active ? "default" : "secondary"}>
-            {vendor.is_active ? "Active" : "Archived"}
-          </Badge>
-          <Button type="button" variant="outline" onClick={() => setShowEdit(true)}>
+        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2">
+          <Button type="button" variant="outline" className="rounded-full shadow-sm px-6" onClick={() => setShowEdit(true)}>
             Edit
           </Button>
-          <Button type="button" variant="outline" onClick={toggleArchive} disabled={updateVendorMutation.isPending}>
+          <Button type="button" variant="outline" className="rounded-full shadow-sm px-6" onClick={toggleArchive} disabled={updateVendorMutation.isPending}>
             {vendor.is_active ? "Archive" : "Unarchive"}
           </Button>
           <Link href="/procurement/vendors">
-            <Button variant="outline">Back</Button>
+            <Button variant="outline" className="rounded-full shadow-sm px-6">Back</Button>
           </Link>
         </div>
       </header>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Vendor Snapshot</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <div className="rounded-[16px] border border-[rgba(252,252,252,0.08)] code-well p-6 sm:p-8 shadow-lg relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <Building2 className="w-48 h-48 text-white" />
+        </div>
+        <div className="mb-6 relative z-10">
+          <h3 className="text-body-lg font-medium text-white">Vendor Snapshot</h3>
+        </div>
+        <div className="grid gap-8 text-sm sm:grid-cols-2 lg:grid-cols-4 relative z-10">
           <div>
-            <p className="text-muted-foreground">Contact Person</p>
-            <p className="font-medium">{vendor.contact_person || "-"}</p>
+            <p className="text-code-sm text-white/60 uppercase tracking-wider mb-2">Contact Person</p>
+            <p className="text-body-lg text-white">{vendor.contact_person || "-"}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Phone</p>
-            <p className="font-medium">{vendor.phone || "-"}</p>
+            <p className="text-code-sm text-white/60 uppercase tracking-wider mb-2">Phone</p>
+            <p className="text-body-lg text-white">{vendor.phone || "-"}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Email</p>
-            <p className="font-medium">{vendor.email || "-"}</p>
+            <p className="text-code-sm text-white/60 uppercase tracking-wider mb-2">Email</p>
+            <p className="text-body-lg text-white">{vendor.email || "-"}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">GSTIN</p>
-            <p className="font-medium">{vendor.gstin || "-"}</p>
+            <p className="text-code-sm text-white/60 uppercase tracking-wider mb-2">GSTIN</p>
+            <p className="text-body-lg text-white">{vendor.gstin || "-"}</p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">Total Purchased</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-semibold">{formatCurrency(summary.total_purchased)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-semibold">{formatCurrency(summary.total_paid)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">Total Due</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-semibold text-destructive">{formatCurrency(summary.total_due)}</p></CardContent>
-        </Card>
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col justify-between">
+          <h3 className="text-body-lg font-medium text-foreground mb-4">Total Purchased</h3>
+          <p className="text-display-sm sm:text-display-md text-foreground tabular-nums leading-none">
+            {formatCurrency(summary.total_purchased)}
+          </p>
+        </div>
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col justify-between">
+          <h3 className="text-body-lg font-medium text-foreground mb-4">Total Paid</h3>
+          <p className="text-display-sm sm:text-display-md text-foreground tabular-nums leading-none">
+            {formatCurrency(summary.total_paid)}
+          </p>
+        </div>
+        <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden flex flex-col justify-between">
+          <h3 className="text-body-lg font-medium text-foreground mb-4">Total Due</h3>
+          <p className="text-display-sm sm:text-display-md text-destructive tabular-nums leading-none">
+            {formatCurrency(summary.total_due)}
+          </p>
+        </div>
       </div>
 
       <Tabs defaultValue="pos">
@@ -120,7 +132,7 @@ export default function VendorDetailPage({ params }: VendorDetailPageProps) {
           <TabsTrigger value="pos">Recent POs</TabsTrigger>
           <TabsTrigger value="payments">Recent Payments</TabsTrigger>
         </TabsList>
-        <TabsContent value="pos" className="rounded border p-3">
+        <TabsContent value="pos" className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
           {recent_pos.length === 0 ? (
             <p className="text-sm text-muted-foreground">No purchase orders yet.</p>
           ) : (
@@ -135,7 +147,7 @@ export default function VendorDetailPage({ params }: VendorDetailPageProps) {
             </Table>
           )}
         </TabsContent>
-        <TabsContent value="payments" className="rounded border p-3">
+        <TabsContent value="payments" className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
           {recent_payments.length === 0 ? (
             <p className="text-sm text-muted-foreground">No payments yet.</p>
           ) : (

@@ -15,13 +15,10 @@ import {
   Building2,
   BarChart3,
   ClipboardList,
-  Sun,
-  Moon,
   Settings,
 } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useAuthStore } from "@/stores/auth.store";
-import { useTheme } from "@/components/theme-provider";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
@@ -98,16 +95,12 @@ function SidebarNavItem({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-[7px] text-[13px] transition-all duration-150 ${
+      className={`group relative flex w-full items-center gap-3 rounded-full border px-4 py-2 text-[14px] transition-colors ${
         active
-          ? "bg-accent text-accent-foreground font-medium"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          ? "border-white/10 bg-white/10 text-white font-medium"
+          : "border-transparent text-white/70 hover:bg-white/10 hover:text-white"
       }`}
     >
-      {/* Active indicator bar */}
-      {active && (
-        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-primary" />
-      )}
       <Icon className="size-4 shrink-0" />
       {item.label}
     </button>
@@ -132,20 +125,20 @@ function SidebarContent({
   return (
     <>
       {/* Brand */}
-      <div className="flex items-center gap-3 px-5 h-12 shrink-0 border-b border-border">
-        <div className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-violet-500 text-white shadow-sm shadow-primary/20">
+      <div className="flex items-center gap-3 px-6 h-14 shrink-0 border-b border-white/10">
+        <div className="flex size-8 items-center justify-center rounded-full bg-white text-primary">
           <span className="text-xs font-bold">R</span>
         </div>
-        <span className="text-sm font-semibold text-foreground tracking-tight">
+        <span className="text-sm font-semibold text-white tracking-tight">
           Reva ERP
         </span>
       </div>
 
       {/* Nav sections */}
-      <nav className="flex-1 overflow-y-auto px-3 pt-4 pb-2">
+      <nav className="flex-1 overflow-y-auto px-4 pt-6 pb-3">
         {NAV_SECTIONS.map((section, i) => (
-          <div key={section.title} className={i > 0 ? "mt-6" : ""}>
-            <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/60">
+          <div key={section.title} className={i > 0 ? "mt-7" : ""}>
+            <p className="px-4 mb-2 text-caption text-white/50 uppercase tracking-[0.18em]">
               {section.title}
             </p>
             <div className="space-y-0.5">
@@ -168,41 +161,38 @@ function SidebarContent({
       </nav>
 
       {/* Bottom user card */}
-      <div className="border-t border-border px-3 py-3 space-y-1">
+      <div className="border-t border-white/10 px-4 py-4 space-y-2">
         <button
           type="button"
           onClick={() => onNav("/settings")}
-          className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-[7px] text-[13px] transition-all duration-150 ${
+          className={`group relative flex w-full items-center gap-3 rounded-full border px-4 py-2 text-[14px] transition-colors ${
             pathname === "/settings"
-              ? "bg-accent text-accent-foreground font-medium"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              ? "border-white/10 bg-white/10 text-white font-medium"
+              : "border-transparent text-white/70 hover:bg-white/10 hover:text-white"
           }`}
         >
-          {pathname === "/settings" && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-primary" />
-          )}
           <Settings className="size-4 shrink-0" />
           Settings
         </button>
         <button
           type="button"
           onClick={onLogout}
-          className="group flex w-full items-center gap-3 rounded-lg px-3 py-[7px] text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150"
+          className="group flex w-full items-center gap-3 rounded-full border border-transparent px-4 py-2 text-[14px] text-white/70 hover:bg-white/10 hover:text-white transition-colors"
         >
           <LogOut className="size-4 shrink-0" />
           Sign Out
         </button>
 
         {/* Mini user card */}
-        <div className="flex items-center gap-2.5 px-3 pt-2 mt-1 border-t border-border">
-          <div className="size-7 rounded-full bg-gradient-to-br from-primary to-violet-500 flex items-center justify-center text-[10px] font-semibold text-white shrink-0">
+        <div className="flex items-center gap-3 rounded-[12px] border border-white/10 bg-white/5 px-4 py-3 mt-2">
+          <div className="size-8 rounded-full bg-white text-primary flex items-center justify-center text-[11px] font-bold shrink-0">
             {userInitial}
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-foreground leading-none truncate">
+            <p className="text-sm font-semibold text-white leading-none truncate">
               {user?.email?.split("@")[0] || "User"}
             </p>
-            <p className="text-[10px] text-muted-foreground capitalize mt-0.5">
+            <p className="text-[12px] text-white/60 capitalize mt-1">
               {user?.role_code?.toLowerCase() || "staff"}
             </p>
           </div>
@@ -221,7 +211,6 @@ export function AppShell({ children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const clearAuthSession = useAuthStore((state) => state.clearAuthSession);
   const user = useAuthStore((state) => state.user);
-  const { theme, toggleTheme } = useTheme();
 
   const logoutMutation = useMutation({
     mutationFn: logout,
@@ -255,7 +244,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* ── Desktop Sidebar ── */}
-      <aside className="hidden md:flex md:w-[240px] lg:w-[260px] flex-col shrink-0 border-r border-border bg-card/50">
+      <aside className="hidden md:flex md:w-[248px] lg:w-[272px] flex-col shrink-0 border-r border-white/10 hero-band text-white">
         <SidebarContent
           pathname={pathname}
           onNav={handleNav}
@@ -271,12 +260,12 @@ export function AppShell({ children }: AppShellProps) {
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-[280px] bg-card border-r border-border flex flex-col shadow-2xl">
+          <aside className="absolute left-0 top-0 bottom-0 w-[288px] hero-band text-white border-r border-white/10 flex flex-col shadow-2xl">
             <div className="absolute right-3 top-3 z-10">
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <X className="size-4" />
               </button>
@@ -292,45 +281,30 @@ export function AppShell({ children }: AppShellProps) {
       )}
 
       {/* ── Main Content ── */}
-      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-        {/* Compact header */}
-        <header className="flex items-center gap-3 border-b border-border bg-card/50 px-4 md:px-6 h-12 shrink-0">
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden bg-[#fbfbfb]">
+        {/* Header */}
+        <header className="flex items-center gap-4 bg-card/80 backdrop-blur-xl border-b border-border px-4 md:px-8 h-[72px] shrink-0 sticky top-0 z-30 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
           {/* Mobile menu */}
           <button
             type="button"
-            className="md:hidden p-1.5 -ml-1 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+            className="md:hidden p-2 -ml-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
             onClick={() => setMobileOpen(true)}
           >
             <Menu className="size-4" />
           </button>
 
           {/* Page title */}
-          <h1 className="text-sm font-semibold text-foreground">{pageTitle}</h1>
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-6 rounded-full bg-primary/80" />
+            <h1 className="text-headline text-foreground">{pageTitle}</h1>
+          </div>
 
           <div className="flex-1" />
-
-          {/* Theme toggle */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            title={
-              theme === "dark"
-                ? "Switch to light mode"
-                : "Switch to dark mode"
-            }
-          >
-            {theme === "dark" ? (
-              <Sun className="size-4" />
-            ) : (
-              <Moon className="size-4" />
-            )}
-          </button>
         </header>
 
         {/* Page content with max-width constraint */}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[1400px] mx-auto p-4 md:p-6 lg:p-8">
+          <div className="max-w-[1280px] mx-auto p-5 md:p-8 lg:p-10">
             {children}
           </div>
         </main>

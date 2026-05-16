@@ -765,19 +765,19 @@ export default function ProcurementPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Procurement</h1>
-          <p className="text-[13px] text-muted-foreground mt-0.5">
+          <h1 className="text-headline text-foreground">Procurement</h1>
+          <p className="text-body-lg text-muted-foreground mt-0.5">
             Purchase orders, receiving, and closures.
           </p>
         </div>
-        <Button size="sm" onClick={openCreateDialog} disabled={createMutation.isPending}>
+        <Button size="sm" onClick={openCreateDialog} disabled={createMutation.isPending} className="rounded-full px-6 shadow-md">
           + New PO
         </Button>
       </header>
 
-      <section className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+      <section className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
           <Input
             value={searchTerm}

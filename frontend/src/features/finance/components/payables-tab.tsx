@@ -91,14 +91,14 @@ export function PayablesTab({
 
   return (
     <div className="space-y-4" data-testid="payables-tab-panel">
-      <div className="rounded-[24px] border border-border p-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-medium text-foreground">Outstanding Payables</p>
+            <p className="text-body-lg font-medium text-foreground">Outstanding Payables</p>
             <p className="text-sm text-muted-foreground mt-1">
               Review vendors with open balances and log payments against unpaid purchase orders.
             </p>
           </div>
-          <div className="text-sm text-muted-foreground">
+          <div className="text-body-sm font-medium text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-full">
             {vendors.length} vendors • {totalUnpaidPOs} unpaid POs
           </div>
         </div>

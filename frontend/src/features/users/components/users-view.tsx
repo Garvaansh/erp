@@ -79,23 +79,23 @@ export function UsersView() {
   return (
     <div className="space-y-6">
       {/* Header with inline stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold text-foreground">Users</h1>
+      <div className="rounded-[16px] border border-border bg-card p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <h1 className="text-headline text-foreground">Users</h1>
           <div className="hidden sm:flex items-center gap-2">
-            <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded-md tabular-nums">
+            <span className="text-xs text-muted-foreground px-3 py-1 bg-muted rounded-full tabular-nums">
               {users.length} total
             </span>
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 px-2 py-1 bg-emerald-100 dark:bg-emerald-500/15 rounded-md tabular-nums">
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 px-3 py-1 bg-emerald-100 dark:bg-emerald-500/15 rounded-full tabular-nums">
               {totals.active} active
             </span>
-            <span className="text-xs text-violet-600 dark:text-violet-400 px-2 py-1 bg-violet-100 dark:bg-violet-500/15 rounded-md tabular-nums">
+            <span className="text-xs text-violet-600 dark:text-violet-400 px-3 py-1 bg-violet-100 dark:bg-violet-500/15 rounded-full tabular-nums">
               {totals.admins} admins
             </span>
           </div>
         </div>
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <UserPlus className="size-3.5" />
+        <Button onClick={() => setCreating(true)} className="rounded-full shadow-md px-6">
+          <UserPlus className="size-4 mr-2" />
           Create User
         </Button>
       </div>
@@ -160,22 +160,23 @@ export function UsersView() {
       )}
 
       {/* Table card */}
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+      {/* Table card */}
+      <div className="rounded-[16px] border border-border bg-card shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 border-b border-border bg-muted/20">
           <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search users…"
-              className="w-full rounded-lg border border-border pl-9 pr-3 py-1.5 text-sm bg-background text-foreground placeholder:text-muted-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+              className="w-full rounded-full border border-border pl-10 pr-3 py-1.5 text-sm bg-card/50 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
             />
           </div>
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as UserFilter)}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm bg-background text-foreground outline-none focus:border-ring"
+            className="rounded-full border border-border px-3 py-1.5 text-sm bg-background text-foreground outline-none focus:border-primary"
           >
             <option value="active">Active</option>
             <option value="archived">Archived</option>
@@ -208,7 +209,7 @@ export function UsersView() {
                   <td className="py-2.5 px-4 text-[13px] text-foreground font-medium">{user.name}</td>
                   <td className="py-2.5 px-4 text-[13px] text-muted-foreground">{user.email}</td>
                   <td className="py-2.5 px-4">
-                    <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md ${roleBadgeColor(user.role_code)}`}>
+                    <span className={`inline-flex items-center text-[11px] font-medium px-2.5 py-1 rounded-full ${roleBadgeColor(user.role_code)}`}>
                       {roleLabel(user.role_code)}
                     </span>
                   </td>
@@ -221,7 +222,7 @@ export function UsersView() {
                     </span>
                   </td>
                   <td className="py-2.5 px-4 text-right">
-                    <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>
+                    <Button variant="outline" size="sm" className="rounded-full shadow-sm" onClick={() => setEditingUser(user)}>
                       Edit
                     </Button>
                   </td>

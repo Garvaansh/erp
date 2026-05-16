@@ -537,7 +537,7 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]" id="wip-entry-form">
-        <Card>
+        <Card className="rounded-[16px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border-border">
           <CardHeader>
             <CardTitle>Log Production Entry</CardTitle>
           </CardHeader>
@@ -825,7 +825,7 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
           </CardContent>
         </Card>
 
-        <Card className="lg:sticky lg:top-20 lg:h-fit">
+        <Card className="lg:sticky lg:top-20 lg:h-fit rounded-[16px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border-border">
           <CardHeader>
             <CardTitle>Live Calculation</CardTitle>
           </CardHeader>
@@ -889,7 +889,7 @@ export function WIPActivityTab({ isAdmin = false }: WIPActivityTabProps) {
         </Card>
       </div>
 
-      <Card>
+      <Card className="rounded-[16px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border-border">
         <CardHeader>
           <CardTitle>Recent Entries</CardTitle>
         </CardHeader>
