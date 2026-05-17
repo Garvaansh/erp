@@ -120,6 +120,25 @@ func GenerateBundleID(ctx context.Context, tx pgx.Tx) (string, int32, error) {
 	return generateInventoryIDByPrefix(ctx, tx, "BNDL")
 }
 
+// GenerateSalesOrderID generates a sales-order human ID in the format SO-YYMMDD-NNN.
+func GenerateSalesOrderID(ctx context.Context, tx pgx.Tx) (string, error) {
+	dayToken := time.Now().UTC().Format(dayLayout)
+	seq, err := nextDailySequenceByPattern(
+		ctx,
+		tx,
+		"sales:order",
+		"sales_orders",
+		"order_number",
+		"SO-"+dayToken+"-%",
+		3,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("SO-%s-%03d", dayToken, seq), nil
+}
+
 // GenerateFinishedGoodSKU generates a deterministic finished-goods SKU.
 // Format: FGP-001, FGP-002.
 func GenerateFinishedGoodSKU(ctx context.Context, tx pgx.Tx) (string, error) {

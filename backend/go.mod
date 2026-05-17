@@ -3,6 +3,7 @@ module github.com/erp/backend
 go 1.26.1
 
 require (
+	github.com/adrg/strutil v0.3.1
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/golang-jwt/jwt/v5 v5.3.1
