@@ -17,6 +17,7 @@ import {
   ClipboardList,
   Settings,
   Factory,
+  FileText,
 } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useAuthStore } from "@/stores/auth.store";
@@ -46,6 +47,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/inventory", label: "Inventory", icon: PackageSearch },
       { href: "/production/wip", label: "Production", icon: Factory },
       { href: "/procurement", label: "Procurement", icon: Truck },
+      { href: "/orders", label: "Orders", icon: FileText },
       { href: "/procurement/vendors", label: "Vendors", icon: Building2 },
     ],
   },
