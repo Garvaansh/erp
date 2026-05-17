@@ -17,8 +17,6 @@ erp_archive/
 **/bin/
 **/*.exe
 **/*.out
-**/*.test
-.air.toml
 
 # Node / Next
 **/node_modules/

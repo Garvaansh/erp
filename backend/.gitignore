@@ -12,9 +12,6 @@ Makefile
 .vscode/
 .idea/
 
-# Test files
-*_test.go
-
 # Environment
 .env
 .env.local
