@@ -35,9 +35,13 @@ type Querier interface {
 	// =============================================================================
 	CreateProductionRun(ctx context.Context, arg CreateProductionRunParams) (ProductionRun, error)
 	CreatePurchaseOrder(ctx context.Context, arg CreatePurchaseOrderParams) (PurchaseOrder, error)
+	CreateSalesBatchAllocation(ctx context.Context, arg CreateSalesBatchAllocationParams) (SalesBatchAllocation, error)
+	CreateSalesOrder(ctx context.Context, arg CreateSalesOrderParams) (SalesOrder, error)
+	CreateSalesOrderLine(ctx context.Context, arg CreateSalesOrderLineParams) (SalesOrderLine, error)
 	CreateUserCommand(ctx context.Context, arg CreateUserCommandParams) (CreateUserCommandRow, error)
 	CreateVendor(ctx context.Context, arg CreateVendorParams) (Vendor, error)
 	CreateWIPJournal(ctx context.Context, arg CreateWIPJournalParams) (ProductionJournal, error)
+	DecrementBatchReservedQty(ctx context.Context, arg DecrementBatchReservedQtyParams) (InventoryBatch, error)
 	// Deducts qty_to_deduct from remaining_qty in a single atomic operation.
 	// PostgreSQL computes the new remaining — the caller never passes a pre-calculated value.
 	// Auto-exhausts the batch when remaining_qty reaches zero after deduction.
@@ -50,6 +54,7 @@ type Querier interface {
 	// The FOR UPDATE lock on GetFIFOBatchesForUpdate already guarantees no concurrent
 	// modification. remaining_qty > 0 is the correct guard here.
 	DeductBatchForProduction(ctx context.Context, arg DeductBatchForProductionParams) (DeductBatchForProductionRow, error)
+	DeductBatchRemainingQty(ctx context.Context, arg DeductBatchRemainingQtyParams) (InventoryBatch, error)
 	ExhaustBatchByID(ctx context.Context, id pgtype.UUID) (InventoryBatch, error)
 	FinalizeBatchReservation(ctx context.Context, arg FinalizeBatchReservationParams) (InventoryBatch, error)
 	GetActiveBatchesByItem(ctx context.Context, itemID pgtype.UUID) ([]GetActiveBatchesByItemRow, error)
@@ -83,6 +88,10 @@ type Querier interface {
 	GetBatchUpstreamLineage(ctx context.Context, targetBatchID pgtype.UUID) ([]GetBatchUpstreamLineageRow, error)
 	// Gets vendor traceability for a RAW batch via its parent_po_id.
 	GetBatchVendorInfo(ctx context.Context, id pgtype.UUID) (GetBatchVendorInfoRow, error)
+	GetCustomerByID(ctx context.Context, id pgtype.UUID) (Customer, error)
+	GetCustomerByNormalizedGST(ctx context.Context, normalizedGst pgtype.Text) (Customer, error)
+	GetCustomerByNormalizedPhone(ctx context.Context, normalizedPhone pgtype.Text) (Customer, error)
+	GetCustomerByNormalizedWhatsApp(ctx context.Context, normalizedWhatsapp pgtype.Text) (Customer, error)
 	// =============================================================================
 	// SECTION 1 — FIFO BATCH ALLOCATION
 	// =============================================================================
@@ -103,6 +112,7 @@ type Querier interface {
 	// Hits idx_production_runs_output_item_id + idx_batch_consumptions_production_run_id.
 	GetFinishedGoodProductionHistory(ctx context.Context, arg GetFinishedGoodProductionHistoryParams) ([]GetFinishedGoodProductionHistoryRow, error)
 	GetFinishedGoodRecentPolishingOutput(ctx context.Context, arg GetFinishedGoodRecentPolishingOutputParams) ([]GetFinishedGoodRecentPolishingOutputRow, error)
+	GetFinishedGoodReservationSummary(ctx context.Context, itemID pgtype.UUID) (GetFinishedGoodReservationSummaryRow, error)
 	GetFinishedGoodSourceMoldedBatches(ctx context.Context, itemID pgtype.UUID) ([]GetFinishedGoodSourceMoldedBatchesRow, error)
 	GetFinishedGoodSourceRawBatches(ctx context.Context, itemID pgtype.UUID) ([]GetFinishedGoodSourceRawBatchesRow, error)
 	GetFinishedGoodSummary(ctx context.Context, id pgtype.UUID) (GetFinishedGoodSummaryRow, error)
@@ -122,7 +132,13 @@ type Querier interface {
 	GetRawMaterialMaster(ctx context.Context) ([]GetRawMaterialMasterRow, error)
 	GetRawMaterialSummary(ctx context.Context, id pgtype.UUID) (GetRawMaterialSummaryRow, error)
 	GetRecentActivity(ctx context.Context) ([]GetRecentActivityRow, error)
+	GetReservableFinishedBatchesForUpdate(ctx context.Context, itemID pgtype.UUID) ([]GetReservableFinishedBatchesForUpdateRow, error)
 	GetRoleByCode(ctx context.Context, code string) (GetRoleByCodeRow, error)
+	GetSalesOrderByID(ctx context.Context, id pgtype.UUID) (SalesOrder, error)
+	GetSalesOrderByIDForUpdate(ctx context.Context, id pgtype.UUID) (SalesOrder, error)
+	GetSalesOrderDetail(ctx context.Context, id pgtype.UUID) (GetSalesOrderDetailRow, error)
+	GetSalesOrderLineByIDForUpdate(ctx context.Context, id pgtype.UUID) (SalesOrderLine, error)
+	GetSalesOrderLineDetails(ctx context.Context, salesOrderID pgtype.UUID) ([]GetSalesOrderLineDetailsRow, error)
 	GetSelectableItems(ctx context.Context) ([]GetSelectableItemsRow, error)
 	// =============================================================================
 	// SECTION 5 — AGGREGATED INVENTORY SUPPORT
@@ -141,13 +157,27 @@ type Querier interface {
 	GetVendorFinancialSummary(ctx context.Context, dollar_1 pgtype.UUID) (GetVendorFinancialSummaryRow, error)
 	GetVendorRecentPOs(ctx context.Context, vendorID pgtype.UUID) ([]GetVendorRecentPOsRow, error)
 	GetVendorRecentPayments(ctx context.Context, vendorID pgtype.UUID) ([]GetVendorRecentPaymentsRow, error)
+	IncrementBatchReservedQty(ctx context.Context, arg IncrementBatchReservedQtyParams) (InventoryBatch, error)
+	InsertCustomer(ctx context.Context, arg InsertCustomerParams) (Customer, error)
+	InsertCustomerAlias(ctx context.Context, arg InsertCustomerAliasParams) error
 	InsertPurchaseOrderLog(ctx context.Context, arg InsertPurchaseOrderLogParams) (PurchaseOrderLog, error)
 	ListActiveItemsByCategory(ctx context.Context, arg ListActiveItemsByCategoryParams) ([]Item, error)
+	ListAllocationsForBatch(ctx context.Context, inventoryBatchID pgtype.UUID) ([]ListAllocationsForBatchRow, error)
+	ListAllocationsForLineForUpdate(ctx context.Context, salesOrderLineID pgtype.UUID) ([]ListAllocationsForLineForUpdateRow, error)
+	ListAllocationsForOrder(ctx context.Context, salesOrderID pgtype.UUID) ([]ListAllocationsForOrderRow, error)
+	ListAllocationsForOrderForUpdate(ctx context.Context, salesOrderID pgtype.UUID) ([]ListAllocationsForOrderForUpdateRow, error)
+	ListCustomerFuzzyCandidates(ctx context.Context, arg ListCustomerFuzzyCandidatesParams) ([]ListCustomerFuzzyCandidatesRow, error)
+	ListCustomerSearchCandidates(ctx context.Context, arg ListCustomerSearchCandidatesParams) ([]ListCustomerSearchCandidatesRow, error)
+	ListCustomersByNormalizedAlias(ctx context.Context, normalizedAlias string) ([]Customer, error)
+	ListFinishedGoodReservations(ctx context.Context, itemID pgtype.UUID) ([]ListFinishedGoodReservationsRow, error)
 	ListPendingApprovals(ctx context.Context, arg ListPendingApprovalsParams) ([]ListPendingApprovalsRow, error)
 	// Newest first. Offset-based pagination (limit + offset). Switch to cursor
 	// pagination when production history volumes grow large.
 	// Optionally filter by output_item_id (pass NULL to list all).
 	ListProductionRuns(ctx context.Context, arg ListProductionRunsParams) ([]ListProductionRunsRow, error)
+	ListSalesOrderLinesByOrder(ctx context.Context, salesOrderID pgtype.UUID) ([]SalesOrderLine, error)
+	ListSalesOrderLinesByOrderForUpdate(ctx context.Context, salesOrderID pgtype.UUID) ([]SalesOrderLine, error)
+	ListSalesOrders(ctx context.Context, arg ListSalesOrdersParams) ([]ListSalesOrdersRow, error)
 	ListTransactionsByBatch(ctx context.Context, arg ListTransactionsByBatchParams) ([]InventoryTransaction, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
 	ListVariantsByParent(ctx context.Context, arg ListVariantsByParentParams) ([]Item, error)
@@ -155,13 +185,17 @@ type Querier interface {
 	ListWIPActivityEntries(ctx context.Context, arg ListWIPActivityEntriesParams) ([]ListWIPActivityEntriesRow, error)
 	RecordTransaction(ctx context.Context, arg RecordTransactionParams) (InventoryTransaction, error)
 	RejectJournal(ctx context.Context, arg RejectJournalParams) (ProductionJournal, error)
+	ReleaseAllocations(ctx context.Context, arg ReleaseAllocationsParams) ([]SalesBatchAllocation, error)
 	ReleaseBatchReservation(ctx context.Context, arg ReleaseBatchReservationParams) (InventoryBatch, error)
 	ReserveBatchStock(ctx context.Context, arg ReserveBatchStockParams) (InventoryBatch, error)
 	SetBatchStatus(ctx context.Context, arg SetBatchStatusParams) (InventoryBatch, error)
+	UpdateAllocationDispatch(ctx context.Context, arg UpdateAllocationDispatchParams) (SalesBatchAllocation, error)
 	UpdateBatchQuantity(ctx context.Context, arg UpdateBatchQuantityParams) (InventoryBatch, error)
 	UpdateInventoryBatchStatus(ctx context.Context, arg UpdateInventoryBatchStatusParams) (InventoryBatch, error)
 	UpdateItemThreshold(ctx context.Context, arg UpdateItemThresholdParams) (Item, error)
+	UpdateOrderDispatchProgress(ctx context.Context, arg UpdateOrderDispatchProgressParams) (SalesOrderLine, error)
 	UpdatePurchaseOrder(ctx context.Context, arg UpdatePurchaseOrderParams) (PurchaseOrder, error)
+	UpdateSalesOrderStatus(ctx context.Context, arg UpdateSalesOrderStatusParams) (SalesOrder, error)
 	UpdateUserCommand(ctx context.Context, arg UpdateUserCommandParams) (UpdateUserCommandRow, error)
 	UpdateVendorMutableFields(ctx context.Context, arg UpdateVendorMutableFieldsParams) (Vendor, error)
 }

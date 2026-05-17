@@ -481,6 +481,32 @@ type BomVersion struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Customer struct {
+	ID                 pgtype.UUID        `json:"id"`
+	DisplayName        string             `json:"display_name"`
+	NormalizedName     string             `json:"normalized_name"`
+	PhoneNumber        pgtype.Text        `json:"phone_number"`
+	NormalizedPhone    pgtype.Text        `json:"normalized_phone"`
+	WhatsappNumber     pgtype.Text        `json:"whatsapp_number"`
+	NormalizedWhatsapp pgtype.Text        `json:"normalized_whatsapp"`
+	Email              pgtype.Text        `json:"email"`
+	GstNumber          pgtype.Text        `json:"gst_number"`
+	NormalizedGst      pgtype.Text        `json:"normalized_gst"`
+	CompanyName        pgtype.Text        `json:"company_name"`
+	Notes              pgtype.Text        `json:"notes"`
+	IsActive           bool               `json:"is_active"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CustomerAlias struct {
+	ID              pgtype.UUID        `json:"id"`
+	CustomerID      pgtype.UUID        `json:"customer_id"`
+	Alias           string             `json:"alias"`
+	NormalizedAlias string             `json:"normalized_alias"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type InventoryBatch struct {
 	ID            pgtype.UUID        `json:"id"`
 	ItemID        pgtype.UUID        `json:"item_id"`
@@ -629,6 +655,45 @@ type Role struct {
 	Code      string             `json:"code"`
 	Name      string             `json:"name"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SalesBatchAllocation struct {
+	ID               pgtype.UUID        `json:"id"`
+	SalesOrderLineID pgtype.UUID        `json:"sales_order_line_id"`
+	InventoryBatchID pgtype.UUID        `json:"inventory_batch_id"`
+	AllocatedQty     pgtype.Numeric     `json:"allocated_qty"`
+	DispatchedQty    pgtype.Numeric     `json:"dispatched_qty"`
+	Status           string             `json:"status"`
+	ReservedAt       pgtype.Timestamptz `json:"reserved_at"`
+	DispatchedAt     pgtype.Timestamptz `json:"dispatched_at"`
+	ReleasedAt       pgtype.Timestamptz `json:"released_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type SalesOrder struct {
+	ID           pgtype.UUID        `json:"id"`
+	OrderNumber  string             `json:"order_number"`
+	CustomerID   pgtype.UUID        `json:"customer_id"`
+	Status       string             `json:"status"`
+	Notes        pgtype.Text        `json:"notes"`
+	OrderDate    pgtype.Timestamptz `json:"order_date"`
+	ReservedAt   pgtype.Timestamptz `json:"reserved_at"`
+	DispatchedAt pgtype.Timestamptz `json:"dispatched_at"`
+	CancelledAt  pgtype.Timestamptz `json:"cancelled_at"`
+	CreatedBy    pgtype.UUID        `json:"created_by"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SalesOrderLine struct {
+	ID                 pgtype.UUID        `json:"id"`
+	SalesOrderID       pgtype.UUID        `json:"sales_order_id"`
+	FinishedGoodItemID pgtype.UUID        `json:"finished_good_item_id"`
+	OrderedQty         pgtype.Numeric     `json:"ordered_qty"`
+	DispatchedQty      pgtype.Numeric     `json:"dispatched_qty"`
+	UnitPrice          pgtype.Numeric     `json:"unit_price"`
+	LineTotal          pgtype.Numeric     `json:"line_total"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type SkuSequence struct {
