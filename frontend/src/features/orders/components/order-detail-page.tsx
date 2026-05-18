@@ -24,6 +24,7 @@ import { getOrderErrorMessage } from "@/features/orders/utils/errors";
 import { DispatchOrderDialog } from "@/features/orders/components/dispatch-order-dialog";
 import { CancelOrderDialog } from "@/features/orders/components/cancel-order-dialog";
 import { OrderTimeline } from "@/features/orders/components/order-timeline";
+import { InvoiceActions } from "@/features/invoices/components/invoice-actions";
 
 type OrderDetailPageProps = {
   orderId: string;
@@ -100,10 +101,7 @@ export function OrderDetailPage({ orderId }: OrderDetailPageProps) {
             >
               Cancel
             </Button>
-            <Button type="button" variant="outline" disabled>
-              <Printer className="mr-2 size-4" />
-              Print Invoice
-            </Button>
+            <InvoiceActions orderId={order.id} />
           </div>
         </div>
       </header>
