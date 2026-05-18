@@ -507,6 +507,14 @@ type CustomerAlias struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type DocumentSequence struct {
+	ID           pgtype.UUID        `json:"id"`
+	DocumentType string             `json:"document_type"`
+	Prefix       string             `json:"prefix"`
+	NextNumber   int64              `json:"next_number"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type InventoryBatch struct {
 	ID            pgtype.UUID        `json:"id"`
 	ItemID        pgtype.UUID        `json:"item_id"`
@@ -538,6 +546,15 @@ type InventoryTransaction struct {
 	PerformedBy     pgtype.UUID        `json:"performed_by"`
 	Notes           pgtype.Text        `json:"notes"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type Invoice struct {
+	ID            pgtype.UUID        `json:"id"`
+	OrderID       pgtype.UUID        `json:"order_id"`
+	InvoiceNumber string             `json:"invoice_number"`
+	Snapshot      []byte             `json:"snapshot"`
+	GeneratedBy   pgtype.UUID        `json:"generated_by"`
+	GeneratedAt   pgtype.Timestamptz `json:"generated_at"`
 }
 
 type Item struct {
@@ -699,6 +716,18 @@ type SalesOrderLine struct {
 type SkuSequence struct {
 	CategoryCode string `json:"category_code"`
 	NextVal      int32  `json:"next_val"`
+}
+
+type SystemSetting struct {
+	ID          pgtype.UUID        `json:"id"`
+	Category    string             `json:"category"`
+	Key         string             `json:"key"`
+	Value       []byte             `json:"value"`
+	Description pgtype.Text        `json:"description"`
+	IsSensitive bool               `json:"is_sensitive"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

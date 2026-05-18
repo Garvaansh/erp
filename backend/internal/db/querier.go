@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	AllocateNextDocumentNumber(ctx context.Context, documentType string) (AllocateNextDocumentNumberRow, error)
 	ApproveJournal(ctx context.Context, arg ApproveJournalParams) (ProductionJournal, error)
 	ChangeUserPasswordCommand(ctx context.Context, arg ChangeUserPasswordCommandParams) error
 	CreateBatch(ctx context.Context, arg CreateBatchParams) (InventoryBatch, error)
@@ -21,6 +22,7 @@ type Querier interface {
 	CreateDerivedBatch(ctx context.Context, arg CreateDerivedBatchParams) (InventoryBatch, error)
 	CreateInventoryBatch(ctx context.Context, arg CreateInventoryBatchParams) (InventoryBatch, error)
 	CreateInventoryTransaction(ctx context.Context, arg CreateInventoryTransactionParams) (InventoryTransaction, error)
+	CreateInvoice(ctx context.Context, arg CreateInvoiceParams) (Invoice, error)
 	CreateItem(ctx context.Context, arg CreateItemParams) (Item, error)
 	CreateJournal(ctx context.Context, arg CreateJournalParams) (pgtype.UUID, error)
 	// Creates the output inventory batch from a production run (molded or finished).
@@ -118,6 +120,9 @@ type Querier interface {
 	GetFinishedGoodSummary(ctx context.Context, id pgtype.UUID) (GetFinishedGoodSummaryRow, error)
 	GetFinishedGoodsMaster(ctx context.Context) ([]GetFinishedGoodsMasterRow, error)
 	GetInventoryAggregated(ctx context.Context) ([]GetInventoryAggregatedRow, error)
+	GetInvoice(ctx context.Context, id pgtype.UUID) (Invoice, error)
+	GetInvoiceByNumber(ctx context.Context, invoiceNumber string) (Invoice, error)
+	GetInvoiceByOrder(ctx context.Context, orderID pgtype.UUID) (Invoice, error)
 	GetItem(ctx context.Context, id pgtype.UUID) (Item, error)
 	GetJournalByIDForUpdate(ctx context.Context, id pgtype.UUID) (ProductionJournal, error)
 	GetJournalByMovementGroup(ctx context.Context, movementGroupID pgtype.UUID) (ProductionJournal, error)
@@ -140,6 +145,8 @@ type Querier interface {
 	GetSalesOrderLineByIDForUpdate(ctx context.Context, id pgtype.UUID) (SalesOrderLine, error)
 	GetSalesOrderLineDetails(ctx context.Context, salesOrderID pgtype.UUID) ([]GetSalesOrderLineDetailsRow, error)
 	GetSelectableItems(ctx context.Context) ([]GetSelectableItemsRow, error)
+	GetSetting(ctx context.Context, arg GetSettingParams) (SystemSetting, error)
+	GetSettingsByCategory(ctx context.Context, category string) ([]SystemSetting, error)
 	// =============================================================================
 	// SECTION 5 — AGGREGATED INVENTORY SUPPORT
 	// =============================================================================
@@ -198,6 +205,7 @@ type Querier interface {
 	UpdateSalesOrderStatus(ctx context.Context, arg UpdateSalesOrderStatusParams) (SalesOrder, error)
 	UpdateUserCommand(ctx context.Context, arg UpdateUserCommandParams) (UpdateUserCommandRow, error)
 	UpdateVendorMutableFields(ctx context.Context, arg UpdateVendorMutableFieldsParams) (Vendor, error)
+	UpsertSetting(ctx context.Context, arg UpsertSettingParams) (SystemSetting, error)
 }
 
 var _ Querier = (*Queries)(nil)
