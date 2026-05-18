@@ -11,8 +11,10 @@ import (
 	"github.com/erp/backend/internal/auth"
 	"github.com/erp/backend/internal/db"
 	"github.com/erp/backend/internal/handlers"
+	"github.com/erp/backend/internal/invoices"
 	"github.com/erp/backend/internal/middleware" // Import the middleware package
 	"github.com/erp/backend/internal/services"
+	"github.com/erp/backend/internal/settings"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -264,6 +266,9 @@ func main() {
 	reportsGroup.Get("/inventory", reportHandler.GetInventoryReport)
 	reportsGroup.Get("/purchase", reportHandler.GetPurchaseReport)
 	reportsGroup.Get("/users", reportHandler.GetUsersReport)
+
+	settings.RegisterRoutes(api, dbpool, requireAuth)
+	invoices.RegisterRoutes(api, dbpool, requireAuth)
 
 	// 6. Graceful Shutdown
 	go func() {
